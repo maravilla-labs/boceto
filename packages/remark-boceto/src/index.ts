@@ -1,6 +1,6 @@
 import type { Code, Html, Root } from 'mdast'
 import { visit } from 'unist-util-visit'
-import { parse, SvgRenderer } from '@boceto/core'
+import { applyFlexLayout, initYoga, parse, SvgRenderer } from '@boceto/core'
 
 export interface RemarkBocetoOptions {
   /**
@@ -27,16 +27,20 @@ export interface RemarkBocetoOptions {
   render?: (source: string, info: { lang: string; meta: string | null }) => string
 }
 
-export type Plugin = () => (tree: Root) => void
+export type Plugin = () => (tree: Root) => void | Promise<void>
 
 /**
  * remark plugin that transforms `code` nodes whose language is `boceto`
  * into `html` nodes.
  *
  * - `mode: 'wc'` (default): emits `<boceto-view code="…">`.
- * - `mode: 'svg'`: emits a full `<svg>…</svg>` rendered server-side.
+ * - `mode: 'svg'`: emits a full `<svg>…</svg>` rendered server-side. The
+ *   transformer is async in this mode so it can `await initYoga()` once
+ *   before resolving FlexContainer layout.
  */
-export default function remarkBoceto(options: RemarkBocetoOptions = {}): (tree: Root) => void {
+export default function remarkBoceto(
+  options: RemarkBocetoOptions = {},
+): (tree: Root) => void | Promise<void> {
   const mode = options.mode ?? 'wc'
   const tag = options.tag ?? 'boceto-view'
   const extraAttrs = options.attributes ?? {}
@@ -44,32 +48,51 @@ export default function remarkBoceto(options: RemarkBocetoOptions = {}): (tree: 
   const height = options.height ?? 600
   const svgRenderer = mode === 'svg' ? new SvgRenderer() : null
 
-  return (tree) => {
+  if (mode !== 'svg') {
+    // Synchronous transformer for WC mode — no layout to resolve.
+    return (tree) => {
+      visit(tree, 'code', (node: Code, index, parent) => {
+        if (!parent || index == null) return
+        if ((node.lang ?? '') !== 'boceto') return
+        const source = node.value
+        const meta = node.meta ?? null
+        let html: string
+        if (options.render) {
+          html = options.render(source, { lang: 'boceto', meta })
+        } else {
+          const attrs: Record<string, string> = { ...extraAttrs, code: source }
+          if (meta) attrs['data-page'] = meta.trim()
+          html = renderTag(tag, attrs)
+        }
+        parent.children[index] = { type: 'html', value: html } as Html
+      })
+    }
+  }
+
+  // SVG mode: collect every boceto block, ensure Yoga is loaded once, then
+  // parse + lay out + render each in place.
+  return async (tree) => {
+    const targets: Array<{ node: Code; index: number; parent: Root | Code['data'] }> = []
     visit(tree, 'code', (node: Code, index, parent) => {
       if (!parent || index == null) return
       if ((node.lang ?? '') !== 'boceto') return
-
+      targets.push({ node, index, parent: parent as Root })
+    })
+    if (targets.length === 0) return
+    await initYoga()
+    for (const { node, index, parent } of targets) {
       const source = node.value
       const meta = node.meta ?? null
-
       let html: string
       if (options.render) {
         html = options.render(source, { lang: 'boceto', meta })
-      } else if (mode === 'svg') {
-        // Boceto fence body doesn't include the fence markers; wrap so the
-        // parser sees a valid block. The page name comes from `meta`.
-        const wrapped = '```boceto' + (meta ? ':' + meta : '') + '\n' + source + '\n```'
-        const doc = parse(wrapped)
-        html = svgRenderer!.renderToString(doc, { width, height })
       } else {
-        const attrs: Record<string, string> = { ...extraAttrs, code: source }
-        if (meta) attrs['data-page'] = meta.trim()
-        html = renderTag(tag, attrs)
+        const wrapped = '```boceto' + (meta ? ':' + meta : '') + '\n' + source + '\n```'
+        const doc = applyFlexLayout(parse(wrapped))
+        html = svgRenderer!.renderToString(doc, { width, height })
       }
-
-      const replacement: Html = { type: 'html', value: html }
-      parent.children[index] = replacement
-    })
+      ;(parent as Root).children[index] = { type: 'html', value: html } as Html
+    }
   }
 }
 

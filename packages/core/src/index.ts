@@ -4,14 +4,32 @@ export type {
   BocetoDoc,
   Component,
   ComponentBodyItem,
+  ComponentDefaults,
   ComponentInstance,
+  ComponentShell,
+  ComputedBox,
   Element,
   ElementType,
+  FlexAlign,
+  FlexChildProps,
+  FlexContainer,
+  FlexDirection,
+  FlexJustify,
+  FlexWrap,
   Page,
   PageItem,
   ParseOptions,
+  Slot,
 } from './types'
-export { ELEMENT_TYPES, isComponentInstance } from './types'
+export {
+  DEFAULT_SLOT,
+  ELEMENT_TYPES,
+  isComponentInstance,
+  isFlexContainer,
+  isSlot,
+  layoutBox,
+} from './types'
+export { initYoga, isYogaReady, applyFlexLayout } from './layout/yoga'
 export { parse, BocetoParseError } from './parser'
 export { serialize, type SerializeOptions } from './serializer'
 export { tokenize, type Token } from './tokenizer'

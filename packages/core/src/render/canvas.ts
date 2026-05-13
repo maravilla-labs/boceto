@@ -1,5 +1,5 @@
-import type { BocetoDoc, Element } from '../types'
-import { isComponentInstance } from '../types'
+import type { BocetoDoc } from '../types'
+import { findItemById, iterateRenderables, layoutBox } from '../types'
 import { drawElement } from '../elements'
 import { arrow as drawArrow } from '../elements/primitives'
 import { CanvasSurface } from './canvas-surface'
@@ -36,20 +36,18 @@ export class CanvasRenderer implements Renderer {
     const surface = new CanvasSurface(ctx)
 
     for (const ar of page.arrows) {
-      const from = page.elements.find((e) => e.id === ar.from)
-      const to = page.elements.find((e) => e.id === ar.to)
+      const from = findItemById(page.elements, ar.from)
+      const to = findItemById(page.elements, ar.to)
       if (!from || !to) continue
-      drawArrow(surface, from.x + from.w / 2, from.y + from.h, to.x + to.w / 2, to.y, {
+      const f = layoutBox(from)
+      const t = layoutBox(to)
+      drawArrow(surface, f.x + f.w / 2, f.y + f.h, t.x + t.w / 2, t.y, {
         label: ar.label,
       })
     }
 
-    for (const item of page.elements) {
-      if (isComponentInstance(item)) {
-        for (const child of item.expanded) drawElement(surface, child)
-      } else {
-        drawElement(surface, item as Element)
-      }
+    for (const el of iterateRenderables(page.elements)) {
+      drawElement(surface, el)
     }
   }
 }

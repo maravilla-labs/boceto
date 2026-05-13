@@ -1,0 +1,1243 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Boceto — Playground</title>
+    <meta
+      name="description"
+      content="Interactive Boceto playground. Edit the DSL on the left, see the wireframe render live on the right. Markdown mode lets you mix prose with boceto fences."
+    />
+    <link rel="stylesheet" href="./assets/style.css" />
+    <style>
+      .pg-shell {
+        max-width: var(--max-width);
+        margin: 0 auto;
+        padding: 24px 24px 48px;
+      }
+      .pg-head h1 { margin: 0 0 4px; font-size: 28px; }
+      .pg-head p { margin: 0 0 16px; color: var(--muted); font-size: 14px; max-width: 700px; }
+
+      .pg-toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 12px;
+        padding: 10px 12px;
+        background: var(--paper);
+        border: 1px solid var(--rule);
+        border-radius: 8px;
+        align-items: center;
+      }
+      .pg-toolbar label {
+        font-size: 13px;
+        color: var(--muted);
+        margin-right: 4px;
+      }
+      .pg-toolbar select,
+      .pg-toolbar button {
+        font: inherit;
+        font-size: 13.5px;
+        border: 1px solid var(--rule);
+        background: white;
+        padding: 6px 12px;
+        border-radius: 6px;
+        cursor: pointer;
+        color: var(--ink);
+      }
+      .pg-toolbar select { padding: 6px 28px 6px 10px; }
+      .pg-toolbar button:hover { background: var(--code-bg); }
+      .pg-mode {
+        display: inline-flex;
+        border: 1px solid var(--rule);
+        border-radius: 6px;
+        overflow: hidden;
+      }
+      .pg-mode button {
+        border: 0;
+        border-radius: 0;
+        background: white;
+        padding: 6px 12px;
+        cursor: pointer;
+      }
+      .pg-mode button.active {
+        background: var(--ink);
+        color: white;
+      }
+      .pg-status {
+        margin-left: auto;
+        font-size: 12.5px;
+        color: var(--muted);
+      }
+      .pg-status.err { color: #b45309; }
+      .pg-status.ok { color: #047857; }
+
+      .pg-split {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+        align-items: stretch;
+      }
+      @media (max-width: 880px) {
+        .pg-split { grid-template-columns: 1fr; }
+      }
+
+      .pg-pane {
+        border: 1px solid var(--rule);
+        border-radius: 8px;
+        background: white;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        min-height: 520px;
+      }
+      .pg-pane > header {
+        padding: 8px 12px;
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--muted);
+        border-bottom: 1px solid var(--rule);
+        background: var(--paper);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .pg-editor-host {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+      }
+      .pg-editor-host .cm-editor {
+        flex: 1;
+        font-size: 13px;
+      }
+      .pg-editor-host .cm-editor .cm-scroller {
+        font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+      }
+      .pg-editor-host .cm-editor .cm-content { padding: 12px 0; }
+      .pg-editor-host .cm-editor .cm-line { padding: 0 14px; }
+      .pg-editor-host .cm-editor.cm-focused { outline: none; }
+
+      .pg-preview {
+        flex: 1;
+        padding: 12px;
+        overflow: auto;
+        background: white;
+      }
+      .pg-preview boceto-view {
+        display: block;
+        margin: 0 auto;
+      }
+      .pg-preview .pg-md {
+        font-size: 15px;
+        line-height: 1.6;
+        color: var(--ink);
+        max-width: 100%;
+      }
+      .pg-preview .pg-md h1,
+      .pg-preview .pg-md h2,
+      .pg-preview .pg-md h3 {
+        margin: 24px 0 8px;
+      }
+      .pg-preview .pg-md h1:first-child,
+      .pg-preview .pg-md h2:first-child { margin-top: 0; }
+      .pg-preview .pg-md p { margin: 0 0 12px; }
+      .pg-preview .pg-md pre {
+        background: var(--code-bg);
+        padding: 10px 14px;
+        border-radius: 6px;
+        overflow-x: auto;
+        font-size: 12.5px;
+      }
+      .pg-preview .pg-md code {
+        font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+        font-size: 0.92em;
+      }
+      .pg-preview .pg-md :not(pre) > code {
+        background: var(--code-bg);
+        padding: 1px 6px;
+        border-radius: 4px;
+      }
+      .pg-preview .pg-md svg {
+        display: block;
+        margin: 12px auto;
+        border: 1px solid var(--rule);
+        border-radius: 6px;
+        background: white;
+        max-width: 100%;
+      }
+      .pg-preview .pg-md .pg-md-err {
+        background: rgba(220, 38, 38, 0.06);
+        border: 1px solid rgba(220, 38, 38, 0.3);
+        color: #991b1b;
+      }
+      .pg-preview .pg-md .pg-md-figure {
+        margin: 14px 0;
+        padding: 0;
+        text-align: center;
+      }
+      .pg-preview .pg-md .pg-md-figure svg {
+        margin: 0 auto 4px;
+      }
+      .pg-preview .pg-md .pg-md-caption {
+        font-size: 12.5px;
+        color: var(--muted);
+        font-style: italic;
+        margin-top: 2px;
+      }
+      .pg-preview .pg-md .pg-md-note {
+        font-size: 12.5px;
+        color: var(--muted);
+        background: var(--code-bg);
+        border: 1px dashed var(--rule);
+        padding: 8px 12px;
+        border-radius: 6px;
+        margin: 12px 0;
+      }
+      .pg-preview .pg-md .pg-md-note code {
+        font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+        font-size: 11.5px;
+        background: white;
+        padding: 1px 5px;
+        border: 1px solid var(--rule);
+        border-radius: 3px;
+      }
+
+      /* Error / loading banner — shown above the preview when present */
+      .pg-banner {
+        margin-bottom: 12px;
+        padding: 10px 14px;
+        border-radius: 6px;
+        font-size: 13px;
+        font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+        line-height: 1.5;
+        display: none;
+      }
+      .pg-banner.err {
+        display: block;
+        background: rgba(220, 38, 38, 0.06);
+        border: 1px solid rgba(220, 38, 38, 0.3);
+        color: #991b1b;
+      }
+      .pg-banner.warn {
+        display: block;
+        background: rgba(217, 119, 6, 0.06);
+        border: 1px solid rgba(217, 119, 6, 0.3);
+        color: #92400e;
+      }
+      .pg-banner .pg-err-line {
+        font-weight: 600;
+        margin-right: 6px;
+      }
+      .pg-banner .pg-err-source {
+        margin-top: 4px;
+        opacity: 0.8;
+        white-space: pre;
+      }
+
+      .pg-share {
+        margin-top: 12px;
+        font-size: 13px;
+        color: var(--muted);
+      }
+
+      /* Share toast — floats below the toolbar when the user clicks "Share" */
+      .pg-toast {
+        position: fixed;
+        bottom: 24px;
+        right: 24px;
+        max-width: 480px;
+        padding: 14px 16px;
+        background: var(--ink);
+        color: white;
+        border-radius: 8px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+        font-size: 13.5px;
+        line-height: 1.5;
+        z-index: 100;
+        opacity: 0;
+        transform: translateY(8px);
+        transition: opacity 0.2s, transform 0.2s;
+        pointer-events: none;
+      }
+      .pg-toast.visible {
+        opacity: 1;
+        transform: translateY(0);
+        pointer-events: auto;
+      }
+      .pg-toast strong { color: white; }
+      .pg-toast a {
+        color: #93c5fd;
+        text-decoration: underline;
+        word-break: break-all;
+      }
+      .pg-toast .pg-toast-url {
+        display: block;
+        margin-top: 6px;
+        font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+        font-size: 11.5px;
+        opacity: 0.85;
+        max-height: 60px;
+        overflow-y: auto;
+        word-break: break-all;
+        background: rgba(255, 255, 255, 0.08);
+        padding: 6px 8px;
+        border-radius: 4px;
+      }
+      .pg-toast button {
+        margin-top: 10px;
+        font: inherit;
+        font-size: 12px;
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        background: transparent;
+        color: white;
+        padding: 4px 10px;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      .pg-toast button:hover { background: rgba(255, 255, 255, 0.1); }
+    </style>
+  </head>
+  <body>
+    <header class="site">
+      <nav>
+        <a class="brand" href="./index.html">
+          <span class="logo-mark">B</span>
+          Boceto
+        </a>
+        <div class="links">
+          <a href="./index.html">Home</a>
+          <a href="./docs.html">Documentation</a>
+          <a href="./playground.html" class="active">Playground</a>
+          <a href="./elements.html">Elements</a>
+          <a href="./editor.html">Editor</a>
+          <a href="https://github.com/maravilla-labs/boceto" class="gh">GitHub →</a>
+        </div>
+      </nav>
+    </header>
+
+    <main class="pg-shell">
+      <div class="pg-head">
+        <h1>Playground</h1>
+        <p>
+          Edit the source on the left, see the result render live on the right. Switch
+          between <strong>DSL</strong> mode (pure Boceto) and <strong>Markdown</strong>
+          mode to see how Boceto blocks embed in real markdown documents. Parse errors
+          show inline with the line number.
+        </p>
+      </div>
+
+      <div class="pg-toolbar">
+        <label>Mode</label>
+        <div class="pg-mode" role="tablist">
+          <button type="button" data-mode="dsl" class="active" role="tab">DSL</button>
+          <button type="button" data-mode="md" role="tab">Markdown</button>
+        </div>
+        <label for="pg-snippet">Starter</label>
+        <select id="pg-snippet">
+          <option value="hello">Hello Boceto</option>
+          <option value="login">Login screen</option>
+          <option value="dashboard">Dashboard</option>
+          <option value="row">row / col layout</option>
+          <option value="grow">grow &amp; auto sizing</option>
+          <option value="wrap">Wrap as grid</option>
+          <option value="component">Composite component</option>
+          <option value="panel">Responsive panel</option>
+          <option value="appshell">App shell</option>
+          <option value="modal">Modal (h=auto)</option>
+          <option value="slots">Slots — composite children</option>
+          <option value="container">Element as container (box / modal w/ children)</option>
+          <option value="md-mix">[Markdown] Prose + diagram</option>
+        </select>
+        <button id="pg-copy" type="button" title="Copy source to clipboard">Copy</button>
+        <button id="pg-share" type="button" title="Copy shareable URL to clipboard">Share link</button>
+        <button id="pg-reset" type="button" title="Reset to the selected starter">Reset</button>
+        <span class="pg-status" id="pg-status">Loading…</span>
+      </div>
+
+      <div class="pg-split">
+        <div class="pg-pane">
+          <header>
+            <span>Source</span>
+            <span id="pg-mode-label">DSL</span>
+          </header>
+          <div class="pg-editor-host" id="pg-editor"></div>
+        </div>
+        <div class="pg-pane">
+          <header>
+            <span>Preview</span>
+            <span id="pg-pages-label"></span>
+          </header>
+          <div class="pg-preview" id="pg-preview">
+            <div class="pg-banner" id="pg-banner"></div>
+            <div id="pg-render"></div>
+          </div>
+        </div>
+      </div>
+
+      <p class="pg-share">
+        Tip: keep <a href="./docs.html">the docs</a> open in another tab while you
+        experiment. <strong>Markdown</strong> mode renders <code>```boceto</code>
+        fences as inline SVG diagrams, so you can preview what a real README will look
+        like.
+      </p>
+    </main>
+
+    <div class="pg-toast" id="pg-toast" role="status" aria-live="polite"></div>
+
+    <!-- ─────────────────────────────────────────────────────────── -->
+    <!-- CodeMirror 6, markdown-it, and our core API                -->
+    <!-- ─────────────────────────────────────────────────────────── -->
+    <!--
+      `*?external=...` tells esm.sh to leave the listed packages as bare
+      imports rather than inlining its own copy. Combined with the importmap
+      below, every @codemirror/* module ends up sharing the same single
+      @codemirror/state / @codemirror/view instances — otherwise CodeMirror's
+      internal `instanceof` checks fail because two distinct copies of the
+      state module exist on the page.
+    -->
+    <script type="importmap">
+      {
+        "imports": {
+          "@codemirror/state": "https://esm.sh/@codemirror/state@6.4.1",
+          "@codemirror/view": "https://esm.sh/@codemirror/view@6.34.1?external=@codemirror/state",
+          "@codemirror/language": "https://esm.sh/@codemirror/language@6.10.3?external=@codemirror/state,@codemirror/view,@lezer/highlight,@lezer/common,@lezer/lr",
+          "@codemirror/commands": "https://esm.sh/@codemirror/commands@6.7.0?external=@codemirror/state,@codemirror/view,@codemirror/language",
+          "@codemirror/search": "https://esm.sh/@codemirror/search@6.5.6?external=@codemirror/state,@codemirror/view",
+          "@codemirror/lang-markdown": "https://esm.sh/@codemirror/lang-markdown@6.3.0?external=@codemirror/state,@codemirror/view,@codemirror/language,@lezer/common,@lezer/highlight,@lezer/markdown",
+          "@lezer/common": "https://esm.sh/@lezer/common@1.2.1",
+          "@lezer/highlight": "https://esm.sh/@lezer/highlight@1.2.1?external=@lezer/common",
+          "@lezer/lr": "https://esm.sh/@lezer/lr@1.4.2?external=@lezer/common",
+          "@lezer/markdown": "https://esm.sh/@lezer/markdown@1.3.1?external=@lezer/common,@lezer/highlight",
+          "markdown-it": "https://esm.sh/markdown-it@14.1.0",
+          "@boceto/core": "./assets/boceto-core.js"
+        }
+      }
+    </script>
+
+    <script type="module">
+      import { EditorState } from '@codemirror/state'
+      import { EditorView, keymap, lineNumbers, highlightActiveLine } from '@codemirror/view'
+      import {
+        HighlightStyle,
+        StreamLanguage,
+        syntaxHighlighting,
+        bracketMatching,
+        indentOnInput,
+      } from '@codemirror/language'
+      // Renamed: `history` from @codemirror/commands shadowed `window.history`,
+      // so `history.replaceState` calls failed silently then noisily. Alias to
+      // `cmHistory` to keep the global accessible.
+      import { defaultKeymap, history as cmHistory, historyKeymap, indentWithTab } from '@codemirror/commands'
+      import { searchKeymap } from '@codemirror/search'
+      import { markdown as cmMarkdown } from '@codemirror/lang-markdown'
+      import { tags as t } from '@lezer/highlight'
+      import MarkdownIt from 'markdown-it'
+      import {
+        applyFlexLayout,
+        BocetoParseError,
+        initYoga,
+        parse,
+        SvgRenderer,
+      } from '@boceto/core'
+
+      // ─────────────────────────────────────────────────────────────
+      // Snippets
+      // ─────────────────────────────────────────────────────────────
+      const SNIPPETS = {
+        hello: `\`\`\`boceto
+element navbar 0 0 600 44 "MyApp"
+element heading 100 80 400 28 "Hello, Boceto"
+element label 100 120 400 22 "Edit me on the left."
+element primary-button 100 160 200 36 "Get started"
+\`\`\``,
+
+        login: `\`\`\`boceto:Login
+element navbar 0 0 600 44 "MyApp"
+element heading 100 90 400 32 "Welcome back" fontSize=28
+element label 100 130 400 22 "Sign in to continue"
+element input 100 170 400 36 "Email address"
+element input 100 216 400 36 "Password"
+element primary-button 100 264 400 36 "Sign In"
+element button 100 312 196 30 "Forgot password?"
+element button 304 312 196 30 "Register"
+\`\`\``,
+
+        dashboard: `\`\`\`boceto:Dashboard
+element navbar 0 0 900 44 "Dashboard"
+element sidebar 0 44 200 460 ""
+element heading 24 70 160 22 "Menu"
+element button 24 110 160 32 "Home"
+element button 24 150 160 32 "Reports"
+element button 24 190 160 32 "Settings"
+
+element heading 230 70 600 32 "Overview" fontSize=26
+element chart-bar 230 120 320 220 ""
+element chart-donut 580 120 280 220 ""
+element table 230 360 620 140 "" rows=4 cols=4
+\`\`\``,
+
+        row: `\`\`\`boceto
+row 20 20 860 60 gap=12 align=middle
+  element button 0 0 100 36 "Back"
+  element heading 0 0 200 28 "Settings"
+  element primary-button 0 0 100 36 "Save"
+end
+
+col 20 100 200 240 gap=8
+  element button 0 0 200 36 "Profile"
+  element button 0 0 200 36 "Account"
+  element button 0 0 200 36 "Privacy"
+  element button 0 0 200 36 "Logout"
+end
+\`\`\``,
+
+        grow: `\`\`\`boceto
+row 20 20 860 44 gap=8 align=middle
+  element button 0 0 80 32 "Back"
+  element input 0 0 0 32 "Search…" grow=1
+  element button 0 0 80 32 "Filter"
+end
+
+row 20 80 auto auto padding=12 gap=8 align=middle
+  element heading 0 0 200 28 "Toolbar"
+  element button 0 0 80 32 "Save"
+  element button 0 0 80 32 "Cancel"
+end
+\`\`\``,
+
+        wrap: `\`\`\`boceto
+row 20 20 860 320 gap=12 wrap=wrap align=start
+  element card 0 0 0 100 "" grow=1 min-w=180
+  element card 0 0 0 100 "" grow=1 min-w=180
+  element card 0 0 0 100 "" grow=1 min-w=180
+  element card 0 0 0 100 "" grow=1 min-w=180
+  element card 0 0 0 100 "" grow=1 min-w=180
+  element card 0 0 0 100 "" grow=1 min-w=180
+  element card 0 0 0 100 "" grow=1 min-w=180
+end
+\`\`\``,
+
+        component: `\`\`\`boceto
+component UserCard(name, role)
+  element card 0 0 240 80 ""
+  element avatar 8 8 40 40 ""
+  element heading 56 12 180 24 "$name"
+  element label 56 38 180 18 "$role"
+end
+
+element UserCard 20 20 240 80 "" name="Jane Doe" role="Admin"
+element UserCard 280 20 240 80 "" name="John Smith" role="User"
+element UserCard 540 20 240 80 "" name="Mei Chen" role="Owner"
+\`\`\``,
+
+        panel: `\`\`\`boceto
+component Panel(title) direction=col align=stretch padding=16 gap=8 min-w=200 max-w=400
+  element heading 0 0 0 24 "$title"
+  element box 0 0 0 0 "" grow=1
+end
+
+# fixed size
+element Panel 20 20 280 120 "" title="Fixed"
+
+# grow inside a row
+row 20 160 860 120 gap=12 align=stretch
+  element box 0 0 200 0 "" id=sidebar
+  element Panel 0 0 0 0 "" grow=1 title="Grows"
+end
+
+# wrap grid
+row 20 300 860 40 gap=12 wrap=wrap
+  element Panel 0 0 0 0 "" grow=1 title="A"
+  element Panel 0 0 0 0 "" grow=1 title="B"
+  element Panel 0 0 0 0 "" grow=1 title="C"
+end
+\`\`\``,
+
+        appshell: `\`\`\`boceto
+component Header(title) direction=row align=middle padding=16 gap=8 h=56
+  element heading 0 0 0 28 "$title" grow=1
+  element button 0 0 80 32 "Action"
+end
+
+component Footer() direction=row align=middle padding=16 h=44
+  element label 0 0 0 16 "© 2026" grow=1
+  element label 0 0 120 16 "v1.0.0"
+end
+
+component Main() direction=col align=stretch padding=16 gap=12 grow=1
+  element heading 0 0 0 24 "Welcome"
+  element box 0 0 0 0 "" grow=1
+end
+
+component AppShell(title) direction=col align=stretch
+  element Header 0 0 0 0 "" title="$title"
+  element Main 0 0 0 0 ""
+  element Footer 0 0 0 0 ""
+end
+
+element AppShell 20 20 860 340 "" title="My App"
+\`\`\``,
+
+        modal: `\`\`\`boceto
+# Single-element Modal: the built-in \`modal\` element type IS the chrome.
+# Block-form children fill the body — chrome inset (40px top) keeps content
+# below the title bar automatically. No composite needed.
+element box 0 0 900 280 "" id=backdrop
+element modal 250 40 400 auto "Confirm action" direction=col padding=12 gap=12 align=stretch :
+  element label 0 0 0 18 "Are you sure you want to continue?"
+  element input 0 0 0 36 "Reason (optional)"
+  row 0 0 0 36 gap=8 justify=end
+    element button 0 0 100 32 "Cancel"
+    element primary-button 0 0 100 32 "Confirm"
+  end
+end
+\`\`\``,
+
+        container: `\`\`\`boceto
+# Any element can host children via block-form \`:\` … \`end\`.
+# Flex mode (direction= set) flows children automatically:
+element box 20 20 400 auto "" direction=col padding=12 gap=8 align=stretch :
+  element heading 0 0 0 24 "Flex container"
+  element label 0 0 0 18 "Children flow with flex"
+  row 0 0 0 36 gap=8 justify=end
+    element button 0 0 80 28 "Cancel"
+    element primary-button 0 0 80 28 "OK"
+  end
+end
+
+# Absolute body (no direction): children at declared local (x, y):
+element box 440 20 400 200 "" border=#3b82c4 shadow=12 :
+  element heading 12 12 0 24 "Absolute body"
+  element label 12 50 0 16 "Children keep their declared coords"
+  element button 12 90 100 32 "Overlay style"
+end
+
+# Chrome elements get an intrinsic inset (modal: 40px top):
+element modal 20 280 400 auto "Confirm action" direction=col padding=12 gap=12 align=stretch :
+  element label 0 0 0 18 "Are you sure?"
+  row 0 0 0 36 gap=8 justify=end
+    element button 0 0 90 32 "Cancel"
+    element primary-button 0 0 90 32 "Confirm"
+  end
+end
+\`\`\``,
+
+        slots: `\`\`\`boceto
+# A Card with three slots: header, default (body), footer.
+component Card(title) direction=col align=stretch padding=12 gap=8 w=300
+  slot header
+  element heading 0 0 0 24 "$title"
+  slot
+  slot footer
+end
+
+# Call site fills each slot; bare children fill the default slot.
+element Card 20 20 320 auto "" title="Members" :
+  slot header
+    element label 0 0 0 14 "Showing 3 of 24"
+  end
+  element label 0 0 0 18 "Alice — Admin"
+  element label 0 0 0 18 "Bob — User"
+  element label 0 0 0 18 "Mei — Owner"
+  slot footer
+    row 0 0 0 32 gap=8 justify=end
+      element button 0 0 80 28 "Cancel"
+      element primary-button 0 0 80 28 "Save"
+    end
+  end
+end
+
+# Same component, second use — different slot content, same layout.
+element Card 360 20 320 auto "" title="Settings" :
+  element label 0 0 0 18 "Theme"
+  element label 0 0 0 18 "Notifications"
+end
+\`\`\``,
+
+        'md-mix': `# Login flow
+
+This is a markdown document. Boceto diagrams embed as fenced \`\`\`boceto blocks
+and render as inline SVG — exactly what you'd ship to a README or design doc.
+
+\`\`\`boceto:Login
+element navbar 0 0 600 44 "MyApp"
+element heading 100 90 400 32 "Welcome back" fontSize=28
+element input 100 170 400 36 "Email address"
+element input 100 216 400 36 "Password"
+element primary-button 100 264 400 36 "Sign In"
+\`\`\`
+
+## Notes
+
+- The diagram above is a real Boceto block, not an image.
+- You can have **multiple diagrams** in one document.
+- Below: a wrap-grid of cards.
+
+\`\`\`boceto:Grid
+row 20 20 560 200 gap=12 wrap=wrap align=start
+  element card 0 0 0 80 "" grow=1 min-w=160
+  element card 0 0 0 80 "" grow=1 min-w=160
+  element card 0 0 0 80 "" grow=1 min-w=160
+  element card 0 0 0 80 "" grow=1 min-w=160
+end
+\`\`\`
+
+That's it. Mix prose, lists, code, and diagrams freely.`,
+      }
+
+      // ─────────────────────────────────────────────────────────────
+      // Boceto language for CodeMirror (StreamLanguage, simple tokenizer)
+      // ─────────────────────────────────────────────────────────────
+      const KEYWORDS = new Set([
+        'element', 'text', 'arrow', 'row', 'col', 'end', 'component',
+      ])
+      const bocetoLang = StreamLanguage.define({
+        name: 'boceto',
+        token(stream) {
+          if (stream.eatSpace()) return null
+          // line comment
+          if (stream.match(/#.*/)) return 'comment'
+          // quoted string
+          if (stream.match(/"(?:\\.|[^"\\])*"?/)) return 'string'
+          // number
+          if (stream.match(/-?\d+(?:\.\d+)?/)) return 'number'
+          // keyword / identifier / attr
+          const word = stream.match(/[A-Za-z_][\w-]*/)
+          if (word) {
+            if (KEYWORDS.has(word[0])) return 'keyword'
+            // attribute name followed by `=`
+            if (stream.peek() === '=') return 'propertyName'
+            return 'variableName'
+          }
+          if (stream.match(/[=#]/)) return 'operator'
+          stream.next()
+          return null
+        },
+        languageData: { commentTokens: { line: '#' } },
+      })
+
+      const palette = {
+        keyword: '#1a5590',
+        string: '#047857',
+        number: '#b45309',
+        comment: '#94a3b8',
+        propertyName: '#7c3aed',
+        variableName: '#1e293b',
+        operator: '#475569',
+      }
+      const highlight = HighlightStyle.define([
+        { tag: t.keyword, color: palette.keyword, fontWeight: '600' },
+        { tag: t.string, color: palette.string },
+        { tag: t.number, color: palette.number },
+        { tag: t.comment, color: palette.comment, fontStyle: 'italic' },
+        { tag: t.propertyName, color: palette.propertyName },
+        { tag: t.variableName, color: palette.variableName },
+        { tag: t.operator, color: palette.operator },
+        // Markdown headings inherit the same accent color.
+        { tag: t.heading, color: palette.keyword, fontWeight: '700' },
+      ])
+
+      // ─────────────────────────────────────────────────────────────
+      // DOM refs
+      // ─────────────────────────────────────────────────────────────
+      const $editor = document.getElementById('pg-editor')
+      const $render = document.getElementById('pg-render')
+      const $banner = document.getElementById('pg-banner')
+      const $snippet = document.getElementById('pg-snippet')
+      const $copy = document.getElementById('pg-copy')
+      const $share = document.getElementById('pg-share')
+      const $reset = document.getElementById('pg-reset')
+      const $status = document.getElementById('pg-status')
+      const $modeLabel = document.getElementById('pg-mode-label')
+      const $pagesLabel = document.getElementById('pg-pages-label')
+      const $modeButtons = document.querySelectorAll('.pg-mode button')
+
+      // ─────────────────────────────────────────────────────────────
+      // State
+      // ─────────────────────────────────────────────────────────────
+      let mode = 'dsl' // 'dsl' | 'md'
+      let editor = null
+      let renderTimer = null
+
+      // markdown-it instance, lazy
+      const md = new MarkdownIt({ html: false, linkify: true, typographer: true })
+      const origFence = md.renderer.rules.fence
+      const svgRenderer = new SvgRenderer()
+
+      /**
+       * In markdown mode every `boceto` fence in the document is part of ONE
+       * Boceto document — components defined in one fence are visible to
+       * every other fence (the parser collects them across blocks). We
+       * therefore pre-parse the full markdown source once before rendering
+       * (see `renderMarkdown`), then this fence renderer just looks up the
+       * matching page on `env.bocetoDoc` by ordinal index.
+       *
+       * Fences that contain ONLY `component … end` definitions produce no
+       * page; we render a small "definitions" note and don't advance the
+       * page counter.
+       */
+      md.renderer.rules.fence = function (tokens, idx, opts, env, self) {
+        const tok = tokens[idx]
+        const info = (tok.info || '').trim()
+        // Accept BOTH `boceto:PageName` (boceto core convention) and
+        // `boceto PageName` (markdown-it convention) — split on whitespace
+        // OR colon so the language token is just `boceto` either way.
+        const lang = info.split(/[\s:]/)[0]
+        if (lang !== 'boceto') {
+          return origFence ? origFence(tokens, idx, opts, env, self) : ''
+        }
+        // Extract the page name (anything after `boceto` and the first
+        // separator). Empty when no name was supplied.
+        const pageNameFromInfo = info.slice(lang.length + 1).trim()
+
+        // Document-level parse error — show once per fence so it's visible
+        // wherever the user is editing, with the line number.
+        if (env.bocetoErr) {
+          const err = env.bocetoErr
+          const lineHtml =
+            err.line != null ? `<div><strong>Line ${err.line}</strong></div>` : ''
+          return `<pre class="pg-md-err">${lineHtml}${escapeHtml(err.message)}</pre>\n`
+        }
+
+        // Components-only fence — emit a tiny note instead of a blank space.
+        if (isDefinitionsOnlyBody(tok.content)) {
+          const names = collectComponentNames(tok.content)
+          const list = names.length ? names.map((n) => '<code>' + n + '</code>').join(', ') : '—'
+          return `<div class="pg-md-note">Component definitions: ${list}</div>\n`
+        }
+
+        const doc = env.bocetoDoc
+        if (!doc) return ''
+        const page = doc.pages[env.bocetoPageIdx ?? 0]
+        env.bocetoPageIdx = (env.bocetoPageIdx ?? 0) + 1
+        if (!page) {
+          return `<pre class="pg-md-err">Boceto: no page for this fence</pre>\n`
+        }
+        const w = inferPageWidth(page) ?? 880
+        const h = inferPageHeight(page) ?? 480
+        const svg = svgRenderer.renderToString(doc, { page: page.name, width: w, height: h })
+        // When the fence carried an explicit page name (`boceto:Name`),
+        // render a small caption above the diagram so authors get visible
+        // labeling in long markdown docs.
+        const caption = pageNameFromInfo
+          ? `<figcaption class="pg-md-caption">${escapeHtml(pageNameFromInfo)}</figcaption>`
+          : ''
+        return `<figure class="pg-md-figure">${svg}${caption}</figure>\n`
+      }
+
+      function escapeHtml(s) {
+        return s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
+      }
+
+      /**
+       * Cheap textual scan: returns true if `body` has no statement other
+       * than `component … end` blocks (and comments/blank lines). Used to
+       * detect fences that produce no rendered page so we can skip them in
+       * the page-index counter and show a "definitions" note instead.
+       */
+      function isDefinitionsOnlyBody(body) {
+        const lines = body.split('\n')
+        let depth = 0
+        for (const raw of lines) {
+          const line = raw.trim()
+          if (!line || line.startsWith('#')) continue
+          if (depth > 0) {
+            const head = line.split(/\s+/)[0]
+            if (head === 'row' || head === 'col' || head === 'component') depth++
+            else if (head === 'end') depth--
+            continue
+          }
+          if (line.startsWith('component')) {
+            depth = 1
+            continue
+          }
+          return false
+        }
+        return true
+      }
+
+      function collectComponentNames(body) {
+        const out = []
+        const re = /^component\s+([A-Za-z][A-Za-z0-9_-]*)/gm
+        let m
+        while ((m = re.exec(body))) out.push(m[1])
+        return out
+      }
+
+      // ─────────────────────────────────────────────────────────────
+      // Render pipeline
+      // ─────────────────────────────────────────────────────────────
+      function clearBanner() {
+        $banner.className = 'pg-banner'
+        $banner.textContent = ''
+      }
+
+      /**
+       * Translate a `BocetoParseError.line` (body-relative — `1` is the first
+       * DSL statement inside the fence) to the user-source line shown in the
+       * editor.
+       *
+       *  - If `source` opens with a `\`\`\`boceto` fence, the user-source line
+       *    is `bodyLine + fenceOpenIndex + 1` (the +1 jumps over the fence
+       *    line itself).
+       *  - If parsed in raw mode (no fence), the body IS the source — body
+       *    lines map 1:1 to user-source lines.
+       */
+      function bodyLineToSourceLine(bodyLine, source) {
+        if (bodyLine == null) return null
+        const lines = source.split('\n')
+        const fenceIdx = lines.findIndex((l) => /^```boceto/.test(l.trim()))
+        if (fenceIdx < 0) return bodyLine // raw mode
+        return bodyLine + fenceIdx + 1
+      }
+
+      function showError(err, source) {
+        $banner.className = 'pg-banner err'
+        const sourceLine = bodyLineToSourceLine(err.line, source)
+        const lineHtml =
+          sourceLine != null ? `<span class="pg-err-line">Line ${sourceLine}</span>` : ''
+        let sourceHtml = ''
+        if (sourceLine != null) {
+          const lines = source.split('\n')
+          const raw = lines[sourceLine - 1] ?? ''
+          sourceHtml = `<div class="pg-err-source">${escapeHtml(raw)}</div>`
+        }
+        $banner.innerHTML = `${lineHtml}${escapeHtml(err.message)}${sourceHtml}`
+        $status.textContent = 'Parse error'
+        $status.className = 'pg-status err'
+      }
+
+      function itemBox(item) {
+        return item.computed ?? {
+          x: item.x,
+          y: item.y,
+          w: typeof item.w === 'number' ? item.w : 0,
+          h: typeof item.h === 'number' ? item.h : 0,
+        }
+      }
+      function inferPageWidth(page) {
+        let max = 0
+        for (const item of page.elements) {
+          const box = itemBox(item)
+          max = Math.max(max, box.x + box.w)
+        }
+        return max > 0 ? Math.max(max + 20, 600) : null
+      }
+      function inferPageHeight(page) {
+        let max = 0
+        for (const item of page.elements) {
+          const box = itemBox(item)
+          max = Math.max(max, box.y + box.h)
+        }
+        return max > 0 ? max + 20 : null
+      }
+      function inferWidth(doc) {
+        let max = 0
+        for (const p of doc.pages) max = Math.max(max, inferPageWidth(p) ?? 0)
+        return max > 0 ? max : null
+      }
+      function inferHeight(doc) {
+        let max = 0
+        for (const p of doc.pages) max = Math.max(max, inferPageHeight(p) ?? 0)
+        return max > 0 ? max : null
+      }
+
+      function renderDsl(src) {
+        // For DSL mode, treat the input as a fenced boceto block IF it has
+        // fences, otherwise as raw.
+        const hasFence = /```boceto/.test(src)
+        try {
+          const doc = applyFlexLayout(parse(src, { raw: !hasFence }))
+          clearBanner()
+          const w = inferWidth(doc) ?? 880
+          const h = inferHeight(doc) ?? 480
+          $render.innerHTML = svgRenderer.renderToString(doc, { width: w, height: h })
+          const pageCount = doc.pages.length
+          $pagesLabel.textContent = pageCount > 1 ? `${pageCount} pages` : ''
+          $status.textContent = 'Rendered'
+          $status.className = 'pg-status ok'
+        } catch (err) {
+          if (err instanceof BocetoParseError) {
+            showError(err, src)
+          } else {
+            $banner.className = 'pg-banner err'
+            $banner.textContent = String(err)
+            $status.textContent = 'Error'
+            $status.className = 'pg-status err'
+          }
+          $render.innerHTML = ''
+          $pagesLabel.textContent = ''
+        }
+      }
+
+      /**
+       * Markdown mode. Parses the FULL markdown source through `parse()`
+       * first — that pass picks up every `\`\`\`boceto` fence in the
+       * document and shares components across them, so a `component Header`
+       * defined in fence #1 is visible to fence #2.
+       *
+       * The shared doc + a page-index counter are passed to markdown-it via
+       * `env`; the fence renderer above looks up each fence's page by
+       * ordinal index.
+       */
+      function renderMarkdown(src) {
+        let bocetoDoc = null
+        let bocetoErr = null
+        try {
+          bocetoDoc = applyFlexLayout(parse(src))
+        } catch (err) {
+          if (err instanceof BocetoParseError) {
+            bocetoErr = err
+          } else {
+            bocetoErr = { message: String(err), line: null }
+          }
+        }
+
+        const env = { bocetoDoc, bocetoErr, bocetoPageIdx: 0 }
+        let html = ''
+        try {
+          html = md.render(src, env)
+        } catch (err) {
+          $banner.className = 'pg-banner err'
+          $banner.textContent = 'Markdown error: ' + String(err)
+          $status.textContent = 'Error'
+          $status.className = 'pg-status err'
+          return
+        }
+
+        $render.innerHTML = `<div class="pg-md">${html}</div>`
+
+        if (bocetoErr) {
+          // Surface the Boceto parse error at the top in the banner too —
+          // useful when the offending fence is below the fold.
+          showError(bocetoErr, src)
+        } else {
+          clearBanner()
+          $status.textContent = 'Rendered'
+          $status.className = 'pg-status ok'
+        }
+        $pagesLabel.textContent = bocetoDoc && bocetoDoc.pages.length > 1
+          ? `${bocetoDoc.pages.length} diagrams`
+          : ''
+      }
+
+      function render() {
+        const src = editor.state.doc.toString()
+        if (mode === 'dsl') renderDsl(src)
+        else renderMarkdown(src)
+        writeToHash(src)
+      }
+
+      function scheduleRender() {
+        $status.textContent = 'Rendering…'
+        $status.className = 'pg-status'
+        clearTimeout(renderTimer)
+        renderTimer = setTimeout(render, 150)
+      }
+
+      // ─────────────────────────────────────────────────────────────
+      // URL state
+      // ─────────────────────────────────────────────────────────────
+      function readFromHash() {
+        const h = window.location.hash.slice(1)
+        if (!h) return null
+        const params = new URLSearchParams(h)
+        const code = params.get('code')
+        const mode = params.get('m') || 'dsl'
+        const starter = params.get('s')
+        if (code) {
+          try {
+            return { code: decodeURIComponent(escape(atob(code))), mode, starter }
+          } catch {
+            return null
+          }
+        }
+        return null
+      }
+      function writeToHash(code) {
+        const enc = btoa(unescape(encodeURIComponent(code)))
+        const params = new URLSearchParams()
+        params.set('s', $snippet.value)
+        params.set('m', mode)
+        params.set('code', enc)
+        history.replaceState(null, '', '#' + params.toString())
+      }
+
+      // ─────────────────────────────────────────────────────────────
+      // Editor — rebuild on mode switch so language changes
+      // ─────────────────────────────────────────────────────────────
+      function buildEditor(initial) {
+        if (editor) editor.destroy()
+        const langExt = mode === 'md' ? cmMarkdown({ codeLanguages: () => bocetoLang }) : bocetoLang
+        const state = EditorState.create({
+          doc: initial,
+          extensions: [
+            lineNumbers(),
+            cmHistory(),
+            indentOnInput(),
+            bracketMatching(),
+            highlightActiveLine(),
+            EditorView.lineWrapping,
+            keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap, indentWithTab]),
+            langExt,
+            syntaxHighlighting(highlight),
+            EditorView.updateListener.of((u) => {
+              if (u.docChanged) scheduleRender()
+            }),
+          ],
+        })
+        editor = new EditorView({ state, parent: $editor })
+      }
+
+      function setMode(next) {
+        if (mode === next) return
+        mode = next
+        $modeButtons.forEach((b) => b.classList.toggle('active', b.dataset.mode === mode))
+        $modeLabel.textContent = mode === 'md' ? 'Markdown' : 'DSL'
+        buildEditor(editor.state.doc.toString())
+        render()
+      }
+
+      $modeButtons.forEach((b) => {
+        b.addEventListener('click', () => setMode(b.dataset.mode))
+      })
+
+      $snippet.addEventListener('change', () => {
+        const src = SNIPPETS[$snippet.value]
+        // Auto-switch mode if a markdown snippet was picked.
+        const wantMd = $snippet.value.startsWith('md-')
+        if (wantMd && mode !== 'md') setMode('md')
+        if (!wantMd && mode !== 'dsl') setMode('dsl')
+        editor.dispatch({
+          changes: { from: 0, to: editor.state.doc.length, insert: src },
+        })
+        render()
+      })
+
+      $copy.addEventListener('click', async () => {
+        const src = editor.state.doc.toString()
+        try {
+          if (navigator.clipboard && window.isSecureContext) {
+            await navigator.clipboard.writeText(src)
+            showToast(`<strong>DSL copied to clipboard.</strong>`, 2000)
+            $status.textContent = 'Copied'
+            $status.className = 'pg-status ok'
+            return
+          }
+          throw new Error('insecure context')
+        } catch {
+          $status.textContent = 'Copy failed'
+          $status.className = 'pg-status err'
+          showToast(
+            `<strong>Couldn't access the clipboard.</strong> Select the source pane and copy manually.`,
+            4000,
+          )
+        }
+      })
+      // ─────────────────────────────────────────────────────────────
+      // Share toast: shows the generated URL, copies to clipboard, leaves
+      // a Copy fallback button when clipboard is unavailable (insecure
+      // context, denied permission, etc).
+      // ─────────────────────────────────────────────────────────────
+      const $toast = document.getElementById('pg-toast')
+      let toastHideTimer = null
+
+      function showToast(html, autoHideMs = 4000) {
+        $toast.innerHTML = html
+        $toast.classList.add('visible')
+        clearTimeout(toastHideTimer)
+        if (autoHideMs > 0) {
+          toastHideTimer = setTimeout(() => $toast.classList.remove('visible'), autoHideMs)
+        }
+      }
+
+      $share.addEventListener('click', async () => {
+        writeToHash(editor.state.doc.toString())
+        const url = window.location.href
+        let copied = false
+        try {
+          if (navigator.clipboard && window.isSecureContext) {
+            await navigator.clipboard.writeText(url)
+            copied = true
+          }
+        } catch {
+          copied = false
+        }
+        const escaped = escapeHtml(url)
+        if (copied) {
+          showToast(
+            `<strong>Share link copied.</strong> Paste anywhere — recipients open the same playground state.` +
+              `<span class="pg-toast-url">${escaped}</span>` +
+              `<button type="button" data-act="close">Dismiss</button>`,
+          )
+          $status.textContent = 'Link copied'
+          $status.className = 'pg-status ok'
+        } else {
+          showToast(
+            `<strong>Couldn't access the clipboard.</strong> Copy the URL manually:` +
+              `<span class="pg-toast-url">${escaped}</span>` +
+              `<button type="button" data-act="copy-fallback">Try again</button>` +
+              `<button type="button" data-act="close">Dismiss</button>`,
+            0,
+          )
+          $status.textContent = 'Manual copy'
+          $status.className = 'pg-status err'
+        }
+      })
+
+      // Toast button actions
+      $toast.addEventListener('click', async (e) => {
+        const t = e.target
+        if (!(t instanceof HTMLElement)) return
+        const act = t.dataset.act
+        if (act === 'close') {
+          $toast.classList.remove('visible')
+        } else if (act === 'copy-fallback') {
+          try {
+            await navigator.clipboard.writeText(window.location.href)
+            showToast(`<strong>Copied.</strong>`)
+          } catch {
+            // Last resort: select the URL text in the toast for manual copy.
+            const url = $toast.querySelector('.pg-toast-url')
+            if (url) {
+              const range = document.createRange()
+              range.selectNodeContents(url)
+              const sel = window.getSelection()
+              sel.removeAllRanges()
+              sel.addRange(range)
+            }
+          }
+        }
+      })
+      $reset.addEventListener('click', () => {
+        const src = SNIPPETS[$snippet.value]
+        editor.dispatch({
+          changes: { from: 0, to: editor.state.doc.length, insert: src },
+        })
+        render()
+      })
+
+      // ─────────────────────────────────────────────────────────────
+      // Boot
+      // ─────────────────────────────────────────────────────────────
+      $status.textContent = 'Loading layout engine…'
+      await initYoga()
+      $status.textContent = 'Ready'
+      $status.className = 'pg-status ok'
+
+      const loaded = readFromHash()
+      const initialSrc = loaded?.code ?? SNIPPETS[$snippet.value]
+      if (loaded?.starter && SNIPPETS[loaded.starter]) $snippet.value = loaded.starter
+      if (loaded?.mode === 'md') {
+        mode = 'md'
+        $modeButtons.forEach((b) => b.classList.toggle('active', b.dataset.mode === mode))
+        $modeLabel.textContent = 'Markdown'
+      }
+      buildEditor(initialSrc)
+      render()
+    </script>
+  </body>
+</html>

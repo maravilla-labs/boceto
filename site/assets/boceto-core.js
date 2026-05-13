@@ -1,3 +1,171 @@
+// src/types.ts
+var ELEMENT_TYPES = [
+  // Layout
+  "box",
+  "card",
+  "modal",
+  "navbar",
+  "divider",
+  "sidebar",
+  // Typography
+  "heading",
+  "label",
+  "breadcrumb",
+  // Form
+  "input",
+  "textarea",
+  "button",
+  "primary-button",
+  "select",
+  "checkbox",
+  "radio",
+  "switch",
+  "slider",
+  "search",
+  "segmented-control",
+  // Media
+  "image",
+  "video",
+  "avatar",
+  // Content
+  "list",
+  "table",
+  "tabs",
+  "badge",
+  "progress",
+  "pagination",
+  "alert",
+  "chip",
+  "code-block",
+  "accordion",
+  "chat-bubble",
+  "calendar",
+  // Navigation / overlays
+  "dropdown-menu",
+  "tooltip",
+  "toast",
+  // Feedback
+  "spinner",
+  "skeleton",
+  // Data viz
+  "chart-bar",
+  "chart-line",
+  "chart-donut",
+  // Mobile chrome
+  "phone-frame",
+  "status-bar",
+  "home-indicator",
+  "fab",
+  "app-icon",
+  // System chrome
+  "window-frame",
+  "browser-frame",
+  "terminal",
+  // Form (long-tail)
+  "combobox",
+  "date-picker",
+  "color-picker",
+  "file-upload",
+  "rating",
+  "otp-input",
+  "tag-input",
+  "stepper-input",
+  "range-slider",
+  // Content (long-tail)
+  "tree",
+  "stepper",
+  "carousel",
+  "popover",
+  "kbd",
+  "quote",
+  "status-dot",
+  "notification-bell",
+  "mention",
+  "ai-suggestion",
+  "presence-cursor",
+  // Data viz (long-tail)
+  "chart-area",
+  "chart-sparkline",
+  "gantt",
+  "heatmap",
+  "map",
+  "code-diff",
+  // AR / spatial
+  "glass-window",
+  "gaze-cursor",
+  "pinch-indicator",
+  "volumetric-scene",
+  "passthrough-frame",
+  "voice-input"
+];
+var DEFAULT_SLOT = "";
+function isComponentInstance(item) {
+  return "kind" in item && item.kind === "component-instance";
+}
+function isFlexContainer(item) {
+  return "kind" in item && item.kind === "flex-container";
+}
+function isSlot(item) {
+  return "kind" in item && item.kind === "slot";
+}
+function layoutBox(item) {
+  if (item.computed) return item.computed;
+  const w = typeof item.w === "number" ? item.w : 0;
+  const h = typeof item.h === "number" ? item.h : 0;
+  return { x: item.x, y: item.y, w, h };
+}
+function* iterateRenderables(items, offsetX = 0, offsetY = 0) {
+  for (const item of items) {
+    if (isFlexContainer(item)) {
+      yield* iterateRenderables(item.children, offsetX, offsetY);
+      continue;
+    }
+    if (isComponentInstance(item)) {
+      const box = layoutBox(item);
+      const dx = box.x - item.x + offsetX;
+      const dy = box.y - item.y + offsetY;
+      yield* iterateRenderables(item.expanded, dx, dy);
+      continue;
+    }
+    let yielded;
+    if (item.computed) {
+      yielded = {
+        ...item,
+        x: item.computed.x,
+        y: item.computed.y,
+        w: item.computed.w,
+        h: item.computed.h
+      };
+    } else if (offsetX !== 0 || offsetY !== 0) {
+      yielded = { ...item, x: item.x + offsetX, y: item.y + offsetY };
+    } else {
+      yielded = item;
+    }
+    yield yielded;
+    if (item.children && item.children.length > 0) {
+      const dx = yielded.x - item.x + offsetX;
+      const dy = yielded.y - item.y + offsetY;
+      yield* iterateRenderables(item.children, dx, dy);
+    }
+  }
+}
+function findItemById(items, id) {
+  for (const item of items) {
+    if (item.id === id) return item;
+    if (isFlexContainer(item)) {
+      const hit = findItemById(item.children, id);
+      if (hit) return hit;
+    } else if (isComponentInstance(item)) {
+      const hit = findItemById(item.expanded, id);
+      if (hit) return hit;
+    } else if (item.children && item.children.length > 0) {
+      const hit = findItemById(item.children, id);
+      if (hit) return hit;
+    }
+  }
+  return void 0;
+}
+
 // ../../node_modules/.pnpm/yoga-layout@3.2.1/node_modules/yoga-layout/dist/binaries/yoga-wasm-base64-esm.js
 var loadYoga = (() => {
   var _scriptDir = import.meta.url;
@@ -1538,173 +1706,7 @@ async function loadYoga2() {
   return wrapAssembly(await yoga_wasm_base64_esm_default());
 }
 
-// ../core/dist/index.js
-var ELEMENT_TYPES = [
-  // Layout
-  "box",
-  "card",
-  "modal",
-  "navbar",
-  "divider",
-  "sidebar",
-  // Typography
-  "heading",
-  "label",
-  "breadcrumb",
-  // Form
-  "input",
-  "textarea",
-  "button",
-  "primary-button",
-  "select",
-  "checkbox",
-  "radio",
-  "switch",
-  "slider",
-  "search",
-  "segmented-control",
-  // Media
-  "image",
-  "video",
-  "avatar",
-  // Content
-  "list",
-  "table",
-  "tabs",
-  "badge",
-  "progress",
-  "pagination",
-  "alert",
-  "chip",
-  "code-block",
-  "accordion",
-  "chat-bubble",
-  "calendar",
-  // Navigation / overlays
-  "dropdown-menu",
-  "tooltip",
-  "toast",
-  // Feedback
-  "spinner",
-  "skeleton",
-  // Data viz
-  "chart-bar",
-  "chart-line",
-  "chart-donut",
-  // Mobile chrome
-  "phone-frame",
-  "status-bar",
-  "home-indicator",
-  "fab",
-  "app-icon",
-  // System chrome
-  "window-frame",
-  "browser-frame",
-  "terminal",
-  // Form (long-tail)
-  "combobox",
-  "date-picker",
-  "color-picker",
-  "file-upload",
-  "rating",
-  "otp-input",
-  "tag-input",
-  "stepper-input",
-  "range-slider",
-  // Content (long-tail)
-  "tree",
-  "stepper",
-  "carousel",
-  "popover",
-  "kbd",
-  "quote",
-  "status-dot",
-  "notification-bell",
-  "mention",
-  "ai-suggestion",
-  "presence-cursor",
-  // Data viz (long-tail)
-  "chart-area",
-  "chart-sparkline",
-  "gantt",
-  "heatmap",
-  "map",
-  "code-diff",
-  // AR / spatial
-  "glass-window",
-  "gaze-cursor",
-  "pinch-indicator",
-  "volumetric-scene",
-  "passthrough-frame",
-  "voice-input"
-];
-var DEFAULT_SLOT = "";
-function isComponentInstance(item) {
-  return "kind" in item && item.kind === "component-instance";
-}
-function isFlexContainer(item) {
-  return "kind" in item && item.kind === "flex-container";
-}
-function isSlot(item) {
-  return "kind" in item && item.kind === "slot";
-}
-function layoutBox(item) {
-  if (item.computed) return item.computed;
-  const w = typeof item.w === "number" ? item.w : 0;
-  const h = typeof item.h === "number" ? item.h : 0;
-  return { x: item.x, y: item.y, w, h };
-}
-function* iterateRenderables(items, offsetX = 0, offsetY = 0) {
-  for (const item of items) {
-    if (isFlexContainer(item)) {
-      yield* iterateRenderables(item.children, offsetX, offsetY);
-      continue;
-    }
-    if (isComponentInstance(item)) {
-      const box = layoutBox(item);
-      const dx = box.x - item.x + offsetX;
-      const dy = box.y - item.y + offsetY;
-      yield* iterateRenderables(item.expanded, dx, dy);
-      continue;
-    }
-    let yielded;
-    if (item.computed) {
-      yielded = {
-        ...item,
-        x: item.computed.x,
-        y: item.computed.y,
-        w: item.computed.w,
-        h: item.computed.h
-      };
-    } else if (offsetX !== 0 || offsetY !== 0) {
-      yielded = { ...item, x: item.x + offsetX, y: item.y + offsetY };
-    } else {
-      yielded = item;
-    }
-    yield yielded;
-    if (item.children && item.children.length > 0) {
-      const dx = yielded.x - item.x + offsetX;
-      const dy = yielded.y - item.y + offsetY;
-      yield* iterateRenderables(item.children, dx, dy);
-    }
-  }
-}
-function findItemById(items, id) {
-  for (const item of items) {
-    if (item.id === id) return item;
-    if (isFlexContainer(item)) {
-      const hit = findItemById(item.children, id);
-      if (hit) return hit;
-    } else if (isComponentInstance(item)) {
-      const hit = findItemById(item.expanded, id);
-      if (hit) return hit;
-    } else if (item.children && item.children.length > 0) {
-      const hit = findItemById(item.children, id);
-      if (hit) return hit;
-    }
-  }
-  return void 0;
-}
+// src/elements/insets.ts
 var TABLE = {
   card: { top: 36 },
   modal: { top: 40 },
@@ -1723,6 +1725,8 @@ function chromeInsets(type) {
     left: partial.left ?? 0
   };
 }
+
+// src/layout/yoga.ts
 function isElementContainer(item) {
   return !isFlexContainer(item) && !isComponentInstance(item) && item.children != null && item.children.length > 0;
 }
@@ -1732,6 +1736,9 @@ async function initYoga() {
   if (yogaInstance) return;
   if (!yogaPromise) yogaPromise = loadYoga2();
   yogaInstance = await yogaPromise;
+}
+function isYogaReady() {
+  return yogaInstance !== null;
 }
 function applyFlexLayout(doc) {
   if (!yogaInstance) {
@@ -2091,6 +2098,8 @@ function toYogaWrap(w) {
       return Wrap.WrapReverse;
   }
 }
+
+// src/parser/blocks.ts
 var FENCE_RE = /```boceto(?::([^\n]*))?\n([\s\S]*?)```/g;
 var PAGE_SEP_RE = /^---(?:\s+(.*))?$/;
 var STATEMENT_KEYWORDS = /* @__PURE__ */ new Set([
@@ -2138,6 +2147,8 @@ function looksLikeStandalone(source) {
   }
   return false;
 }
+
+// src/tokenizer.ts
 function tokenize(line) {
   const out = [];
   const len = line.length;
@@ -2189,6 +2200,8 @@ function readQuoted(line, start) {
   }
   return { value: buf, end: j + 1 };
 }
+
+// src/parser/errors.ts
 var BocetoParseError = class extends Error {
   constructor(message, line, source) {
     super(message);
@@ -2199,6 +2212,8 @@ var BocetoParseError = class extends Error {
   line;
   source;
 };
+
+// src/parser/attrs.ts
 var FLEX_DIRECTION_VALUES = ["row", "col"];
 var FLEX_JUSTIFY_VALUES = [
   "start",
@@ -2326,6 +2341,8 @@ function consumeOptionalNumber(attrs, key, ownerKeyword, lineNo, raw) {
   return v;
 }
 var NAMED_ID_RE = /^[A-Za-z][A-Za-z0-9_-]*$/;
+
+// src/parser/primitives.ts
 function posInt(tok, name, lineNo, raw) {
   const n = Number(tok.value);
   if (!Number.isFinite(n) || !Number.isInteger(n) || n < 0) {
@@ -2341,6 +2358,8 @@ function posIntOrAuto(tok, name, lineNo, raw) {
   if (!tok.quoted && tok.value === "auto") return "auto";
   return posInt(tok, name, lineNo, raw);
 }
+
+// src/parser/elements.ts
 var ELEMENT_TYPE_SET = new Set(ELEMENT_TYPES);
 function parseElementOrInstance(tokens, pageIndex, auto, lineNo, raw, componentMap) {
   if (tokens.length < 7) {
@@ -2559,6 +2578,8 @@ function parseArrow(tokens, pageIndex, auto, lineNo, raw) {
     label
   };
 }
+
+// src/parser/layout.ts
 function parseLayoutFrame(kind, tokens, pageIndex, auto, lineNo, raw) {
   if (tokens.length < 5) {
     throw new BocetoParseError(
@@ -2620,6 +2641,8 @@ function parseLayoutFrame(kind, tokens, pageIndex, auto, lineNo, raw) {
     startLine: lineNo
   };
 }
+
+// src/parser/page.ts
 function parsePage(name, pageIndex, body, componentMap, options = {}) {
   const items = [];
   const arrows = [];
@@ -2901,6 +2924,8 @@ function parseSlotName(tokens, lineNo, raw, requireName) {
   }
   return nameTok.value;
 }
+
+// src/parser/components.ts
 var COMPONENT_HEADER_RE = /^component\s+([A-Za-z][A-Za-z0-9_-]*)\s*(?:\(([^)]*)\))?\s*(.*)$/;
 var PARAM_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
 var ELEMENT_TYPE_SET2 = new Set(ELEMENT_TYPES);
@@ -3225,6 +3250,8 @@ var VAR_BARE_RE = /\$([A-Za-z_][A-Za-z0-9_]*)/g;
 function substituteParams(s, params) {
   return s.replace(VAR_BRACED_RE, (_, name) => params[name] ?? "").replace(VAR_BARE_RE, (_, name) => params[name] ?? "");
 }
+
+// src/parser/index.ts
 function parse(source, options = {}) {
   if (options.raw) {
     return {
@@ -3253,6 +3280,271 @@ function parse(source, options = {}) {
   }
   return { pages, components };
 }
+
+// src/serializer.ts
+function serialize(doc, options = {}) {
+  const format = options.format ?? "markdown";
+  const blocks = [];
+  const componentMap = new Map(doc.components.map((c) => [c.name, c]));
+  if (doc.components.length > 0) {
+    const defs = doc.components.map((c) => serializeComponent(c, componentMap)).join("\n\n");
+    blocks.push(format === "markdown" ? "```boceto\n" + defs + "\n```" : defs);
+  }
+  for (const page of doc.pages) {
+    blocks.push(serializePage(page, format, componentMap));
+  }
+  return format === "markdown" ? blocks.join("\n\n") : blocks.join("\n\n");
+}
+function serializePage(page, format, componentMap) {
+  const body = serializePageBody(page, componentMap);
+  if (format === "markdown") return "```boceto:" + page.name + "\n" + body + "\n```";
+  return `--- ${page.name}
+${body}`;
+}
+function serializePageBody(page, componentMap) {
+  const lines = [];
+  for (const item of page.elements) appendItem(lines, item, 0, componentMap);
+  for (const ar of page.arrows) {
+    const label = ar.label ? ` ${quote(ar.label)}` : "";
+    lines.push(`arrow ${ar.from} ${ar.to}${label}`);
+  }
+  return lines.join("\n");
+}
+function appendItem(lines, item, indent, componentMap) {
+  const pad = "  ".repeat(indent);
+  if (isFlexContainer(item)) {
+    const [open, ...rest] = serializeFlexContainer(item, indent, componentMap).split("\n");
+    lines.push(pad + open);
+    for (const r2 of rest) lines.push(r2);
+    return;
+  }
+  if (isComponentInstance(item)) {
+    lines.push(pad + serializeInstance(item, componentMap));
+    return;
+  }
+  const rendered = serializeElement(item, componentMap, indent).split("\n");
+  lines.push(pad + rendered[0]);
+  for (let i = 1; i < rendered.length; i++) lines.push(rendered[i]);
+}
+function serializeComponent(c, componentMap) {
+  const parts = [
+    "component",
+    `${c.name}${c.params.length ? "(" + c.params.join(", ") + ")" : ""}`
+  ];
+  if (c.shell) {
+    const s = c.shell;
+    parts.push(`direction=${s.direction}`);
+    if (s.padding !== 0) parts.push(`padding=${s.padding}`);
+    if (s.gap !== 0) parts.push(`gap=${s.gap}`);
+    const defaultAlign = s.direction === "row" ? "middle" : "start";
+    if (s.align !== defaultAlign) parts.push(`align=${s.align}`);
+    if (s.justify !== "start") parts.push(`justify=${s.justify}`);
+    if (s.wrap !== "nowrap") parts.push(`wrap=${s.wrap}`);
+  }
+  if (c.defaults) {
+    const d = c.defaults;
+    if (d.w !== void 0) parts.push(`w=${formatDim(d.w)}`);
+    if (d.h !== void 0) parts.push(`h=${formatDim(d.h)}`);
+    appendFlexChildAttrs(parts, d);
+  }
+  const header = parts.join(" ");
+  const bodyLines = [];
+  for (const item of c.body) {
+    if ("from" in item && "to" in item) {
+      const label = item.label ? ` ${quote(item.label)}` : "";
+      bodyLines.push(`  arrow ${item.from} ${item.to}${label}`);
+      continue;
+    }
+    if (isSlot(item)) {
+      bodyLines.push("  " + (item.name ? `slot ${item.name}` : "slot"));
+      continue;
+    }
+    if (isFlexContainer(item)) {
+      const nested = serializeFlexContainer(item, 1, componentMap).split("\n");
+      for (const n of nested) bodyLines.push(n);
+      continue;
+    }
+    if (isComponentInstance(item)) {
+      bodyLines.push("  " + serializeInstance(item, componentMap));
+      continue;
+    }
+    const rendered = serializeElement(item, componentMap, 1).split("\n");
+    bodyLines.push("  " + rendered[0]);
+    for (let j = 1; j < rendered.length; j++) bodyLines.push(rendered[j]);
+  }
+  bodyLines.push("end");
+  return `${header}
+${bodyLines.join("\n")}`;
+}
+var AUTO_ID_RE = /^p\d+e\d+$/;
+var AUTO_INSTANCE_ID_RE = /^p\d+c\d+$/;
+var AUTO_FLEX_ID_RE = /^p\d+f\d+$/;
+var NAMED_ID_RE2 = /^[A-Za-z][A-Za-z0-9_-]*$/;
+function serializeElement(el, componentMap, indent = 0) {
+  const isAuto = AUTO_ID_RE.test(el.id) || el.id.includes(".");
+  if (!isAuto && !NAMED_ID_RE2.test(el.id)) {
+    throw new Error(
+      `Cannot serialize element with id "${el.id}": ids must match [A-Za-z][A-Za-z0-9_-]*`
+    );
+  }
+  const typeToken = isAuto ? el.type : `${el.type}#${el.id}`;
+  const parts = [
+    "element",
+    typeToken,
+    String(el.x),
+    String(el.y),
+    String(el.w),
+    String(el.h),
+    quote(el.label)
+  ];
+  if (el.note !== void 0 && el.note !== "") parts.push(quote(el.note));
+  if (el.direction != null) parts.push(`direction=${el.direction}`);
+  if (el.gap != null) parts.push(`gap=${el.gap}`);
+  if (el.padding != null) parts.push(`padding=${el.padding}`);
+  if (el.justify != null) parts.push(`justify=${el.justify}`);
+  if (el.align != null) parts.push(`align=${el.align}`);
+  if (el.wrap != null) parts.push(`wrap=${el.wrap}`);
+  appendFlexChildAttrs(parts, el);
+  for (const [k, v] of Object.entries(el.attrs)) parts.push(`${k}=${formatAttr(v)}`);
+  if (!el.children || el.children.length === 0) {
+    return parts.join(" ");
+  }
+  const pad = "  ".repeat(indent + 1);
+  const lines = [parts.join(" ") + " :"];
+  const cm = componentMap ?? /* @__PURE__ */ new Map();
+  for (const child of el.children) {
+    lines.push(...serializeSlotChild(child, cm, indent + 1).map((l) => pad + l));
+  }
+  lines.push("  ".repeat(indent) + "end");
+  return lines.join("\n");
+}
+function serializeFlexContainer(c, indent, componentMap) {
+  const isAuto = AUTO_FLEX_ID_RE.test(c.id);
+  if (!isAuto && !NAMED_ID_RE2.test(c.id)) {
+    throw new Error(
+      `Cannot serialize flex container with id "${c.id}": ids must match [A-Za-z][A-Za-z0-9_-]*`
+    );
+  }
+  const kind = c.direction;
+  const head = isAuto ? kind : `${kind}#${c.id}`;
+  const parts = [head, String(c.x), String(c.y), formatDim(c.w), formatDim(c.h)];
+  const defaultAlign = c.direction === "row" ? "middle" : "start";
+  if (c.gap !== 0) parts.push(`gap=${c.gap}`);
+  if (c.padding !== 0) parts.push(`padding=${c.padding}`);
+  if (c.align !== defaultAlign) parts.push(`align=${c.align}`);
+  if (c.justify !== "start") parts.push(`justify=${c.justify}`);
+  if (c.wrap !== "nowrap") parts.push(`wrap=${c.wrap}`);
+  appendFlexChildAttrs(parts, c);
+  const open = parts.join(" ");
+  const lines = [open];
+  const pad = "  ".repeat(indent + 1);
+  for (const child of c.children) {
+    if (isFlexContainer(child)) {
+      const nested = serializeFlexContainer(child, indent + 1, componentMap).split("\n");
+      lines.push(pad + nested[0]);
+      for (let i = 1; i < nested.length; i++) lines.push(nested[i]);
+    } else if (isComponentInstance(child)) {
+      lines.push(pad + serializeInstance(child, componentMap));
+    } else {
+      const rendered = serializeElement(child, componentMap, indent + 1).split("\n");
+      lines.push(pad + rendered[0]);
+      for (let i = 1; i < rendered.length; i++) lines.push(rendered[i]);
+    }
+  }
+  lines.push("  ".repeat(indent) + "end");
+  return lines.join("\n");
+}
+function appendFlexChildAttrs(parts, item) {
+  if (item.grow != null) parts.push(`grow=${item.grow}`);
+  if (item.shrink != null) parts.push(`shrink=${item.shrink}`);
+  if (item.basis != null) parts.push(`basis=${item.basis}`);
+  if (item.alignSelf != null) parts.push(`align-self=${item.alignSelf}`);
+  if (item.minW != null) parts.push(`min-w=${item.minW}`);
+  if (item.minH != null) parts.push(`min-h=${item.minH}`);
+  if (item.maxW != null) parts.push(`max-w=${item.maxW}`);
+  if (item.maxH != null) parts.push(`max-h=${item.maxH}`);
+}
+function formatDim(d) {
+  return d === "auto" ? "auto" : String(d);
+}
+function serializeInstance(ci, componentMap, indent = 0) {
+  const isAuto = AUTO_INSTANCE_ID_RE.test(ci.id);
+  if (!isAuto && !NAMED_ID_RE2.test(ci.id)) {
+    throw new Error(
+      `Cannot serialize component instance with id "${ci.id}": ids must match [A-Za-z][A-Za-z0-9_-]*`
+    );
+  }
+  const typeToken = isAuto ? ci.componentName : `${ci.componentName}#${ci.id}`;
+  const defaults = componentMap.get(ci.componentName)?.defaults;
+  const w = defaults && eqDim(ci.w, defaults.w) ? "auto" : ci.w;
+  const h = defaults && eqDim(ci.h, defaults.h) ? "auto" : ci.h;
+  const parts = [
+    "element",
+    typeToken,
+    String(ci.x),
+    String(ci.y),
+    formatDim(w),
+    formatDim(h),
+    '""'
+  ];
+  appendFlexChildAttrsSkippingDefaults(parts, ci, defaults);
+  for (const [k, v] of Object.entries(ci.params)) parts.push(`${k}=${formatAttr(v)}`);
+  if (!ci.slots || Object.keys(ci.slots).length === 0) {
+    return parts.join(" ");
+  }
+  const pad = "  ".repeat(indent + 1);
+  const lines = [parts.join(" ") + " :"];
+  const defaultChildren = ci.slots[DEFAULT_SLOT] ?? [];
+  for (const child of defaultChildren) {
+    lines.push(...serializeSlotChild(child, componentMap, indent + 1).map((l) => pad + l));
+  }
+  for (const [slotName, children] of Object.entries(ci.slots)) {
+    if (slotName === DEFAULT_SLOT) continue;
+    lines.push(`${pad}slot ${slotName}`);
+    const innerPad = "  ".repeat(indent + 2);
+    for (const child of children) {
+      lines.push(...serializeSlotChild(child, componentMap, indent + 2).map((l) => innerPad + l));
+    }
+    lines.push(`${pad}end`);
+  }
+  lines.push("  ".repeat(indent) + "end");
+  return lines.join("\n");
+}
+function serializeSlotChild(item, componentMap, indent) {
+  if (isFlexContainer(item)) {
+    return serializeFlexContainer(item, indent, componentMap).split("\n");
+  }
+  if (isComponentInstance(item)) {
+    return serializeInstance(item, componentMap, indent).split("\n");
+  }
+  return serializeElement(item, componentMap, indent).split("\n");
+}
+function eqDim(a, b) {
+  return a === b;
+}
+function appendFlexChildAttrsSkippingDefaults(parts, ci, defaults) {
+  const defs = defaults ?? {};
+  if (ci.grow != null && ci.grow !== defs.grow) parts.push(`grow=${ci.grow}`);
+  if (ci.shrink != null && ci.shrink !== defs.shrink) parts.push(`shrink=${ci.shrink}`);
+  if (ci.basis != null && ci.basis !== defs.basis) parts.push(`basis=${ci.basis}`);
+  if (ci.alignSelf != null && ci.alignSelf !== defs.alignSelf) parts.push(`align-self=${ci.alignSelf}`);
+  if (ci.minW != null && ci.minW !== defs.minW) parts.push(`min-w=${ci.minW}`);
+  if (ci.minH != null && ci.minH !== defs.minH) parts.push(`min-h=${ci.minH}`);
+  if (ci.maxW != null && ci.maxW !== defs.maxW) parts.push(`max-w=${ci.maxW}`);
+  if (ci.maxH != null && ci.maxH !== defs.maxH) parts.push(`max-h=${ci.maxH}`);
+}
+function quote(s) {
+  return '"' + s.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"';
+}
+function formatAttr(v) {
+  if (typeof v === "number") return String(v);
+  if (/[\s"\\]/.test(v)) {
+    return '"' + v.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"';
+  }
+  return v;
+}
+
+// src/elements/registry.ts
 var REGISTRY = /* @__PURE__ */ new Map();
 function registerElement(type, renderer) {
   REGISTRY.set(type, renderer);
@@ -3260,6 +3552,8 @@ function registerElement(type, renderer) {
 function getRenderer(type) {
   return REGISTRY.get(type);
 }
+
+// src/elements/primitives.ts
 function sketchRect(s, x, y, w, h, { fill = "#fff", stroke = "#333", lw = 2, r: r2 = 1.5 } = {}) {
   const pts = [
     [s.jitter(x, r2), s.jitter(y, r2)],
@@ -3365,9 +3659,14 @@ function arrow(s, x1, y1, x2, y2, { stroke = "#444", lw = 2, label = "" } = {}) 
 var PALETTE = {
   selection: "#4a90d9",
   hover: "#7bb3e8",
+  paper: "#fafaf8",
+  paperLine: "#e8e8e4",
   bg: "rgba(255,255,255,0.92)",
+  dark: "#1e1e2e",
   default: "#444"
 };
+
+// src/elements/register.ts
 function strokeColor(state) {
   return state.selected ? PALETTE.selection : state.hovered ? PALETTE.hover : PALETTE.default;
 }
@@ -3955,7 +4254,7 @@ r("spinner", (s, el) => {
   const cy = el.y + el.h / 2;
   const r2 = Math.min(el.w, el.h) / 2 - 2;
   s.arcSegment(cx, cy, r2, Math.PI / 2, Math.PI * 2, {
-    stroke: strokeColor({ selected: false, hovered: false }),
+    stroke: strokeColor({ selected: false, hovered: false}),
     strokeWidth: 3,
     fill: "transparent"
   });
@@ -5167,6 +5466,8 @@ function drawStar(s, cx, cy, r2, opts) {
   }
   s.path(points.join(" ") + " Z", opts);
 }
+
+// src/elements/index.ts
 var FALLBACK_DRAW = (s, el, st) => {
   const sc = st.selected ? PALETTE.selection : st.hovered ? PALETTE.hover : PALETTE.default;
   sketchRect(s, el.x, el.y, el.w, el.h, { stroke: sc, fill: PALETTE.bg });
@@ -5246,6 +5547,12 @@ function drawNote(surface, el) {
     dash: [4, 4]
   });
 }
+function strokeColor2(state) {
+  return state.selected ? PALETTE.selection : state.hovered ? PALETTE.hover : PALETTE.default;
+}
+function fillColor2(state) {
+  return state.selected ? "#e8f4fd" : state.hovered ? "#f0f8ff" : PALETTE.bg;
+}
 function parseShadowAttr(el) {
   const v = el.attrs.shadow;
   if (v == null) return null;
@@ -5262,11 +5569,15 @@ function parseBorderAttr(el) {
   if (v === "true") return { width: 1.5, color: "#333" };
   return { width: 1.5, color: String(v) };
 }
+
+// src/render/surface.ts
 var DEFAULT_FONT = "'Patrick Hand','Comic Sans MS',cursive";
 function fontString(opts) {
   const family = opts.font ?? DEFAULT_FONT;
   return `${opts.bold ? "bold " : ""}${opts.italic ? "italic " : ""}${opts.size}px ${family}`;
 }
+
+// src/render/canvas-surface.ts
 var CanvasSurface = class {
   constructor(ctx) {
     this.ctx = ctx;
@@ -5379,12 +5690,16 @@ function applyStroke(ctx, opts) {
   if (opts.strokeWidth != null) ctx.lineWidth = opts.strokeWidth;
   ctx.lineCap = opts.lineCap ?? "round";
 }
+
+// src/render/types.ts
 function selectPage(doc, page) {
   if (doc.pages.length === 0) return void 0;
   if (page === void 0) return doc.pages[0];
   if (typeof page === "number") return doc.pages[page];
   return doc.pages.find((p) => p.id === page || p.name === page) ?? doc.pages[0];
 }
+
+// src/render/canvas.ts
 var CanvasRenderer = class {
   constructor(canvas) {
     this.canvas = canvas;
@@ -5427,97 +5742,214 @@ var CanvasRenderer = class {
   }
 };
 
-// src/boceto-view.ts
-var yogaReady = initYoga();
-var DEFAULT_W = 860;
-var DEFAULT_H = 600;
-var BocetoViewElement = class extends HTMLElement {
-  static get observedAttributes() {
-    return ["code", "src", "width", "height", "page"];
-  }
-  #canvas;
-  #renderer;
-  #shadow;
-  #lastDoc = null;
-  constructor() {
-    super();
-    this.#shadow = this.attachShadow({ mode: "open" });
-    this.#canvas = document.createElement("canvas");
-    this.#canvas.width = DEFAULT_W;
-    this.#canvas.height = DEFAULT_H;
-    this.#canvas.style.maxWidth = "100%";
-    this.#canvas.style.height = "auto";
-    const style = document.createElement("style");
-    style.textContent = `:host { display: block; } canvas { display: block; }`;
-    this.#shadow.appendChild(style);
-    this.#shadow.appendChild(this.#canvas);
-    this.#renderer = new CanvasRenderer(this.#canvas);
-  }
-  connectedCallback() {
-    void this.#refresh();
-  }
-  attributeChangedCallback() {
-    void this.#refresh();
-  }
-  /** Programmatic alternative to setting the `code` attribute. */
-  setCode(code) {
-    this.setAttribute("code", code);
-  }
-  /** Latest parsed document, if any. */
-  get document() {
-    return this.#lastDoc;
-  }
-  async #refresh() {
-    const w = numAttr2(this, "width", DEFAULT_W);
-    const h = numAttr2(this, "height", DEFAULT_H);
-    if (this.#canvas.width !== w) this.#canvas.width = w;
-    if (this.#canvas.height !== h) this.#canvas.height = h;
-    let source = this.getAttribute("code");
-    if (source == null) {
-      const src = this.getAttribute("src");
-      if (src) {
-        try {
-          const res = await fetch(src);
-          if (res.ok) source = await res.text();
-        } catch {
-          source = null;
-        }
-      }
-    }
-    if (source == null) source = this.textContent ?? "";
-    let doc;
-    try {
-      doc = parse(source, { raw: !source.includes("```") && !/^---/m.test(source.trim()) });
-    } catch {
-      return;
-    }
-    await yogaReady;
-    applyFlexLayout(doc);
-    this.#lastDoc = doc;
-    const pageAttr = this.getAttribute("page");
-    const pageOpt = pageAttr == null ? void 0 : isNumeric(pageAttr) ? Number(pageAttr) : pageAttr;
-    this.#renderer.render(doc, { width: w, height: h, page: pageOpt });
-    this.dispatchEvent(
-      new CustomEvent("boceto-render", { detail: { doc, page: pageOpt }, bubbles: true })
-    );
-  }
-};
-function numAttr2(el, name, fallback) {
-  const v = el.getAttribute(name);
-  if (v == null) return fallback;
-  const n = Number(v);
-  return Number.isFinite(n) ? n : fallback;
+// src/random.ts
+function mulberry32(seed) {
+  let s = seed >>> 0;
+  return function next() {
+    s = s + 1831565813 >>> 0;
+    let t = s;
+    t = Math.imul(t ^ t >>> 15, t | 1);
+    t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
 }
-function isNumeric(s) {
-  return s !== "" && !Number.isNaN(Number(s));
-}
-var TAG = "boceto-view";
-function defineBocetoView(tag = TAG) {
-  if (typeof customElements === "undefined") return;
-  if (!customElements.get(tag)) customElements.define(tag, BocetoViewElement);
+function hashString(s) {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
 }
 
-// src/auto.ts
-defineBocetoView();
-//# sourceMappingURL=auto.js.map
-//# sourceMappingURL=auto.js.map
+// src/render/svg-surface.ts
+var SvgSurface = class {
+  #parts = [];
+  #defs = [];
+  #defCounter = 0;
+  #rng;
+  constructor(seed) {
+    this.#rng = mulberry32(seed);
+  }
+  jitter(n, amount = 1.8) {
+    return n + (this.#rng() - 0.5) * amount;
+  }
+  rect(x, y, w, h, opts = {}) {
+    const attrs = shapeAttrs(opts);
+    this.#parts.push(`<rect x="${fmt(x)}" y="${fmt(y)}" width="${fmt(w)}" height="${fmt(h)}"${attrs}/>`);
+  }
+  line(x1, y1, x2, y2, opts = {}) {
+    const attrs = strokeAttrs(opts);
+    let dash = "";
+    if (opts.dash?.length) dash = ` stroke-dasharray="${opts.dash.join(" ")}"`;
+    this.#parts.push(
+      `<line x1="${fmt(x1)}" y1="${fmt(y1)}" x2="${fmt(x2)}" y2="${fmt(y2)}"${attrs}${dash}/>`
+    );
+  }
+  arc(cx, cy, r2, opts = {}) {
+    const attrs = shapeAttrs(opts);
+    this.#parts.push(`<circle cx="${fmt(cx)}" cy="${fmt(cy)}" r="${fmt(r2)}"${attrs}/>`);
+  }
+  arcSegment(cx, cy, r2, start, end, opts = {}) {
+    const attrs = shapeAttrs(opts);
+    const x1 = cx + r2 * Math.cos(start);
+    const y1 = cy + r2 * Math.sin(start);
+    const x2 = cx + r2 * Math.cos(end);
+    const y2 = cy + r2 * Math.sin(end);
+    const large = end - start > Math.PI ? 1 : 0;
+    const sweep = end > start ? 1 : 0;
+    let d = `M ${fmt(x1)} ${fmt(y1)} A ${fmt(r2)} ${fmt(r2)} 0 ${large} ${sweep} ${fmt(x2)} ${fmt(y2)}`;
+    if (opts.closed) d += " Z";
+    this.#parts.push(`<path d="${d}"${attrs}/>`);
+  }
+  path(d, opts = {}) {
+    const attrs = shapeAttrs(opts);
+    this.#parts.push(`<path d="${d}"${attrs}/>`);
+  }
+  text(s, x, y, opts) {
+    const fill = opts.color ?? "#222";
+    const align = opts.align ?? "left";
+    const baseline = opts.baseline ?? "top";
+    const size = opts.size;
+    const weight = opts.bold ? ' font-weight="bold"' : "";
+    const style = opts.italic ? ' font-style="italic"' : "";
+    const family = (opts.font ?? "'Patrick Hand','Comic Sans MS',cursive").replace(/"/g, "&quot;");
+    const anchor = align === "center" ? "middle" : align === "right" ? "end" : "start";
+    const dy = baselineToDy(baseline, size);
+    this.#parts.push(
+      `<text x="${fmt(x)}" y="${fmt(y + dy)}" fill="${escapeAttr(fill)}" font-size="${size}" font-family="${family}" text-anchor="${anchor}"${weight}${style}>${escapeText(s)}</text>`
+    );
+  }
+  measureText(s, opts) {
+    const factor = opts.bold ? 0.6 : 0.55;
+    return { width: s.length * opts.size * factor };
+  }
+  group(opts, fn) {
+    const attrs = [];
+    if (opts.opacity != null) attrs.push(`opacity="${opts.opacity}"`);
+    if (opts.shadow) {
+      const id = this.#nextDefId("shadow");
+      this.#defs.push(
+        `<filter id="${id}" x="-50%" y="-50%" width="200%" height="200%"><feDropShadow dx="${opts.shadow.dx ?? 0}" dy="${opts.shadow.dy ?? 0}" stdDeviation="${(opts.shadow.blur ?? 0) / 2}" flood-color="${escapeAttr(opts.shadow.color)}"/></filter>`
+      );
+      attrs.push(`filter="url(#${id})"`);
+    }
+    if (opts.clip) {
+      const id = this.#nextDefId("clip");
+      this.#defs.push(
+        `<clipPath id="${id}"><rect x="${fmt(opts.clip.x)}" y="${fmt(opts.clip.y)}" width="${fmt(opts.clip.w)}" height="${fmt(opts.clip.h)}"/></clipPath>`
+      );
+      attrs.push(`clip-path="url(#${id})"`);
+    }
+    this.#parts.push(`<g${attrs.length ? " " + attrs.join(" ") : ""}>`);
+    try {
+      fn();
+    } finally {
+      this.#parts.push("</g>");
+    }
+  }
+  /**
+   * Wrap accumulated content in an `<svg>` document.
+   */
+  flush(width, height, options = {}) {
+    const bgRect = options.background === null ? "" : `<rect width="${width}" height="${height}" fill="${escapeAttr(options.background ?? "#fafaf8")}"/>`;
+    let grid = "";
+    if (options.grid !== false) {
+      const dots = [];
+      for (let gx = 20; gx < width; gx += 20) {
+        for (let gy = 20; gy < height; gy += 20) {
+          dots.push(`<rect x="${gx}" y="${gy}" width="1.5" height="1.5" fill="#e8e8e4"/>`);
+        }
+      }
+      grid = dots.join("");
+    }
+    const defs = this.#defs.length ? `<defs>${this.#defs.join("")}</defs>` : "";
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">${defs}${bgRect}${grid}${this.#parts.join("")}</svg>`;
+  }
+  #nextDefId(prefix) {
+    return `${prefix}-${this.#defCounter++}`;
+  }
+};
+function shapeAttrs(opts) {
+  const out = [];
+  out.push(` fill="${escapeAttr(opts.fill && opts.fill !== "transparent" ? opts.fill : "none")}"`);
+  if (opts.stroke && opts.stroke !== "transparent") out.push(` stroke="${escapeAttr(opts.stroke)}"`);
+  else out.push(' stroke="none"');
+  if (opts.strokeWidth != null) out.push(` stroke-width="${opts.strokeWidth}"`);
+  out.push(` stroke-linecap="${opts.lineCap ?? "round"}"`);
+  out.push(` stroke-linejoin="${opts.lineJoin ?? "round"}"`);
+  return out.join("");
+}
+function strokeAttrs(opts) {
+  const out = [' fill="none"'];
+  if (opts.stroke) out.push(` stroke="${escapeAttr(opts.stroke)}"`);
+  if (opts.strokeWidth != null) out.push(` stroke-width="${opts.strokeWidth}"`);
+  out.push(` stroke-linecap="${opts.lineCap ?? "round"}"`);
+  return out.join("");
+}
+function fmt(n) {
+  return Number.isInteger(n) ? String(n) : n.toFixed(2);
+}
+function escapeAttr(s) {
+  return s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+}
+function escapeText(s) {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+function baselineToDy(b, size) {
+  switch (b) {
+    case "top":
+      return size * 0.8;
+    case "middle":
+      return size * 0.35;
+    case "bottom":
+      return 0;
+    case "alphabetic":
+    default:
+      return 0;
+  }
+}
+
+// src/render/svg.ts
+var DEFAULT_W = 860;
+var DEFAULT_H = 600;
+var SvgRenderer = class {
+  /**
+   * Render one page of `doc` as an SVG document string.
+   */
+  renderToString(doc, options = {}) {
+    const w = options.width ?? DEFAULT_W;
+    const h = options.height ?? DEFAULT_H;
+    const page = selectPage(doc, options.page);
+    if (!page) {
+      const surface2 = new SvgSurface(0);
+      return surface2.flush(w, h, {
+        background: options.background ?? void 0,
+        grid: options.grid
+      });
+    }
+    const seed = options.seed ?? hashString(page.id + ":" + page.name);
+    const surface = new SvgSurface(seed);
+    for (const ar of page.arrows) {
+      const from = findItemById(page.elements, ar.from);
+      const to = findItemById(page.elements, ar.to);
+      if (!from || !to) continue;
+      const f = layoutBox(from);
+      const t = layoutBox(to);
+      arrow(surface, f.x + f.w / 2, f.y + f.h, t.x + t.w / 2, t.y, {
+        label: ar.label
+      });
+    }
+    for (const el of iterateRenderables(page.elements)) {
+      drawElement(surface, el);
+    }
+    return surface.flush(w, h, {
+      background: options.background,
+      grid: options.grid
+    });
+  }
+};
+
+export { BocetoParseError, CanvasRenderer, CanvasSurface, DEFAULT_FONT, DEFAULT_SLOT, ELEMENT_TYPES, PALETTE, SvgRenderer, SvgSurface, applyFlexLayout, arrow, drawElement, fillColor2 as fillColor, fontString, getRenderer, hashString, initYoga, isComponentInstance, isFlexContainer, isSlot, isYogaReady, layoutBox, mulberry32, parse, registerElement, selectPage, serialize, sketchLine, sketchRect, sketchText, strokeColor2 as strokeColor, tokenize, wrapText };
+//# sourceMappingURL=browser.js.map
+//# sourceMappingURL=browser.js.map

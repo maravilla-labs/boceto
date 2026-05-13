@@ -17,13 +17,14 @@ and may be redefined in later versions.
 A Boceto v0.1 implementation **MUST**:
 
 - Recognize fenced code blocks whose info string starts with `boceto`.
-- Implement the seven statement keywords defined in §4: `element`, `text`, `arrow`, `row`, `col`, `end`,
-  `component`.
+- Implement the statement keywords defined in §4: `element`, `text`, `arrow`, `row`, `col`, `end`,
+  `component`, `slot`.
 - Implement all element types listed in §5.
 - Accept the `TYPE#ID` shorthand defined in §4.5.
 - Resolve composite component references defined in §4.7.
+- Resolve `FlexContainer` layout via a flexbox-compatible engine (Yoga); see §4.6.
 - Round-trip parse → serialize → parse without semantic loss for any document built only from constructs in
-  this spec. (Layout primitives in §4.6 are parser sugar and do not round-trip — see that section.)
+  this spec.
 
 A Boceto v0.1 implementation **MAY**:
 
@@ -141,7 +142,7 @@ element  TYPE[#ID]   X Y W H   "label"   ["note"]   [KEY=VALUE ...]
 | `TYPE`       | One of the element types listed in §5.                                              |
 | `#ID`        | Optional named element ID (see §4.5). When omitted, an ID is auto-generated.        |
 | `X Y`        | Top-left corner, in canvas pixels.                                                  |
-| `W H`        | Width and height, in canvas pixels. Both MUST be ≥ 1.                               |
+| `W H`        | Width and height, in canvas pixels. `0` or the literal `auto` mean "no preferred size" (the layout pass decides). |
 | `"label"`    | Display label. MAY be the empty string `""`.                                        |
 | `"note"`     | Optional sticky-note annotation. Defaults to empty.                                 |
 | `KEY=VALUE`  | Zero or more type-specific attributes. See §4.4.                                    |
@@ -153,6 +154,77 @@ element button 100 200 120 36 "Sign In"
 element button#submit 100 200 120 36 "Sign In"
 element table  20 60 300 200 "Users" "" rows=5 cols=4
 element input  100 100 240 32 "Email address" "validate format"
+```
+
+**Block form: an element as a container.** A trailing `:` on the line opens a children block,
+closed by `end`. Any element type may use this form — the element's chrome (border, header, etc.)
+renders normally, and the children render inside the **content rect**.
+
+```
+element  TYPE  X Y  W|auto H|auto  "label"  [container attrs]  [child flex attrs]  [KEY=VALUE …] :
+  <children>
+end
+```
+
+The element accepts the same flex-container attributes as `row` / `col`:
+
+| Attr        | Values                                                            | Default              |
+|-------------|-------------------------------------------------------------------|----------------------|
+| `direction` | `row` \| `col` — presence enables **flex mode**                   | (absent ⇒ absolute body) |
+| `gap`       | non-negative integer (px)                                         | `0`                  |
+| `padding`   | non-negative integer (px), all four edges                         | `0`                  |
+| `justify`   | `start` \| `middle` \| `end` \| `between` \| `around` \| `evenly` | `start`              |
+| `align`     | `start` \| `middle` \| `end` \| `stretch`                          | `middle` (row) / `start` (col) |
+| `wrap`      | `nowrap` \| `wrap` \| `wrap-reverse`                              | `nowrap`             |
+
+- **Flex mode** (`direction=` set): children flow according to the flex attrs above.
+- **Absolute body** (no `direction=`): children render at their declared local `(x, y)` inside the
+  content rect — useful for overlay-style layouts.
+
+**Chrome insets.** Element types that draw header chrome get an intrinsic content inset added to
+the author's `padding` so children land below the chrome by default:
+
+| Type            | Intrinsic content inset      |
+|-----------------|------------------------------|
+| `card`          | top: 36                      |
+| `modal`         | top: 40                      |
+| `window-frame`  | top: 32                      |
+| `browser-frame` | top: 70                      |
+| `phone-frame`   | 12px on all sides            |
+
+Other element types contribute zero intrinsic inset; the content rect equals the bounding box
+minus the author's `padding`.
+
+**Generic decoration attrs** (orthogonal to block-form children; valid on any element):
+
+| Attr     | Values                                                  | Effect                                       |
+|----------|---------------------------------------------------------|----------------------------------------------|
+| `border` | `true` \| `N` (px width) \| `#color` (CSS color) \| `false` (default) | Outer stroke around the element's bounding box, drawn after the chrome. |
+| `shadow` | `true` \| `N` (blur radius px) \| `false` (default)     | Drop shadow under the element's chrome.       |
+
+**Examples**
+
+```boceto
+# Box as a flex container
+element box 0 0 400 auto "" direction=col padding=12 gap=8 :
+  element heading 0 0 0 24 "Heading"
+  element label   0 0 0 18 "Body"
+end
+
+# Modal that owns its body — chrome inset pushes content below the title bar
+element modal 100 60 400 auto "Confirm" direction=col padding=12 gap=12 align=stretch :
+  element label 0 0 0 18 "Are you sure?"
+  row 0 0 0 36 gap=8 justify=end
+    element button         0 0 100 32 "Cancel"
+    element primary-button 0 0 100 32 "Confirm"
+  end
+end
+
+# Absolute body — children at declared local (x, y)
+element box 100 100 400 200 "" border=true shadow=8 :
+  element label 12 12 0 16 "At local (12, 12)"
+  element button 12 40 100 32 "OK"
+end
 ```
 
 ### 4.2 `text`
@@ -251,59 +323,94 @@ form `p<page>e<n>` for the element. Auto-IDs are stable within a parse but shoul
 never produced as output. This keeps round-tripped documents diff-friendly regardless of which input form
 was used.
 
-### 4.6 Layout primitives (`row`, `col`, `end`)
+### 4.6 Layout containers (`row`, `col`, `end`)
 
-`row` and `col` are **parse-time layout sugar**. They wrap a sequence of `element`/`text` statements and
-compute child positions, so authors don't have to math out coordinates by hand.
+`row` and `col` open a **`FlexContainer`** — a first-class layout container that wraps a sequence of
+child statements and resolves their final positions via a flexbox-compatible engine (Yoga). Containers
+round-trip through parse → serialize → parse and may be nested freely.
 
 ```
-row  X Y W H  [gap=N align=start|middle|end]
+row[#ID]  X Y W|auto H|auto  [attrs…]
   <statements>
 end
 
-col  X Y W H  [gap=N align=start|middle|end|stretch]
+col[#ID]  X Y W|auto H|auto  [attrs…]
   <statements>
 end
 ```
 
-`row` places its children **left-to-right** inside the bounding box `(X, Y, W, H)`. Each child's `x` is
-overwritten by the layout engine; `y` is computed from `align`:
+`row` lays its children out along the **main axis = X** (left → right). `col` lays them along the
+**main axis = Y** (top → bottom). Both are otherwise identical: the same attributes apply, the same
+children are accepted, and the same layout algorithm runs.
 
-- `align=start` — children flush to the top edge (default for `col` is `start`).
-- `align=middle` — children vertically centered (default for `row` is `middle`).
-- `align=end` — children flush to the bottom edge.
+**Sizing.** `X` and `Y` are the container's top-left in page space (non-negative integers). `W` and `H`
+may be a non-negative integer or the literal `auto` — `auto` lets the engine size the container to its
+children along that axis.
 
-`col` places its children **top-to-bottom**. `align` controls horizontal placement, with the additional
-value `align=stretch` overriding child width to match the container's width.
+**Container attributes** (all optional):
 
-The `gap` attribute (default `0`) is the spacing between consecutive children.
+| Attribute  | Type / values                                                | Default                        |
+|------------|--------------------------------------------------------------|--------------------------------|
+| `gap`      | non-negative integer (px)                                    | `0`                            |
+| `padding`  | non-negative integer (px), applied to all four edges          | `0`                            |
+| `align`    | `start` \| `middle` \| `end` \| `stretch` (cross axis)        | `middle` for `row`, `start` for `col` |
+| `justify`  | `start` \| `middle` \| `end` \| `between` \| `around` \| `evenly` (main axis) | `start`         |
+| `wrap`     | `nowrap` \| `wrap` \| `wrap-reverse`                          | `nowrap`                       |
+| `min-w` / `min-h` / `max-w` / `max-h` | non-negative integer (px)         | unset                          |
 
-Within a `row`/`col` block, child `element`/`text` statements still take all their positional tokens
-(`X Y W H`) — these are **required by the line-oriented grammar** but the X/Y are ignored. By convention
-write them as `0 0`. Width and height are preserved (except as noted for `align=stretch`).
+`align` and `justify` follow flexbox semantics. `stretch` (only meaningful as a cross-axis value, i.e.
+`align=stretch`) stretches a child whose cross-axis size is unconstrained to fill the container; a child
+with an explicit cross-axis size keeps that size.
 
-`row` and `col` blocks MAY nest. When nested, the inner block's placed children flow into the parent's
-children list (one element per item, not grouped) and the parent layout arranges each individually. This
-keeps semantics consistent and easy to reason about.
+**Per-child attributes.** Any child of a `FlexContainer` MAY carry these flex props, in addition to its
+own `element`/`text` attributes:
 
-`end` closes the most recent open `row` or `col`. Missing `end` is a parse error pointing at the unclosed
-block. An `end` with no matching open block is also a parse error.
+| Attribute       | Type / values                                                | Default       |
+|-----------------|--------------------------------------------------------------|---------------|
+| `grow`          | non-negative number                                          | `0`           |
+| `shrink`        | non-negative number                                          | `1`           |
+| `basis`         | non-negative integer (px) or `auto`                          | `auto`        |
+| `align-self`    | `auto` \| `start` \| `middle` \| `end` \| `stretch`           | `auto`        |
+| `min-w` / `min-h` / `max-w` / `max-h` | non-negative integer (px)         | unset         |
 
-**Round-trip:** `row`/`col`/`end` are sugar — they don't survive serialization. After parse + serialize,
-the document contains only flat `element`/`text` lines with the computed coordinates. v0.3 may add a
-tree-preserving variant for round-trip use cases (e.g. GUI editors).
+A child whose `w` (cross axis for `col`, main axis for `row`) is `0` is treated as having no explicit
+size on that axis — `grow`, `basis`, and `align=stretch` then determine the final value.
+
+**Children.** A container's children MAY be any of: `element`, `text`, `arrow`, a composite reference, or
+another `row` / `col`. Composites and nested containers are first-class — they survive serialization.
+
+**Closure.** `end` closes the most recent open `row` or `col`. Missing `end` is a parse error pointing at
+the unclosed block; an `end` with no matching open block is also a parse error.
+
+**Round-trip.** Containers round-trip. After parse + serialize, the document contains the original
+`row`/`col` blocks with their declared attributes preserved; child statements appear in source order
+inside the block. Computed coordinates (the result of running the layout engine) are not serialized —
+they are recomputed on demand by the host application's render path.
 
 **Example:**
 
 ```boceto
-row 100 50 600 60 gap=10 align=middle
+row 100 50 600 60 gap=10 align=middle justify=between
   element button 0 0 100 36 "Save"
   element button 0 0 100 36 "Cancel"
   element button 0 0 100 36 "Reset"
 end
 ```
 
-Produces three buttons placed at `x ∈ {100, 210, 320}`, vertically centered in the 60px-tall row.
+Three buttons distributed across the row with equal space between them, vertically centered in the
+60-pixel-tall row.
+
+**Example with dynamic sizing:**
+
+```boceto
+row 0 0 auto auto gap=8 padding=12
+  element button 0 0 0 36 "Primary" grow=1
+  element button 0 0 100 36 "Cancel"
+end
+```
+
+The row sizes itself to its contents. The "Primary" button grows to fill remaining horizontal space
+after the fixed-width "Cancel" button and the gap/padding are accounted for.
 
 ### 4.7 Composite components (`component`, `end`)
 
@@ -312,28 +419,106 @@ parameters fill in labels and attribute values.
 
 **Definition:**
 ```
-component NAME[(param1, param2, ...)]
-  <element / text / arrow / row / col statements>
+component NAME[(param1, param2, ...)] [shell-attrs] [size-defaults] [child-flex-defaults]
+  <element / text / arrow / row / col / composite statements>
 end
 ```
 
 - `NAME` matches the identifier rule in §3.4 and **MUST NOT** collide with a built-in element type from §5.
 - `(param1, param2, ...)` declares the parameter names accepted at the call site. The parens are optional
   if there are no parameters.
-- The body contains the same statements as a page body, with one exception: `component` definitions
-  cannot be nested inside another `component`.
+- Optional header attrs (see "Component attributes" below) declare the component's flex shell and instance
+  defaults.
+- The body contains the same statements as a page body: `element`, `text`, `arrow`, `row`, `col`, and
+  references to other composites. The only restriction is that `component` definitions themselves cannot
+  be nested inside another `component`.
+- The body may include `slot` markers (see "Slots" below) that designate where call-site children render.
 - `end` closes the definition.
+
+**Component attributes** (all optional, all on the header line, in any order):
+
+| Group | Attribute | Type / values | Default |
+|-------|-----------|---------------|---------|
+| Shell | `direction` | `row` \| `col` | — (when set, body lays out as flex children) |
+| Shell | `gap` | non-negative integer (px) | `0` |
+| Shell | `padding` | non-negative integer (px) | `0` |
+| Shell | `align` | `start` \| `middle` \| `end` \| `stretch` | `middle` (row) / `start` (col) |
+| Shell | `justify` | `start` \| `middle` \| `end` \| `between` \| `around` \| `evenly` | `start` |
+| Shell | `wrap` | `nowrap` \| `wrap` \| `wrap-reverse` | `nowrap` |
+| Size default | `w` / `h` | non-negative integer (px) or `auto` | unset |
+| Size default | `min-w` / `min-h` / `max-w` / `max-h` | non-negative integer (px) | unset |
+| Child-flex default | `grow` / `shrink` | non-negative number | unset |
+| Child-flex default | `basis` | non-negative integer (px) or `auto` | unset |
+| Child-flex default | `align-self` | `auto` \| `start` \| `middle` \| `end` \| `stretch` | unset |
+
+**Shell mode** is opted into by declaring `direction`. When the component has a shell:
+
+- The body is laid out as flex children of an **implicit root** sized to the instance's resolved box.
+- Body items use coordinates relative to the component origin `(0, 0)`; their `x`/`y` is overwritten by
+  flex layout. `w`/`h` (and child-flex props like `grow=1`) determine the resolved size.
+- When the instance is grown / shrunk / wrapped by a parent `row`/`col`, the body re-flows against the new
+  size automatically — a `Panel` component with `direction=col` adapts whether it's at a fixed call-site
+  size, inside a row with `grow=1`, or in a wrapping grid.
+
+**Without a shell**, body coordinates are absolute (origin = instance top-left) — useful for pixel-precise
+widgets where flex resizing would be unhelpful.
+
+**Size defaults and child-flex defaults** apply to every instance whose call site doesn't supply that
+attribute. Per-instance attrs win over component defaults.
 
 **Reference:** A composite is referenced from any page using the `element` keyword, with the component
 name in place of a built-in type:
 
 ```
-element NAME[#instanceId] X Y W H "" param1=value1 param2="value with spaces"
+element NAME[#instanceId] X Y W|auto H|auto "" key=value ...
 ```
 
 The label slot must be present (grammar parity with regular `element`) but is ignored — composites
 typically pass the label down through `$param`. The optional `#instanceId` is the standard `TYPE#ID`
 shorthand from §4.5; if omitted, the parser auto-generates an opaque id of the form `p<page>c<n>`.
+
+`W` and `H` may be `auto` to defer to the component's `w`/`h` default; if neither is supplied, the
+instance is unsized along that axis and a parent `row`/`col` (or the shell layout) determines the final
+value.
+
+`key=value` tokens at the call site fill three different buckets:
+1. **Flex-child overrides** for layout (`grow`, `shrink`, `basis`, `align-self`, `min-w`/`min-h`/`max-w`/`max-h`).
+2. **Parameters** declared in the component's `(params)` list — substituted into `$name` placeholders.
+3. Any other key is treated as a parameter (forgiving — unknown params substitute to the empty string).
+
+Flex-child overrides at the call site win over the component's defaults.
+
+**Slots.** A component body may declare one or more `slot` markers, which designate where call-site
+children render:
+
+```
+slot          # anonymous default slot
+slot NAME     # named slot
+```
+
+At the call site, a trailing `:` on the `element NAME ...` line opens a children block (closed by `end`).
+Bare children inside that block fill the **anonymous default slot**; `slot NAME ... end` sub-blocks fill
+**named slots**:
+
+```
+element Card 0 0 300 auto "" title="Hi" :
+  element label 0 0 0 16 "anonymous default body"
+  slot header
+    element label 0 0 0 16 "named: header"
+  end
+  slot body
+    element label 0 0 0 16 "named: body"
+  end
+end
+```
+
+- The component must declare a `slot` (anonymous) for bare children to be accepted, and a `slot NAME`
+  for each named slot the call site uses. Otherwise the parser raises an error.
+- A given slot name may appear at most once per call site.
+- The single-line call form (no `:`) is still valid for components with or without slots — slots default
+  to empty when the call site doesn't supply them.
+- Built-in element types (`element box`, `element button`, etc.) do **not** accept a children block;
+  only composite references do.
 
 **Parameter substitution.** Inside the component body, `$name` and `${name}` placeholders in any string
 position (label, note, string-typed attribute value) are replaced with the caller's value. Unknown
@@ -341,17 +526,24 @@ parameters substitute to the empty string (forgiving — eases refactors). Numer
 support substitution in v0.1 (no expression syntax).
 
 **Coordinate convention.** Body element coordinates are interpreted as **relative to the component's
-origin**. At reference expansion, every body element is translated by `(instance.x, instance.y)`. The
-caller's `W`/`H` are recorded but are not currently used to scale the component (children render at the
-sizes baked into the body).
+origin**. For **absolute-body components** (no shell), expansion translates every body element by
+`(instance.x, instance.y)` and the body renders at the baked sizes. For **flex-shell components**, body
+coordinates are reset by flex layout — the body sizes itself to the instance's resolved box every time.
 
-**Scope.** All component definitions in a document are visible from all pages, regardless of the order
-of `boceto` blocks. A page may reference a component defined in a later block.
+**Scope and nesting.** All component definitions in a document are visible from all pages, regardless of
+source order — a page may reference a component defined in a later block, and a component body may
+reference any other component (including ones defined later). Composites may appear anywhere a regular
+`element` may: at page top level, inside a `row` / `col` container, or inside another component's body.
+
+When component A's body references component B, B's body is recursively expanded at the call site of A;
+the result is a tree of `Element` and `FlexContainer` nodes (no unresolved composite refs survive in the
+final document). The parser detects reference cycles (A → B → A) at expansion time and reports the chain.
 
 **Restrictions in v0.1:**
 
-- `component` definitions cannot be nested.
-- Composite references cannot appear inside a `row` or `col` block.
+- `component` definitions cannot themselves be nested syntactically inside another `component` block.
+  (References between components are unrestricted; only the textual nesting of `component … end` blocks
+  is forbidden.)
 - Body coordinates are absolute (no `_w`/`_h` placeholders, no arithmetic). Components are fixed-size
   widgets — design them at the size you want them displayed.
 
@@ -359,7 +551,7 @@ of `boceto` blocks. A page may reference a component defined in a later block.
 serialize as `element <componentName>[#id] X Y W H "" key=value ...` lines — *not* as their expanded
 children. This preserves the abstraction across edit cycles.
 
-**Example:**
+**Example — absolute-body widget:**
 
 ````markdown
 ```boceto
@@ -374,6 +566,35 @@ end
 ```boceto:Team
 element user-card 100  50 240 80 "" name="Jane Doe" role="Admin"
 element user-card 100 150 240 80 "" name="John"     role="User"
+```
+````
+
+**Example — responsive flex-shell panel:**
+
+````markdown
+```boceto
+component Panel(title) direction=col padding=12 gap=8 w=300 h=auto min-w=200 max-w=600
+  element heading 0 0 0 24 "$title"
+  element box 0 0 0 0 "" grow=1
+end
+```
+
+```boceto:Dashboard
+# Page top-level, explicit size
+element Panel 100 100 400 200 "" title="Stats"
+
+# In a row, grow=1 makes Panel fill the remaining slot
+row 0 0 800 200 gap=8
+  element box 0 0 200 200 ""
+  element Panel 0 0 auto auto "" grow=1 title="Main"
+end
+
+# Grid via wrap — each Panel packs to its min-w when the row wraps
+row 0 0 800 auto gap=12 wrap=wrap
+  element Panel 0 0 auto auto "" title="One"
+  element Panel 0 0 auto auto "" title="Two"
+  element Panel 0 0 auto auto "" title="Three"
+end
 ```
 ````
 
@@ -457,15 +678,27 @@ type Page = {
   arrows: Arrow[]
 }
 
-type PageItem = Element | ComponentInstance
+type PageItem = Element | ComponentInstance | FlexContainer
 
-type Element = {
+type ComputedBox = { x: number; y: number; w: number; h: number }
+
+type FlexChildProps = {
+  grow?: number
+  shrink?: number
+  basis?: number | 'auto'
+  alignSelf?: 'auto' | 'start' | 'middle' | 'end' | 'stretch'
+  minW?: number; minH?: number; maxW?: number; maxH?: number
+}
+
+type Element = FlexChildProps & {
   id: string
   type: ElementType
   x: number; y: number; w: number; h: number
   label: string
   note?: string
   attrs: Record<string, string | number>
+  computed?: ComputedBox    // filled by the layout pass when this element
+                            // is a child of a FlexContainer
 }
 
 type Arrow = {
@@ -475,35 +708,72 @@ type Arrow = {
   label?: string
 }
 
-type Component = {
-  name: string              // identifier, must not collide with built-in types
-  params: string[]          // parameter names
-  body: (Element | Arrow)[] // template — coords are component-relative,
-                            // labels/attrs may contain $name placeholders
+type FlexContainer = FlexChildProps & {
+  kind: 'flex-container'
+  id: string
+  direction: 'row' | 'col'   // main-axis direction
+  x: number; y: number
+  w: number | 'auto'
+  h: number | 'auto'
+  padding: number
+  gap: number
+  justify: 'start' | 'middle' | 'end' | 'between' | 'around' | 'evenly'
+  align: 'start' | 'middle' | 'end' | 'stretch'
+  wrap: 'nowrap' | 'wrap' | 'wrap-reverse'
+  children: PageItem[]       // recursive — may hold Elements, composites,
+                             // or nested containers
+  computed?: ComputedBox     // filled by the layout pass
 }
 
-type ComponentInstance = {
+type Component = {
+  name: string                                              // must not collide with built-in types
+  params: string[]                                          // parameter names
+  body: (Element | Arrow | FlexContainer | ComponentInstance)[]
+  // template — coords are component-relative, labels/attrs may contain
+  // $name placeholders, nested composites are unresolved references
+  // (expanded recursively at each call site)
+  shell?: {                                                 // present iff `direction` declared
+    direction: 'row' | 'col'
+    padding: number; gap: number
+    justify: 'start' | 'middle' | 'end' | 'between' | 'around' | 'evenly'
+    align: 'start' | 'middle' | 'end' | 'stretch'
+    wrap: 'nowrap' | 'wrap' | 'wrap-reverse'
+  }
+  defaults?: {                                              // applied to instances lacking the attr
+    w?: number | 'auto'; h?: number | 'auto'
+    minW?: number; minH?: number; maxW?: number; maxH?: number
+    grow?: number; shrink?: number; basis?: number | 'auto'
+    alignSelf?: 'auto' | 'start' | 'middle' | 'end' | 'stretch'
+  }
+}
+
+type ComponentInstance = FlexChildProps & {
   kind: 'component-instance'
-  id: string                // call-site id
+  id: string                  // call-site id
   componentName: string
-  x: number; y: number; w: number; h: number
+  x: number; y: number
+  w: number | 'auto'          // 'auto' = use component default OR let layout decide
+  h: number | 'auto'
   params: Record<string, string>
-  expanded: Element[]       // pre-substituted, absolute-coord children;
-                            // renderers iterate this directly
+  expanded: PageItem[]        // recursively expanded children — no nested
+                              // ComponentInstance survives; may include
+                              // Elements and FlexContainers
+  computed?: ComputedBox      // filled by layout pass
 }
 ```
 
-`Element` and `ComponentInstance` are discriminated by the presence of `kind: 'component-instance'`.
-`Element` has no `kind` field. The `expanded` array on `ComponentInstance` lets renderers walk a flat
-list of `Element`s without needing to look up the component definition.
+`PageItem` is a three-way discriminated union: `Element` (no `kind` field), `ComponentInstance`
+(`kind: 'component-instance'`), and `FlexContainer` (`kind: 'flex-container'`). The layout pass writes a
+`computed` box onto every `PageItem` that participates in flex layout; renderers prefer `computed` over
+the declared `x/y/w/h` when present.
 
 The serializer is the inverse: `serialize(parse(s)) === s` (modulo insignificant whitespace) for any
-syntactically valid document **that uses only constructs that round-trip**. Layout primitives (§4.6) are
-the only intentional exception: they expand at parse time and the serializer emits the resulting flat
-elements — the original `row`/`col`/`end` framing is lost.
+syntactically valid document. `row`/`col` blocks round-trip with their declared attributes and children;
+composite definitions round-trip in a leading definitions-only block, and composite call sites round-trip
+as single `element` lines (not their expanded children).
 
-`Page.elements` is always a flat array. Layout primitives do not introduce a tree structure into the
-document model.
+`Page.elements` is a tree: any item may be a leaf `Element`/`ComponentInstance` or a `FlexContainer`
+whose `children` recursively contain more `PageItem`s.
 
 ---
 

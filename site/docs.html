@@ -1,0 +1,1068 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Boceto — Documentation</title>
+    <meta
+      name="description"
+      content="Boceto DSL documentation: file embedding, elements, layout containers, responsive components, attributes, and full reference."
+    />
+    <link rel="stylesheet" href="./assets/style.css" />
+    <script type="module" src="./assets/boceto-view.js"></script>
+    <style>
+      .doc-subnav {
+        background: var(--paper);
+        border-bottom: 1px solid var(--rule);
+        position: sticky;
+        top: 60px;
+        z-index: 9;
+      }
+      .doc-subnav-inner {
+        max-width: var(--max-width);
+        margin: 0 auto;
+        padding: 0 24px;
+        display: flex;
+        gap: 6px;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+      }
+      .doc-subnav a {
+        padding: 14px 14px 12px;
+        font-size: 14px;
+        color: var(--muted);
+        text-decoration: none;
+        border-bottom: 2px solid transparent;
+        white-space: nowrap;
+        transition: color 0.12s, border-color 0.12s;
+      }
+      .doc-subnav a:hover { color: var(--ink); }
+      .doc-subnav a.active {
+        color: var(--ink);
+        border-bottom-color: var(--accent);
+        font-weight: 500;
+      }
+
+      .doc-shell {
+        max-width: var(--max-width);
+        margin: 0 auto;
+        padding: 24px 24px 96px;
+        display: grid;
+        grid-template-columns: 220px 1fr;
+        gap: 40px;
+        align-items: start;
+      }
+      @media (max-width: 880px) {
+        .doc-shell { grid-template-columns: 1fr; gap: 24px; }
+        .doc-side { position: static; display: none; }
+      }
+      .doc-side {
+        position: sticky;
+        top: 132px;
+        font-size: 13px;
+        line-height: 1.7;
+        max-height: calc(100vh - 160px);
+        overflow-y: auto;
+        padding-right: 8px;
+      }
+      .doc-side h4 {
+        margin: 14px 0 2px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        font-size: 10.5px;
+        color: var(--muted);
+      }
+      .doc-side h4:first-child { margin-top: 0; }
+      .doc-side a {
+        display: block;
+        color: var(--ink);
+        text-decoration: none;
+        padding: 2px 0 2px 8px;
+        border-left: 2px solid transparent;
+        margin-left: -2px;
+      }
+      .doc-side a:hover { color: var(--accent); }
+      .doc-side a.active {
+        color: var(--accent-dark);
+        border-left-color: var(--accent);
+        font-weight: 500;
+      }
+      .doc-body h2 {
+        margin: 0 0 8px;
+        font-size: 28px;
+        scroll-margin-top: 130px;
+      }
+      .doc-body h2:not(:first-child) { margin-top: 56px; }
+      .doc-body h3 {
+        margin: 28px 0 6px;
+        font-size: 18px;
+        scroll-margin-top: 130px;
+      }
+      .doc-body h4 {
+        margin: 20px 0 4px;
+        font-size: 14px;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+      .doc-body p { margin: 0 0 12px; }
+      .doc-body ul { margin: 0 0 12px; }
+      .doc-body li { margin: 4px 0; }
+      .doc-body boceto-view {
+        display: block;
+        margin: 14px 0 4px;
+        border: 1px solid var(--rule);
+        border-radius: 8px;
+        background: white;
+      }
+      .doc-body table {
+        border-collapse: collapse;
+        margin: 12px 0 20px;
+        font-size: 13.5px;
+        width: 100%;
+      }
+      .doc-body th,
+      .doc-body td {
+        border: 1px solid var(--rule);
+        padding: 6px 12px;
+        text-align: left;
+        vertical-align: top;
+      }
+      .doc-body th { background: var(--code-bg); font-weight: 600; }
+      .callout {
+        border-left: 3px solid var(--accent);
+        background: rgba(59, 130, 196, 0.06);
+        padding: 12px 16px;
+        margin: 16px 0;
+        border-radius: 0 6px 6px 0;
+        font-size: 14px;
+      }
+      .callout strong { color: var(--accent-dark); }
+      .callout.warn {
+        border-left-color: #d97706;
+        background: rgba(217, 119, 6, 0.06);
+      }
+      .callout.warn strong { color: #b45309; }
+      .lead {
+        color: var(--muted);
+        font-size: 17px;
+        margin: 0 0 28px;
+      }
+    </style>
+  </head>
+  <body>
+    <header class="site">
+      <nav>
+        <a class="brand" href="./index.html">
+          <span class="logo-mark">B</span>
+          Boceto
+        </a>
+        <div class="links">
+          <a href="./index.html">Home</a>
+          <a href="./docs.html" class="active">Documentation</a>
+          <a href="./playground.html">Playground</a>
+          <a href="./elements.html">Elements</a>
+          <a href="./editor.html">Editor</a>
+          <a href="https://github.com/maravilla-labs/boceto" class="gh">GitHub →</a>
+        </div>
+      </nav>
+    </header>
+
+    <nav class="doc-subnav" aria-label="Documentation sections">
+      <div class="doc-subnav-inner">
+        <a href="#sec-getting-started" data-section="sec-getting-started">Getting started</a>
+        <a href="#sec-dsl" data-section="sec-dsl">DSL</a>
+        <a href="#sec-layout" data-section="sec-layout">Layout</a>
+        <a href="#sec-components" data-section="sec-components">Components</a>
+        <a href="#sec-reference" data-section="sec-reference">Reference</a>
+      </div>
+    </nav>
+
+    <main class="doc-shell">
+      <aside class="doc-side">
+        <h4>Getting started</h4>
+        <a href="#intro">Introduction</a>
+        <a href="#embedding">File embedding</a>
+        <a href="#first">Your first diagram</a>
+
+        <h4>DSL</h4>
+        <a href="#element">element</a>
+        <a href="#text">text</a>
+        <a href="#arrow">arrow</a>
+        <a href="#attributes">Attributes</a>
+        <a href="#ids">Named IDs</a>
+
+        <h4>Layout</h4>
+        <a href="#rowcol">row / col</a>
+        <a href="#sizing">Sizing &amp; grow</a>
+        <a href="#wrap">Wrap as grid</a>
+        <a href="#element-container">Elements as containers</a>
+        <a href="#alignment">Alignment tips</a>
+
+        <h4>Components</h4>
+        <a href="#component">component</a>
+        <a href="#responsive">Responsive shells</a>
+        <a href="#absolute-body">Absolute body</a>
+        <a href="#slots">Slots</a>
+        <a href="#patterns">Common patterns</a>
+
+        <h4>Reference</h4>
+        <a href="#attr-rowcol"><code>row</code>/<code>col</code> attrs</a>
+        <a href="#attr-child">Child flex attrs</a>
+        <a href="#attr-component"><code>component</code> attrs</a>
+      </aside>
+
+      <article class="doc-body">
+        <section id="sec-getting-started" data-section="sec-getting-started">
+        <!-- ─────────────────────────────────────────────────────────── -->
+        <h2 id="intro">Documentation</h2>
+        <p class="lead">
+          Boceto is a tiny DSL for hand-drawn wireframes. Write a few lines inside a
+          fenced markdown code block, get a styled diagram. This page documents every
+          construct in the language.
+        </p>
+
+        <p>The DSL has seven keywords. That's all of it:</p>
+        <table>
+          <thead><tr><th>Keyword</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td><code>element</code></td><td>Draw a UI element (one of 83 built-in types) or call a component.</td></tr>
+            <tr><td><code>text</code></td><td>Shorthand for a text label.</td></tr>
+            <tr><td><code>arrow</code></td><td>Connect two elements by id.</td></tr>
+            <tr><td><code>row</code> / <code>col</code></td><td>Open a layout container that arranges its children.</td></tr>
+            <tr><td><code>component</code></td><td>Define a reusable composite.</td></tr>
+            <tr><td><code>end</code></td><td>Close the most recent <code>row</code>, <code>col</code>, or <code>component</code> block.</td></tr>
+          </tbody>
+        </table>
+
+        <!-- ─────────────────────────────────────────────────────────── -->
+        <h2 id="embedding">File embedding</h2>
+        <p>
+          Boceto content lives inside markdown fenced code blocks. The info string
+          starts with <code>boceto</code> and may include an optional page name after
+          a colon:
+        </p>
+        <pre><code>```boceto:Login Screen
+element navbar 0 0 600 44 "MyApp"
+element heading 100 80 400 28 "Welcome back"
+```</code></pre>
+        <p>
+          Coordinates are pixels in page-space. Top-left is <code>(0, 0)</code>.
+          Multiple <code>boceto</code> blocks in the same document become multiple
+          pages of one diagram.
+        </p>
+
+        <!-- ─────────────────────────────────────────────────────────── -->
+        <h2 id="first">Your first diagram</h2>
+
+        <boceto-view width="900" height="240" code='```boceto
+element navbar 0 0 900 44 "MyApp"
+element heading 280 90 340 32 "Welcome back" fontSize=28
+element label 280 130 340 22 "Sign in to continue"
+element input 280 170 340 36 "Email"
+element primary-button 280 210 340 36 "Sign In"
+```'></boceto-view>
+
+        <details>
+          <summary>Show source</summary>
+          <pre>element navbar 0 0 900 44 "MyApp"
+element heading 280 90 340 32 "Welcome back" fontSize=28
+element label 280 130 340 22 "Sign in to continue"
+element input 280 170 340 36 "Email"
+element primary-button 280 210 340 36 "Sign In"</pre>
+        </details>
+        </section>
+
+        <section id="sec-dsl" data-section="sec-dsl">
+        <!-- ─────────────────────────────────────────────────────────── -->
+        <h2 id="element"><code>element</code></h2>
+        <p>The core statement. Draws one UI element.</p>
+        <pre><code>element TYPE[#id] X Y W H "label" ["note"] [key=value ...]</code></pre>
+        <ul>
+          <li><strong>TYPE</strong> — one of 83 element types (see <a href="./elements.html">Elements</a>).</li>
+          <li><strong>#id</strong> — optional named identifier (used by <code>arrow</code> to reference this element).</li>
+          <li><strong>X Y W H</strong> — pixel coordinates and size. Required positionally, even inside a <code>row</code>/<code>col</code> (the container will override <code>X</code> and <code>Y</code>; write <code>0 0</code>).</li>
+          <li><strong>"label"</strong> — quoted text displayed on the element. Use <code>""</code> if blank.</li>
+          <li><strong>"note"</strong> — optional sticky-note annotation.</li>
+          <li><strong>key=value</strong> — type-specific attributes (e.g. <code>fontSize=18</code>, <code>rows=5</code>) and layout attrs when inside a flex container.</li>
+        </ul>
+
+        <!-- ─────────────────────────────────────────────────────────── -->
+        <h2 id="text"><code>text</code></h2>
+        <p>Shorthand for a <code>label</code> element with implicit sizing.</p>
+        <pre><code>text X Y "content" [w=N h=N fontSize=N ...]</code></pre>
+        <p>Equivalent to <code>element label X Y 200 24 "content"</code> with the same attributes.</p>
+
+        <!-- ─────────────────────────────────────────────────────────── -->
+        <h2 id="arrow"><code>arrow</code></h2>
+        <p>
+          Connect two elements by id. The arrow draws from the midpoint of the source's
+          bottom edge to the midpoint of the target's top edge.
+        </p>
+        <pre><code>arrow FROM_ID TO_ID ["optional label"]</code></pre>
+
+        <boceto-view width="900" height="220" code='```boceto
+element button#a 100 40 120 40 "Start"
+element box#b 380 100 200 80 "Process"
+element button#c 660 40 120 40 "Done"
+arrow a b
+arrow b c "completes"
+```'></boceto-view>
+        <details>
+          <summary>Show source</summary>
+          <pre>element button#a 100 40 120 40 "Start"
+element box#b 380 100 200 80 "Process"
+element button#c 660 40 120 40 "Done"
+arrow a b
+arrow b c "completes"</pre>
+        </details>
+
+        <!-- ─────────────────────────────────────────────────────────── -->
+        <h2 id="attributes">Attributes (<code>key=value</code>)</h2>
+        <p>
+          Any element accepts trailing <code>key=value</code> tokens. Unknown attributes
+          are preserved verbatim — implementations may consume them, others pass them
+          through. Common attributes:
+        </p>
+        <table>
+          <thead><tr><th>Attribute</th><th>Meaning</th></tr></thead>
+          <tbody>
+            <tr><td><code>id</code></td><td>Named id (alternative to <code>TYPE#id</code> shorthand).</td></tr>
+            <tr><td><code>fontSize</code></td><td>Override text size in pixels.</td></tr>
+            <tr><td>type-specific</td><td>e.g. <code>rows</code>, <code>cols</code> on <code>table</code>; <code>progress</code> on <code>progress</code>.</td></tr>
+            <tr><td>flex attrs</td><td>See <a href="#attr-child">child flex attributes</a> when inside a <code>row</code>/<code>col</code>.</td></tr>
+          </tbody>
+        </table>
+
+        <!-- ─────────────────────────────────────────────────────────── -->
+        <h2 id="ids">Named IDs</h2>
+        <p>Two equivalent forms; the shorthand is preferred for round-trip diffs.</p>
+        <pre><code>element button#save 0 0 100 30 "Save"
+element button 0 0 100 30 "Save" id=save</code></pre>
+        <p>
+          IDs must match <code>[A-Za-z][A-Za-z0-9_-]*</code>. Without an id, the parser
+          auto-generates an opaque one.
+        </p>
+        </section>
+
+        <section id="sec-layout" data-section="sec-layout">
+        <!-- ─────────────────────────────────────────────────────────── -->
+        <h2 id="rowcol">Layout: <code>row</code> and <code>col</code></h2>
+        <p>
+          A <code>row</code> arranges children left → right. A <code>col</code>
+          arranges them top → bottom. The grammar mirrors <code>element</code>:
+        </p>
+        <pre><code>row[#id] X Y W|auto H|auto [attrs...]
+  &lt;child statements&gt;
+end
+
+col[#id] X Y W|auto H|auto [attrs...]
+  &lt;child statements&gt;
+end</code></pre>
+
+        <boceto-view width="900" height="120" code='```boceto
+row 20 20 860 80 gap=12 align=middle
+  element button 0 0 100 36 "Save"
+  element button 0 0 100 36 "Cancel"
+  element button 0 0 100 36 "Reset"
+end
+```'></boceto-view>
+        <details>
+          <summary>Show source</summary>
+          <pre>row 20 20 860 80 gap=12 align=middle
+  element button 0 0 100 36 "Save"
+  element button 0 0 100 36 "Cancel"
+  element button 0 0 100 36 "Reset"
+end</pre>
+        </details>
+
+        <div class="callout">
+          <strong>Children write <code>0 0</code> for X/Y.</strong> The grammar requires
+          positional tokens, but the container overrides X/Y. Width and height become
+          the child's preferred size.
+        </div>
+
+        <h3>Distribution: <code>justify</code> and <code>align</code></h3>
+        <p>
+          <code>justify</code> spreads children along the main axis;
+          <code>align</code> positions them on the cross axis.
+        </p>
+
+        <boceto-view width="900" height="100" code='```boceto
+row 20 20 860 60 justify=between align=middle
+  element button 0 0 100 36 "Back"
+  element heading 0 0 200 28 "Settings"
+  element primary-button 0 0 100 36 "Save"
+end
+```'></boceto-view>
+        <details>
+          <summary>Show source</summary>
+          <pre>row 20 20 860 60 justify=between align=middle
+  element button 0 0 100 36 "Back"
+  element heading 0 0 200 28 "Settings"
+  element primary-button 0 0 100 36 "Save"
+end</pre>
+        </details>
+
+        <p>
+          Valid <code>justify</code>: <code>start</code>, <code>middle</code>,
+          <code>end</code>, <code>between</code>, <code>around</code>,
+          <code>evenly</code>. Valid <code>align</code>: <code>start</code>,
+          <code>middle</code>, <code>end</code>, <code>stretch</code>.
+        </p>
+
+        <h3 id="sizing">Sizing: <code>auto</code>, <code>grow</code>, <code>min/max</code></h3>
+
+        <h4>Container <code>auto</code></h4>
+        <p>Use <code>auto</code> for <code>W</code> or <code>H</code> to shrink-wrap the container around its content.</p>
+
+        <boceto-view width="900" height="120" code='```boceto
+row 20 20 auto auto padding=12 gap=8 align=middle
+  element heading 0 0 200 28 "Toolbar"
+  element button 0 0 80 32 "Save"
+  element button 0 0 80 32 "Cancel"
+end
+```'></boceto-view>
+        <details>
+          <summary>Show source</summary>
+          <pre>row 20 20 auto auto padding=12 gap=8 align=middle
+  element heading 0 0 200 28 "Toolbar"
+  element button 0 0 80 32 "Save"
+  element button 0 0 80 32 "Cancel"
+end</pre>
+        </details>
+
+        <h4>Child <code>grow</code></h4>
+        <p>
+          A child with <code>grow=1</code> takes any leftover main-axis space. Two
+          siblings with <code>grow=1</code> each split the remainder evenly.
+        </p>
+
+        <boceto-view width="900" height="80" code='```boceto
+row 20 20 860 44 gap=8 align=middle
+  element button 0 0 80 32 "Back"
+  element input 0 0 0 32 "Search…" grow=1
+  element button 0 0 80 32 "Filter"
+end
+```'></boceto-view>
+        <details>
+          <summary>Show source</summary>
+          <pre>row 20 20 860 44 gap=8 align=middle
+  element button 0 0 80 32 "Back"
+  element input 0 0 0 32 "Search…" grow=1
+  element button 0 0 80 32 "Filter"
+end</pre>
+        </details>
+
+        <div class="callout">
+          <strong><code>0</code> means "no preferred size".</strong> A child with
+          <code>w=0 grow=1</code> reads as "I have no width preference; give me the
+          remaining space." An actual zero-sized element wouldn't render, so the
+          overload is unambiguous.
+        </div>
+
+        <h4>Constraints: <code>min-w</code> / <code>max-w</code> / <code>min-h</code> / <code>max-h</code></h4>
+        <p>
+          Guardrails on a child's size. <code>min-w</code> is essential for wrap-as-grid
+          layouts — it sets the threshold at which children break to the next line.
+        </p>
+
+        <h3 id="wrap">Wrap as grid</h3>
+        <p>
+          <code>wrap=wrap</code> on a <code>row</code> pushes overflowing children to a
+          new line. Combined with <code>min-w</code> + <code>grow=1</code> on the
+          children, you get a responsive grid without leaving the row syntax.
+        </p>
+
+        <boceto-view width="900" height="220" code='```boceto
+row 20 20 860 180 gap=12 wrap=wrap align=start
+  element card 0 0 0 80 "" grow=1 min-w=180
+  element card 0 0 0 80 "" grow=1 min-w=180
+  element card 0 0 0 80 "" grow=1 min-w=180
+  element card 0 0 0 80 "" grow=1 min-w=180
+  element card 0 0 0 80 "" grow=1 min-w=180
+end
+```'></boceto-view>
+        <details>
+          <summary>Show source</summary>
+          <pre>row 20 20 860 180 gap=12 wrap=wrap align=start
+  element card 0 0 0 80 "" grow=1 min-w=180
+  element card 0 0 0 80 "" grow=1 min-w=180
+  element card 0 0 0 80 "" grow=1 min-w=180
+  element card 0 0 0 80 "" grow=1 min-w=180
+  element card 0 0 0 80 "" grow=1 min-w=180
+end</pre>
+        </details>
+
+        <h3 id="element-container">Elements as containers</h3>
+        <p>
+          Any element type can host children via the same block-form syntax as composites.
+          A trailing <code>:</code> on the element line opens a children block, closed by
+          <code>end</code>. The element's chrome (border, header, etc.) renders normally,
+          and the children render inside the content rect.
+        </p>
+        <p>Two modes, same trigger rule as composite shells:</p>
+        <ul>
+          <li><strong>Flex container</strong> — set <code>direction=row|col</code>; children flow with full <code>gap</code> / <code>padding</code> / <code>justify</code> / <code>align</code> / <code>wrap</code> support.</li>
+          <li><strong>Absolute body</strong> — omit <code>direction</code>; children render at their declared local <code>(x, y)</code> inside the content rect.</li>
+        </ul>
+
+        <boceto-view width="900" height="180" code='```boceto
+element box 0 0 400 auto "" direction=col padding=12 gap=8 align=stretch :
+  element heading 0 0 0 24 "In a box"
+  element label 0 0 0 18 "With a flex layout"
+end
+```'></boceto-view>
+        <details>
+          <summary>Show source</summary>
+          <pre>element box 0 0 400 auto "" direction=col padding=12 gap=8 align=stretch :
+  element heading 0 0 0 24 "In a box"
+  element label 0 0 0 18 "With a flex layout"
+end</pre>
+        </details>
+
+        <p>
+          Element types that draw header chrome (<code>card</code>, <code>modal</code>,
+          <code>window-frame</code>, <code>browser-frame</code>, <code>phone-frame</code>)
+          get an intrinsic content inset added to your <code>padding</code> so children
+          land below the chrome automatically — no manual <code>padding-top=40</code> trick
+          needed:
+        </p>
+
+        <boceto-view width="900" height="240" code='```boceto
+element modal 80 20 400 auto "Confirm action" direction=col padding=12 gap=12 align=stretch :
+  element label 0 0 0 18 "Are you sure you want to continue?"
+  row 0 0 0 36 gap=8 justify=end
+    element button 0 0 100 32 "Cancel"
+    element primary-button 0 0 100 32 "Confirm"
+  end
+end
+```'></boceto-view>
+        <details>
+          <summary>Show source</summary>
+          <pre>element modal 80 20 400 auto "Confirm action" direction=col padding=12 gap=12 align=stretch :
+  element label 0 0 0 18 "Are you sure you want to continue?"
+  row 0 0 0 36 gap=8 justify=end
+    element button 0 0 100 32 "Cancel"
+    element primary-button 0 0 100 32 "Confirm"
+  end
+end</pre>
+        </details>
+
+        <h4>Generic <code>border</code> + <code>shadow</code></h4>
+        <p>
+          Any element accepts optional <code>border</code> and <code>shadow</code>
+          attributes — independent of block-form children.
+        </p>
+        <ul>
+          <li><code>border=true</code> — 1.5px default stroke. <code>border=3</code> — 3px stroke. <code>border=#3b82c4</code> — colored stroke. <code>border=false</code> — none (default).</li>
+          <li><code>shadow=true</code> — default drop shadow. <code>shadow=12</code> — 12px blur. <code>shadow=false</code> — none (default).</li>
+        </ul>
+
+        <boceto-view width="900" height="180" code='```boceto
+element box 40 40 220 100 "Plain"
+element box 280 40 220 100 "Bordered" border=#3b82c4 shadow=8
+element button 540 40 100 36 "Floating" shadow=14
+```'></boceto-view>
+        <details>
+          <summary>Show source</summary>
+          <pre>element box 40 40 220 100 "Plain"
+element box 280 40 220 100 "Bordered" border=#3b82c4 shadow=8
+element button 540 40 100 36 "Floating" shadow=14</pre>
+        </details>
+
+        <h3 id="alignment">Alignment tips</h3>
+        <p>A few rules that keep diagrams looking sharp:</p>
+        <ul>
+          <li>
+            <strong>Stacked sections should share their padding.</strong> If a header
+            uses <code>padding=12</code> and a body uses <code>padding=16</code>,
+            their titles sit at different left edges. Pick one padding value per layout.
+          </li>
+          <li>
+            <strong>Use <code>align=stretch</code> when children should fill the cross
+            axis.</strong> The default cross-axis behavior doesn't stretch.
+          </li>
+          <li>
+            <strong>Use <code>0</code> for "flex decides".</strong> Pairs with
+            <code>grow</code>, <code>basis</code>, or <code>align=stretch</code>.
+          </li>
+          <li>
+            <strong>Use <code>auto</code> for "size to content".</strong> A container
+            with <code>h=auto</code> grows to fit the tallest child. A call site
+            <code>auto auto</code> uses the component's declared default if set.
+          </li>
+        </ul>
+        </section>
+
+        <section id="sec-components" data-section="sec-components">
+        <!-- ─────────────────────────────────────────────────────────── -->
+        <h2 id="component"><code>component</code></h2>
+        <p>
+          Define a reusable composite once and reference it many times — like a
+          function whose parameters fill in labels and attribute values.
+        </p>
+
+        <pre><code>component NAME[(p1, p2, ...)] [layout-attrs] [size-defaults]
+  &lt;body statements&gt;
+end</code></pre>
+
+        <p>
+          The body contains the same statements as a page: <code>element</code>,
+          <code>text</code>, <code>arrow</code>, <code>row</code>, <code>col</code>,
+          and other component references. Inside the body, <code>$name</code> and
+          <code>${name}</code> are placeholders for parameters; they're substituted
+          at every call site.
+        </p>
+
+        <p>To reference a component, use <code>element NAME ...</code>:</p>
+
+        <boceto-view width="900" height="240" code='```boceto
+component UserCard(name, role)
+  element card 0 0 240 80 ""
+  element avatar 8 8 40 40 ""
+  element heading 56 12 180 24 "$name"
+  element label 56 38 180 18 "$role"
+end
+
+element UserCard 20 20 240 80 "" name="Jane Doe" role="Admin"
+element UserCard 280 20 240 80 "" name="John" role="User"
+```'></boceto-view>
+        <details>
+          <summary>Show source</summary>
+          <pre>component UserCard(name, role)
+  element card 0 0 240 80 ""
+  element avatar 8 8 40 40 ""
+  element heading 56 12 180 24 "$name"
+  element label 56 38 180 18 "$role"
+end
+
+element UserCard 20 20 240 80 "" name="Jane Doe" role="Admin"
+element UserCard 280 20 240 80 "" name="John" role="User"</pre>
+        </details>
+
+        <h3 id="responsive">Responsive shells</h3>
+        <p>
+          Add <code>direction=row</code> or <code>direction=col</code> to the component
+          header and the body becomes flex-laid-out inside an implicit shell sized to
+          the call site. The same component can then be dropped at a fixed size, into
+          a row with <code>grow=1</code>, or into a wrap-grid — and the body re-flows
+          every time.
+        </p>
+
+        <boceto-view width="900" height="380" code='```boceto
+component Panel(title) direction=col align=stretch padding=16 gap=8 min-w=200 max-w=400
+  element heading 0 0 0 24 "$title"
+  element box 0 0 0 0 "" grow=1
+end
+
+# fixed
+element Panel 20 20 280 120 "" title="Fixed"
+
+# grow inside a row
+row 20 160 860 120 gap=12 align=stretch
+  element box 0 0 200 0 "" id=sidebar
+  element Panel 0 0 0 0 "" grow=1 title="Grows"
+end
+
+# wrap grid
+row 20 300 860 40 gap=12 wrap=wrap
+  element Panel 0 0 0 0 "" grow=1 title="A"
+  element Panel 0 0 0 0 "" grow=1 title="B"
+  element Panel 0 0 0 0 "" grow=1 title="C"
+end
+```'></boceto-view>
+        <details>
+          <summary>Show source</summary>
+          <pre>component Panel(title) direction=col align=stretch padding=16 gap=8 min-w=200 max-w=400
+  element heading 0 0 0 24 "$title"
+  element box 0 0 0 0 "" grow=1
+end
+
+# fixed
+element Panel 20 20 280 120 "" title="Fixed"
+
+# grow inside a row
+row 20 160 860 120 gap=12 align=stretch
+  element box 0 0 200 0 "" id=sidebar
+  element Panel 0 0 0 0 "" grow=1 title="Grows"
+end
+
+# wrap grid
+row 20 300 860 40 gap=12 wrap=wrap
+  element Panel 0 0 0 0 "" grow=1 title="A"
+  element Panel 0 0 0 0 "" grow=1 title="B"
+  element Panel 0 0 0 0 "" grow=1 title="C"
+end</pre>
+        </details>
+
+        <p>
+          The component header accepts every <code>row</code>/<code>col</code> attribute
+          (<code>gap</code>, <code>padding</code>, <code>align</code>, <code>justify</code>,
+          <code>wrap</code>) plus size defaults (<code>w</code>, <code>h</code>,
+          <code>min-w</code>, <code>min-h</code>, <code>max-w</code>, <code>max-h</code>)
+          and per-instance flex defaults (<code>grow</code>, <code>shrink</code>,
+          <code>basis</code>, <code>align-self</code>).
+        </p>
+
+        <p>
+          Call-site values override component defaults. Use <code>auto</code> at the
+          call site to fall back to the default; use <code>0</code> at the call site
+          to defer to the parent container's layout.
+        </p>
+
+        <h3 id="absolute-body">Absolute-body components</h3>
+        <p>
+          Omit <code>direction</code> on the header and the component keeps an
+          <strong>absolute body</strong>: body coordinates are relative to the
+          instance origin, and the body does <em>not</em> re-flow when the instance is
+          resized. Useful for pixel-precise widgets you want identical wherever they
+          land.
+        </p>
+
+        <h3 id="slots">Slots — composite children</h3>
+        <p>
+          A component body may include <code>slot</code> markers that designate where
+          call-site children render. A trailing <code>:</code> on the
+          <code>element &lt;Composite&gt; ...</code> line opens a children block,
+          closed by <code>end</code>.
+        </p>
+        <p>
+          Two flavors:
+        </p>
+        <ul>
+          <li><strong>Anonymous default slot</strong> — declared with bare <code>slot</code>; filled by the call site's bare children.</li>
+          <li><strong>Named slots</strong> — declared with <code>slot NAME</code>; filled by <code>slot NAME … end</code> sub-blocks at the call site.</li>
+        </ul>
+
+        <boceto-view width="900" height="240" code='```boceto
+component Card(title) direction=col align=stretch padding=12 gap=8 w=300
+  slot header
+  element heading 0 0 0 24 "$title"
+  slot
+end
+
+element Card 20 20 320 auto "" title="Members" :
+  slot header
+    element label 0 0 0 16 "Showing 3 of 24"
+  end
+  element label 0 0 0 18 "Alice"
+  element label 0 0 0 18 "Bob"
+  element label 0 0 0 18 "Mei"
+end
+```'></boceto-view>
+        <details>
+          <summary>Show source</summary>
+          <pre>component Card(title) direction=col align=stretch padding=12 gap=8 w=300
+  slot header
+  element heading 0 0 0 24 "$title"
+  slot
+end
+
+element Card 20 20 320 auto "" title="Members" :
+  slot header
+    element label 0 0 0 16 "Showing 3 of 24"
+  end
+  element label 0 0 0 18 "Alice"
+  element label 0 0 0 18 "Bob"
+  element label 0 0 0 18 "Mei"
+end</pre>
+        </details>
+
+        <p>
+          Rules:
+        </p>
+        <ul>
+          <li>The single-line call form (no <code>:</code>) is still valid — slots default to empty.</li>
+          <li>Passing bare children when the component has no anonymous <code>slot</code> is a parse error.</li>
+          <li>Passing <code>slot NAME</code> the component doesn't declare is a parse error.</li>
+          <li>A slot name may appear at most once per call site.</li>
+          <li>Built-in element types (<code>element box</code>, <code>element button</code>, …) do not accept children — only composite references do.</li>
+        </ul>
+
+        <h3 id="patterns">Common patterns</h3>
+
+        <h4>App shell — fixed chrome, flexible main</h4>
+        <p>
+          <code>Header</code> and <code>Footer</code> declare <code>h=N</code>;
+          <code>Main</code> uses <code>grow=1</code> to fill the rest. The shared
+          <code>padding</code> across all three is what makes their content edges
+          line up.
+        </p>
+
+        <boceto-view width="900" height="380" code='```boceto
+component Header(title) direction=row align=middle padding=16 gap=8 h=56
+  element heading 0 0 0 28 "$title" grow=1
+  element button 0 0 80 32 "Action"
+end
+
+component Footer() direction=row align=middle padding=16 h=44
+  element label 0 0 0 16 "© 2026" grow=1
+  element label 0 0 120 16 "v1.0.0"
+end
+
+component Main() direction=col align=stretch padding=16 gap=12 grow=1
+  element heading 0 0 0 24 "Welcome"
+  element box 0 0 0 0 "" grow=1
+end
+
+component AppShell(title) direction=col align=stretch
+  element Header 0 0 0 0 "" title="$title"
+  element Main 0 0 0 0 ""
+  element Footer 0 0 0 0 ""
+end
+
+element AppShell 20 20 860 340 "" title="My App"
+```'></boceto-view>
+        <details>
+          <summary>Show source</summary>
+          <pre>component Header(title) direction=row align=middle padding=16 gap=8 h=56
+  element heading 0 0 0 28 "$title" grow=1
+  element button 0 0 80 32 "Action"
+end
+
+component Footer() direction=row align=middle padding=16 h=44
+  element label 0 0 0 16 "© 2026" grow=1
+  element label 0 0 120 16 "v1.0.0"
+end
+
+component Main() direction=col align=stretch padding=16 gap=12 grow=1
+  element heading 0 0 0 24 "Welcome"
+  element box 0 0 0 0 "" grow=1
+end
+
+component AppShell(title) direction=col align=stretch
+  element Header 0 0 0 0 "" title="$title"
+  element Main 0 0 0 0 ""
+  element Footer 0 0 0 0 ""
+end
+
+element AppShell 20 20 860 340 "" title="My App"</pre>
+        </details>
+
+        <h4>Chrome sized to content (<code>h=auto</code>)</h4>
+        <p>Drop <code>h=auto</code> on the header and it grows with its tallest child.</p>
+
+        <boceto-view width="900" height="280" code='```boceto
+component DynHeader(title) direction=row align=middle padding=16 gap=8 h=auto
+  element heading 0 0 0 32 "$title" grow=1
+  element button 0 0 100 40 "Save"
+  element button 0 0 100 40 "Cancel"
+end
+
+component Main() direction=col align=stretch padding=16 gap=12 grow=1
+  element heading 0 0 0 24 "Content area"
+  element box 0 0 0 0 "" grow=1
+end
+
+component Shell(title) direction=col align=stretch
+  element DynHeader 0 0 0 0 "" title="$title"
+  element Main 0 0 0 0 ""
+end
+
+element Shell 20 20 860 240 "" title="Sized to content"
+```'></boceto-view>
+        <details>
+          <summary>Show source</summary>
+          <pre>component DynHeader(title) direction=row align=middle padding=16 gap=8 h=auto
+  element heading 0 0 0 32 "$title" grow=1
+  element button 0 0 100 40 "Save"
+  element button 0 0 100 40 "Cancel"
+end
+
+component Main() direction=col align=stretch padding=16 gap=12 grow=1
+  element heading 0 0 0 24 "Content area"
+  element box 0 0 0 0 "" grow=1
+end
+
+component Shell(title) direction=col align=stretch
+  element DynHeader 0 0 0 0 "" title="$title"
+  element Main 0 0 0 0 ""
+end
+
+element Shell 20 20 860 240 "" title="Sized to content"</pre>
+        </details>
+
+        <h4>Sidebar + main, two columns</h4>
+        <boceto-view width="900" height="260" code='```boceto
+component Sidebar() direction=col align=stretch padding=16 gap=8 w=200
+  element heading 0 0 0 20 "Menu"
+  element button 0 0 0 32 "Home"
+  element button 0 0 0 32 "Settings"
+  element button 0 0 0 32 "Profile"
+end
+
+component Main() direction=col align=stretch padding=16 gap=8 grow=1
+  element heading 0 0 0 24 "Dashboard"
+  element box 0 0 0 0 "" grow=1
+end
+
+component TwoCol() direction=row align=stretch
+  element Sidebar 0 0 0 0 ""
+  element Main 0 0 0 0 ""
+end
+
+element TwoCol 20 20 860 220 ""
+```'></boceto-view>
+        <details>
+          <summary>Show source</summary>
+          <pre>component Sidebar() direction=col align=stretch padding=16 gap=8 w=200
+  element heading 0 0 0 20 "Menu"
+  element button 0 0 0 32 "Home"
+  element button 0 0 0 32 "Settings"
+  element button 0 0 0 32 "Profile"
+end
+
+component Main() direction=col align=stretch padding=16 gap=8 grow=1
+  element heading 0 0 0 24 "Dashboard"
+  element box 0 0 0 0 "" grow=1
+end
+
+component TwoCol() direction=row align=stretch
+  element Sidebar 0 0 0 0 ""
+  element Main 0 0 0 0 ""
+end
+
+element TwoCol 20 20 860 220 ""</pre>
+        </details>
+
+        <h4>Modal — fixed width, content-driven height</h4>
+        <boceto-view width="900" height="280" code='```boceto
+component Modal(title) direction=col align=stretch padding=16 gap=12 w=400 h=auto
+  element heading 0 0 0 24 "$title"
+  element label 0 0 0 18 "Are you sure you want to continue?"
+  element input 0 0 0 36 "Reason (optional)"
+  row 0 0 0 36 gap=8 justify=end
+    element button 0 0 100 32 "Cancel"
+    element primary-button 0 0 100 32 "Confirm"
+  end
+end
+
+element box 0 0 900 280 "" id=backdrop
+element Modal 250 40 400 0 "" title="Confirm action"
+```'></boceto-view>
+        <details>
+          <summary>Show source</summary>
+          <pre>component Modal(title) direction=col align=stretch padding=16 gap=12 w=400 h=auto
+  element heading 0 0 0 24 "$title"
+  element label 0 0 0 18 "Are you sure you want to continue?"
+  element input 0 0 0 36 "Reason (optional)"
+  row 0 0 0 36 gap=8 justify=end
+    element button 0 0 100 32 "Cancel"
+    element primary-button 0 0 100 32 "Confirm"
+  end
+end
+
+element box 0 0 900 280 "" id=backdrop
+element Modal 250 40 400 0 "" title="Confirm action"</pre>
+        </details>
+        </section>
+
+        <section id="sec-reference" data-section="sec-reference">
+        <!-- ─────────────────────────────────────────────────────────── -->
+        <h2 id="attr-rowcol">Reference: <code>row</code> / <code>col</code> attributes</h2>
+        <table>
+          <thead><tr><th>Attribute</th><th>Values</th><th>Default</th></tr></thead>
+          <tbody>
+            <tr><td><code>gap</code></td><td>non-negative integer (px)</td><td><code>0</code></td></tr>
+            <tr><td><code>padding</code></td><td>non-negative integer (px)</td><td><code>0</code></td></tr>
+            <tr><td><code>align</code></td><td><code>start</code> · <code>middle</code> · <code>end</code> · <code>stretch</code></td><td><code>middle</code> (row) / <code>start</code> (col)</td></tr>
+            <tr><td><code>justify</code></td><td><code>start</code> · <code>middle</code> · <code>end</code> · <code>between</code> · <code>around</code> · <code>evenly</code></td><td><code>start</code></td></tr>
+            <tr><td><code>wrap</code></td><td><code>nowrap</code> · <code>wrap</code> · <code>wrap-reverse</code></td><td><code>nowrap</code></td></tr>
+            <tr><td><code>min-w</code> / <code>min-h</code> / <code>max-w</code> / <code>max-h</code></td><td>non-negative integer (px)</td><td>unset</td></tr>
+          </tbody>
+        </table>
+
+        <h2 id="attr-child">Reference: child flex attributes</h2>
+        <p>
+          Applies to any <code>element</code>, <code>text</code>, or component
+          reference that is a direct child of a <code>row</code> / <code>col</code>.
+          Ignored outside a flex container.
+        </p>
+        <table>
+          <thead><tr><th>Attribute</th><th>Values</th><th>Default</th></tr></thead>
+          <tbody>
+            <tr><td><code>grow</code></td><td>non-negative number</td><td><code>0</code></td></tr>
+            <tr><td><code>shrink</code></td><td>non-negative number</td><td><code>1</code></td></tr>
+            <tr><td><code>basis</code></td><td>non-negative integer (px) or <code>auto</code></td><td><code>auto</code></td></tr>
+            <tr><td><code>align-self</code></td><td><code>auto</code> · <code>start</code> · <code>middle</code> · <code>end</code> · <code>stretch</code></td><td><code>auto</code></td></tr>
+            <tr><td><code>min-w</code> / <code>min-h</code> / <code>max-w</code> / <code>max-h</code></td><td>non-negative integer (px)</td><td>unset</td></tr>
+          </tbody>
+        </table>
+
+        <h2 id="attr-component">Reference: <code>component</code> header attributes</h2>
+        <table>
+          <thead><tr><th>Group</th><th>Attribute</th><th>Notes</th></tr></thead>
+          <tbody>
+            <tr><td rowspan="6">Shell</td><td><code>direction</code></td><td><code>row</code> · <code>col</code>. Presence enables shell mode.</td></tr>
+            <tr><td><code>gap</code> / <code>padding</code></td><td>Pixels.</td></tr>
+            <tr><td><code>justify</code></td><td>See <a href="#attr-rowcol">row/col reference</a>.</td></tr>
+            <tr><td><code>align</code></td><td>See above.</td></tr>
+            <tr><td><code>wrap</code></td><td>See above.</td></tr>
+            <tr><td>(omit)</td><td>Component becomes <a href="#absolute-body">absolute-body</a>.</td></tr>
+            <tr><td rowspan="2">Size default</td><td><code>w</code>, <code>h</code></td><td>Pixels or <code>auto</code>. Used when call site doesn't supply.</td></tr>
+            <tr><td><code>min-w</code> / <code>min-h</code> / <code>max-w</code> / <code>max-h</code></td><td>Pixels.</td></tr>
+            <tr><td rowspan="4">Child-flex default</td><td><code>grow</code></td><td>Non-negative number.</td></tr>
+            <tr><td><code>shrink</code></td><td>Non-negative number.</td></tr>
+            <tr><td><code>basis</code></td><td>Pixels or <code>auto</code>.</td></tr>
+            <tr><td><code>align-self</code></td><td>See <a href="#attr-child">child reference</a>.</td></tr>
+          </tbody>
+        </table>
+
+        <p style="margin-top: 48px; color: var(--muted); font-size: 14px;">
+          For the formal grammar, see the
+          <a href="https://github.com/maravilla-labs/boceto/blob/main/spec/boceto-spec.md">spec</a>.
+        </p>
+        </section>
+      </article>
+    </main>
+
+    <script>
+      // Highlight the active sub-nav tab and side-nav link as the user scrolls.
+      // Top sub-nav tracks the top-level section; side-nav tracks the nearest
+      // heading. Uses IntersectionObserver so scroll handlers stay cheap.
+      ;(function () {
+        const subNavLinks = document.querySelectorAll('.doc-subnav a[data-section]')
+        const sideLinks = document.querySelectorAll('.doc-side a[href^="#"]')
+        const sections = document.querySelectorAll('section[data-section]')
+        const headings = document.querySelectorAll('.doc-body h2[id], .doc-body h3[id]')
+
+        function setActive(links, id) {
+          links.forEach((a) => {
+            const targetId = a.getAttribute('data-section') || a.getAttribute('href').slice(1)
+            a.classList.toggle('active', targetId === id)
+          })
+        }
+
+        // Top sub-nav: which top-level section is most visible.
+        const sectionVisibility = new Map()
+        const sectionObserver = new IntersectionObserver(
+          (entries) => {
+            entries.forEach((e) => sectionVisibility.set(e.target.id, e.intersectionRatio))
+            let best = null
+            let bestRatio = 0
+            for (const [id, ratio] of sectionVisibility) {
+              if (ratio > bestRatio) { bestRatio = ratio; best = id }
+            }
+            if (best) setActive(subNavLinks, best)
+          },
+          { rootMargin: '-130px 0px -50% 0px', threshold: [0, 0.1, 0.5, 1] },
+        )
+        sections.forEach((s) => sectionObserver.observe(s))
+
+        // Side-nav: track nearest heading.
+        const headingObserver = new IntersectionObserver(
+          (entries) => {
+            // Pick the first heading currently above the scroll-margin line.
+            const visible = entries
+              .filter((e) => e.isIntersecting)
+              .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)
+            if (visible[0]) setActive(sideLinks, visible[0].target.id)
+          },
+          { rootMargin: '-135px 0px -70% 0px', threshold: 0 },
+        )
+        headings.forEach((h) => headingObserver.observe(h))
+      })()
+    </script>
+  </body>
+</html>

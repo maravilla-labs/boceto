@@ -1,8 +1,14 @@
-import { describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it } from 'vitest'
 import MarkdownIt from 'markdown-it'
+import { initYoga } from '@boceto/core'
 import bocetoIt from '../src'
 
 const make = (opts?: Parameters<typeof bocetoIt>[1]) => new MarkdownIt().use(bocetoIt, opts)
+
+// SVG mode requires the Yoga WASM runtime; pre-init once.
+beforeAll(async () => {
+  await initYoga()
+})
 
 describe('markdown-it-boceto', () => {
   it('renders ```boceto fence as <boceto-view>', () => {

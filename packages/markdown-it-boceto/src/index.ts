@@ -1,5 +1,5 @@
 import type MarkdownIt from 'markdown-it'
-import { parse, SvgRenderer } from '@boceto/core'
+import { applyFlexLayout, parse, SvgRenderer } from '@boceto/core'
 
 export interface MarkdownItBocetoOptions {
   /**
@@ -24,6 +24,11 @@ export interface MarkdownItBocetoOptions {
 /**
  * markdown-it plugin: replaces fenced ```boceto blocks with either
  * `<boceto-view>` (default) or inline `<svg>` (mode: 'svg').
+ *
+ * **`mode: 'svg'` requires pre-initialization.** Because markdown-it's render
+ * pipeline is synchronous, the host application must `await initYoga()` from
+ * `@boceto/core` once before calling `md.render(...)`. If that hasn't
+ * happened, the layout pass will throw with a descriptive error.
  */
 export default function markdownItBoceto(
   md: MarkdownIt,
@@ -51,7 +56,7 @@ export default function markdownItBoceto(
     }
     if (mode === 'svg') {
       const wrapped = '```boceto' + (meta ? ':' + meta : '') + '\n' + source + '\n```'
-      const doc = parse(wrapped)
+      const doc = applyFlexLayout(parse(wrapped))
       return svgRenderer!.renderToString(doc, { width, height }) + '\n'
     }
     const attrs: Record<string, string> = { ...extraAttrs, code: source }

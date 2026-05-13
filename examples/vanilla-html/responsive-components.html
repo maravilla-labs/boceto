@@ -1,0 +1,603 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Boceto · responsive components</title>
+    <style>
+      :root {
+        --ink: #1e1e2e;
+        --muted: #555;
+        --rule: #e0e0e8;
+        --bg: #fafaf8;
+      }
+      * { box-sizing: border-box; }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        margin: 0 auto;
+        padding: 32px 24px 96px;
+        max-width: 1100px;
+        color: var(--ink);
+        line-height: 1.55;
+      }
+      h1 { margin: 0 0 4px; font-size: 28px; }
+      h2 {
+        margin: 40px 0 4px;
+        font-size: 18px;
+        padding-bottom: 6px;
+        border-bottom: 1px solid var(--rule);
+      }
+      .tagline { color: var(--muted); margin: 0 0 24px; font-style: italic; }
+      .note { color: var(--muted); font-size: 14px; margin: 0 0 12px; }
+      boceto-view {
+        display: block;
+        margin: 12px 0;
+        border: 1px solid var(--rule);
+        border-radius: 6px;
+        background: white;
+      }
+      details { margin: 8px 0 24px; font-size: 13px; }
+      summary { cursor: pointer; color: #4a90d9; user-select: none; padding: 4px 0; }
+      summary:hover { color: #1a5590; }
+      pre {
+        background: #f5f5f8;
+        padding: 12px 16px;
+        border-radius: 4px;
+        overflow-x: auto;
+        font-size: 12px;
+        line-height: 1.5;
+        margin: 6px 0 0;
+      }
+      code { font-family: ui-monospace, 'SF Mono', Menlo, monospace; }
+      nav { margin-bottom: 24px; font-size: 14px; }
+      nav a { color: #4a90d9; text-decoration: none; }
+      nav a:hover { text-decoration: underline; }
+    </style>
+
+    <script type="importmap">
+      {
+        "imports": {
+          "@boceto/view/auto": "./node_modules/@boceto/view/dist/auto.js"
+        }
+      }
+    </script>
+
+    <script type="module">
+      import '@boceto/view/auto'
+    </script>
+  </head>
+  <body>
+    <h1>Responsive components</h1>
+    <p class="tagline">
+      One <code>Panel</code> definition — three placements, all adapting automatically.
+    </p>
+    <nav><a href="./index.html">← back to main showcase</a></nav>
+
+    <p class="note">
+      A <strong>flex-shell component</strong> declares its layout on the
+      <code>component</code> header line. The body becomes flex children of an implicit
+      shell sized to the resolved instance box — so the same component adapts to fit
+      whatever container holds it.
+    </p>
+
+    <!-- ─────────────────────────────────────────────────────────────── -->
+    <h2>1 · Fixed call-site size</h2>
+    <p class="note">
+      The simplest case: drop the panel at an explicit <code>W × H</code>. The body
+      flows according to the panel's <code>direction=col padding=12 gap=8</code>.
+    </p>
+    <boceto-view width="600" height="240" code='```boceto
+component Panel(title) direction=col align=stretch padding=12 gap=8 w=300 h=auto min-w=200 max-w=600
+  element heading 0 0 0 24 "$title"
+  element box 0 0 0 0 "" grow=1
+end
+
+element Panel 80 40 400 160 "" title="Stats"
+```'></boceto-view>
+    <details>
+      <summary>Show source</summary>
+      <pre>component Panel(title) direction=col align=stretch padding=12 gap=8 w=300 h=auto min-w=200 max-w=600
+  element heading 0 0 0 24 "$title"
+  element box 0 0 0 0 "" grow=1
+end
+
+element Panel 80 40 400 160 "" title="Stats"</pre>
+    </details>
+
+    <!-- ─────────────────────────────────────────────────────────────── -->
+    <h2>2 · Inside a row with <code>grow=1</code></h2>
+    <p class="note">
+      Same Panel definition, but now it sits in a <code>row</code> next to a fixed-width
+      box. <code>grow=1</code> on the panel + <code>align=stretch</code> on the row makes
+      it fill both the remaining horizontal space and the row's full height. The body
+      re-flows against the new size.
+    </p>
+    <boceto-view width="780" height="240" code='```boceto
+component Panel(title) direction=col align=stretch padding=12 gap=8 w=300 h=auto min-w=200 max-w=600
+  element heading 0 0 0 24 "$title"
+  element box 0 0 0 0 "" grow=1
+end
+
+row 40 40 700 160 gap=12 align=stretch
+  element box 0 0 200 0 "Sidebar"
+  element Panel 0 0 auto auto "" grow=1 title="Main"
+end
+```'></boceto-view>
+    <details>
+      <summary>Show source</summary>
+      <pre>row 40 40 700 160 gap=12 align=stretch
+  element box 0 0 200 0 "Sidebar"
+  element Panel 0 0 auto auto "" grow=1 title="Main"
+end</pre>
+    </details>
+
+    <!-- ─────────────────────────────────────────────────────────────── -->
+    <h2>3 · Wrap-row grid</h2>
+    <p class="note">
+      <code>row wrap=wrap</code> + <code>min-w</code> on each panel gives you a
+      responsive grid. The panels pack as many as fit on a line, then flow onto the
+      next. No grid backend needed — flexbox with wrapping covers the wireframe case.
+    </p>
+    <boceto-view width="780" height="360" code='```boceto
+component Panel(title) direction=col align=stretch padding=12 gap=8 w=240 h=140 min-w=200 max-w=320
+  element heading 0 0 0 24 "$title"
+  element box 0 0 0 0 "" grow=1
+end
+
+row 20 20 720 320 gap=12 wrap=wrap align=start
+  element Panel 0 0 auto auto "" title="One"
+  element Panel 0 0 auto auto "" title="Two"
+  element Panel 0 0 auto auto "" title="Three"
+  element Panel 0 0 auto auto "" title="Four"
+  element Panel 0 0 auto auto "" title="Five"
+  element Panel 0 0 auto auto "" title="Six"
+end
+```'></boceto-view>
+    <details>
+      <summary>Show source</summary>
+      <pre>row 20 20 720 320 gap=12 wrap=wrap align=start
+  element Panel 0 0 auto auto "" title="One"
+  element Panel 0 0 auto auto "" title="Two"
+  element Panel 0 0 auto auto "" title="Three"
+  element Panel 0 0 auto auto "" title="Four"
+  element Panel 0 0 auto auto "" title="Five"
+  element Panel 0 0 auto auto "" title="Six"
+end</pre>
+    </details>
+
+    <!-- ─────────────────────────────────────────────────────────────── -->
+    <h2>4 · Absolute-body component (no shell)</h2>
+    <p class="note">
+      Components without a <code>direction=</code> attribute keep the v0.1
+      absolute-body model — body coordinates are relative to the instance origin,
+      and the body does <em>not</em> re-flow when the instance is resized. Useful for
+      pixel-precise widgets.
+    </p>
+    <boceto-view width="600" height="240" code='```boceto
+component UserCard(name, role)
+  element card 0 0 240 80 ""
+  element avatar 8 8 40 40 ""
+  element heading 56 12 180 24 "$name"
+  element label 56 38 180 18 "$role"
+end
+
+element UserCard 40 40 240 80 "" name="Jane Doe" role="Admin"
+element UserCard 40 140 240 80 "" name="John" role="User"
+```'></boceto-view>
+    <details>
+      <summary>Show source</summary>
+      <pre>component UserCard(name, role)
+  element card 0 0 240 80 ""
+  element avatar 8 8 40 40 ""
+  element heading 56 12 180 24 "$name"
+  element label 56 38 180 18 "$role"
+end
+
+element UserCard 40 40 240 80 "" name="Jane Doe" role="Admin"
+element UserCard 40 140 240 80 "" name="John" role="User"</pre>
+    </details>
+
+    <!-- ─────────────────────────────────────────────────────────────── -->
+    <h2>5 · App shell: fixed-height chrome, flexible main</h2>
+    <p class="note">
+      The classic three-row app shell. <code>Header</code> and <code>Footer</code> have
+      <strong>fixed heights</strong> declared on the component (<code>h=56</code> /
+      <code>h=44</code>); <code>Main</code> uses <code>grow=1</code> to fill whatever's
+      left. Resize <code>AppShell</code>'s call-site H and the main area grows or
+      shrinks while the chrome stays the same height.
+    </p>
+    <boceto-view width="780" height="520" code='```boceto
+component Header(title) direction=row align=middle padding=16 gap=8 h=56
+  element heading 0 0 0 28 "$title" grow=1
+  element button 0 0 80 32 "Action"
+end
+
+component Footer() direction=row align=middle padding=16 h=44
+  element label 0 0 0 16 "© 2026" grow=1
+  element label 0 0 200 16 "v1.0.0"
+end
+
+component Main() direction=col align=stretch padding=16 gap=12 grow=1
+  element heading 0 0 0 24 "Welcome"
+  element box 0 0 0 0 "" grow=1
+end
+
+component AppShell(title) direction=col align=stretch
+  element Header 0 0 0 0 "" title="$title"
+  element Main 0 0 0 0 ""
+  element Footer 0 0 0 0 ""
+end
+
+element AppShell 20 20 720 460 "" title="My App"
+```'></boceto-view>
+    <details>
+      <summary>Show source</summary>
+      <pre>component Header(title) direction=row align=middle padding=16 gap=8 h=56
+  element heading 0 0 0 28 "$title" grow=1
+  element button 0 0 80 32 "Action"
+end
+
+component Footer() direction=row align=middle padding=16 h=44
+  element label 0 0 0 16 "© 2026" grow=1
+  element label 0 0 200 16 "v1.0.0"
+end
+
+component Main() direction=col align=stretch padding=16 gap=12 grow=1
+  element heading 0 0 0 24 "Welcome"
+  element box 0 0 0 0 "" grow=1
+end
+
+component AppShell(title) direction=col align=stretch
+  element Header 0 0 0 0 "" title="$title"
+  element Main 0 0 0 0 ""
+  element Footer 0 0 0 0 ""
+end
+
+element AppShell 20 20 720 460 "" title="My App"</pre>
+    </details>
+
+    <!-- ─────────────────────────────────────────────────────────────── -->
+    <h2>6 · Dynamic chrome height (sized by content)</h2>
+    <p class="note">
+      The header has <strong><code>h=auto</code></strong> — it sizes itself to the
+      tallest child inside it (here, a button at <code>h=40</code> plus
+      <code>padding=12</code> on each edge = 64). Add more buttons or taller content and
+      the header expands automatically.
+    </p>
+    <boceto-view width="780" height="400" code='```boceto
+component DynHeader(title) direction=row align=middle padding=16 gap=8 h=auto
+  element heading 0 0 0 32 "$title" grow=1
+  element button 0 0 100 40 "Save"
+  element button 0 0 100 40 "Cancel"
+end
+
+component DynMain() direction=col align=stretch padding=16 gap=12 grow=1
+  element heading 0 0 0 24 "Content area"
+  element box 0 0 0 0 "" grow=1
+end
+
+component DynShell(title) direction=col align=stretch
+  element DynHeader 0 0 0 0 "" title="$title"
+  element DynMain 0 0 0 0 ""
+end
+
+element DynShell 20 20 720 340 "" title="Header sizes to content"
+```'></boceto-view>
+    <details>
+      <summary>Show source</summary>
+      <pre>component DynHeader(title) direction=row align=middle padding=16 gap=8 h=auto
+  element heading 0 0 0 32 "$title" grow=1
+  element button 0 0 100 40 "Save"
+  element button 0 0 100 40 "Cancel"
+end
+
+component DynMain() direction=col align=stretch padding=16 gap=12 grow=1
+  element heading 0 0 0 24 "Content area"
+  element box 0 0 0 0 "" grow=1
+end
+
+component DynShell(title) direction=col align=stretch
+  element DynHeader 0 0 0 0 "" title="$title"
+  element DynMain 0 0 0 0 ""
+end
+
+element DynShell 20 20 720 340 "" title="Header sizes to content"</pre>
+    </details>
+
+    <!-- ─────────────────────────────────────────────────────────────── -->
+    <h2>7 · Sidebar + main, two-column pattern</h2>
+    <p class="note">
+      A horizontal split: <code>Sidebar</code> is fixed at <code>w=200</code>,
+      <code>Main</code> grows to fill. Swap the sidebar's <code>w</code> to <code>w=auto</code>
+      and add content with explicit widths to see it size to its content instead.
+    </p>
+    <boceto-view width="780" height="320" code='```boceto
+component Sidebar() direction=col align=stretch padding=16 gap=8 w=200
+  element heading 0 0 0 20 "Menu"
+  element button 0 0 0 32 "Home"
+  element button 0 0 0 32 "Settings"
+  element button 0 0 0 32 "Profile"
+end
+
+component Main() direction=col align=stretch padding=16 gap=8 grow=1
+  element heading 0 0 0 24 "Dashboard"
+  element box 0 0 0 0 "" grow=1
+end
+
+component TwoCol() direction=row align=stretch
+  element Sidebar 0 0 0 0 ""
+  element Main 0 0 0 0 ""
+end
+
+element TwoCol 20 20 720 280 ""
+```'></boceto-view>
+    <details>
+      <summary>Show source</summary>
+      <pre>component Sidebar() direction=col align=stretch padding=16 gap=8 w=200
+  element heading 0 0 0 20 "Menu"
+  element button 0 0 0 32 "Home"
+  element button 0 0 0 32 "Settings"
+  element button 0 0 0 32 "Profile"
+end
+
+component Main() direction=col align=stretch padding=16 gap=8 grow=1
+  element heading 0 0 0 24 "Dashboard"
+  element box 0 0 0 0 "" grow=1
+end
+
+component TwoCol() direction=row align=stretch
+  element Sidebar 0 0 0 0 ""
+  element Main 0 0 0 0 ""
+end
+
+element TwoCol 20 20 720 280 ""</pre>
+    </details>
+
+    <!-- ─────────────────────────────────────────────────────────────── -->
+    <h2>8 · Modal: built-in element with block-form children</h2>
+    <p class="note">
+      The <code>modal</code> element type IS the chrome — no composite needed. A
+      trailing <code>:</code> opens a children block; the chrome's intrinsic 40px
+      header inset keeps the body below the title bar automatically.
+      <code>h=auto</code> + <code>direction=col</code> grows the modal to fit its
+      content.
+    </p>
+    <boceto-view width="780" height="360" code='```boceto
+element box 0 0 780 360 "" id=backdrop
+element modal 190 60 400 auto "Confirm action" direction=col padding=16 gap=12 align=stretch :
+  element label 0 0 0 18 "Are you sure you want to continue?"
+  element input 0 0 0 36 "Reason (optional)"
+  row 0 0 0 36 gap=8 justify=end
+    element button 0 0 100 32 "Cancel"
+    element primary-button 0 0 100 32 "Confirm"
+  end
+end
+```'></boceto-view>
+    <details>
+      <summary>Show source</summary>
+      <pre>element box 0 0 780 360 "" id=backdrop
+element modal 190 60 400 auto "Confirm action" direction=col padding=16 gap=12 align=stretch :
+  element label 0 0 0 18 "Are you sure you want to continue?"
+  element input 0 0 0 36 "Reason (optional)"
+  row 0 0 0 36 gap=8 justify=end
+    element button 0 0 100 32 "Cancel"
+    element primary-button 0 0 100 32 "Confirm"
+  end
+end</pre>
+    </details>
+
+    <!-- ─────────────────────────────────────────────────────────────── -->
+    <h2>9 · Min/max as responsive guardrails</h2>
+    <p class="note">
+      Same Panel placed in two rows of different widths. <code>min-w=180</code>
+      prevents the panels from getting too narrow when the row wraps;
+      <code>max-w=280</code> stops them from ballooning when there's extra space.
+      Resize your browser to see how the constraints hold.
+    </p>
+    <boceto-view width="780" height="420" code='```boceto
+component Card(label) direction=col align=stretch padding=10 gap=6 h=auto min-w=180 max-w=280
+  element heading 0 0 0 20 "$label"
+  element label 0 0 0 16 "Subtitle"
+  element box 0 0 0 60 ""
+end
+
+row 20 20 720 180 gap=12 wrap=wrap align=start
+  element Card 0 0 auto auto "" label="One" grow=1
+  element Card 0 0 auto auto "" label="Two" grow=1
+  element Card 0 0 auto auto "" label="Three" grow=1
+end
+
+row 20 220 380 180 gap=12 wrap=wrap align=start
+  element Card 0 0 auto auto "" label="A" grow=1
+  element Card 0 0 auto auto "" label="B" grow=1
+  element Card 0 0 auto auto "" label="C" grow=1
+end
+```'></boceto-view>
+    <details>
+      <summary>Show source</summary>
+      <pre>component Card(label) direction=col align=stretch padding=10 gap=6 h=auto min-w=180 max-w=280
+  element heading 0 0 0 20 "$label"
+  element label 0 0 0 16 "Subtitle"
+  element box 0 0 0 60 ""
+end
+
+row 20 20 720 180 gap=12 wrap=wrap align=start
+  element Card 0 0 auto auto "" label="One" grow=1
+  element Card 0 0 auto auto "" label="Two" grow=1
+  element Card 0 0 auto auto "" label="Three" grow=1
+end
+
+row 20 220 380 180 gap=12 wrap=wrap align=start
+  element Card 0 0 auto auto "" label="A" grow=1
+  element Card 0 0 auto auto "" label="B" grow=1
+  element Card 0 0 auto auto "" label="C" grow=1
+end</pre>
+    </details>
+
+    <!-- ─────────────────────────────────────────────────────────────── -->
+    <h2>10 · Composition: panel containing a card</h2>
+    <p class="note">
+      Composites nest freely: a flex-shell panel can contain an absolute-body card,
+      and the card's reference appears inside the panel's body just like any other
+      element.
+    </p>
+    <boceto-view width="780" height="280" code='```boceto
+component UserCard(name)
+  element card 0 0 200 60 ""
+  element heading 8 8 180 20 "$name"
+  element label 8 32 180 16 "Member"
+end
+
+component Panel(title) direction=col align=stretch padding=8 gap=8
+  element heading 0 0 0 24 "$title"
+  element UserCard 0 0 0 60 "" name="Alice"
+  element UserCard 0 0 0 60 "" name="Bob"
+end
+
+element Panel 40 40 320 220 "" title="Team"
+```'></boceto-view>
+    <details>
+      <summary>Show source</summary>
+      <pre>component UserCard(name)
+  element card 0 0 200 60 ""
+  element heading 8 8 180 20 "$name"
+  element label 8 32 180 16 "Member"
+end
+
+component Panel(title) direction=col align=stretch padding=8 gap=8
+  element heading 0 0 0 24 "$title"
+  element UserCard 0 0 0 60 "" name="Alice"
+  element UserCard 0 0 0 60 "" name="Bob"
+end
+
+element Panel 40 40 320 220 "" title="Team"</pre>
+    </details>
+
+    <!-- ─────────────────────────────────────────────────────────────── -->
+    <h2>11 · Built-in element as flex container</h2>
+    <p class="note">
+      Any built-in element type accepts block-form children via a trailing
+      <code>:</code>. The element's chrome (border, header, etc.) renders normally;
+      children render inside the content rect. With <code>direction=</code> the
+      children flow as flex; without it, they keep their declared local
+      <code>(x, y)</code>.
+    </p>
+    <boceto-view width="780" height="340" code='```boceto
+# Flex mode: direction=col, children flow with gap/padding
+element box 20 20 360 auto "" direction=col padding=12 gap=8 align=stretch :
+  element heading 0 0 0 24 "In a box"
+  element label 0 0 0 18 "Flex container"
+  row 0 0 0 36 gap=8 justify=end
+    element button 0 0 80 28 "Cancel"
+    element primary-button 0 0 80 28 "OK"
+  end
+end
+
+# Absolute body: children at declared local (x, y), no flex flow
+element box 420 20 340 auto "" :
+  element heading 12 12 0 24 "Overlay"
+  element label 12 48 0 18 "Absolute body"
+  element button 12 80 100 32 "At (12, 80)"
+  element label 12 124 0 16 "Manual coords"
+end
+```'></boceto-view>
+    <details>
+      <summary>Show source</summary>
+      <pre># Flex mode: direction=col, children flow with gap/padding
+element box 20 20 360 auto "" direction=col padding=12 gap=8 align=stretch :
+  element heading 0 0 0 24 "In a box"
+  element label 0 0 0 18 "Flex container"
+  row 0 0 0 36 gap=8 justify=end
+    element button 0 0 80 28 "Cancel"
+    element primary-button 0 0 80 28 "OK"
+  end
+end
+
+# Absolute body: children at declared local (x, y), no flex flow
+element box 420 20 340 auto "" :
+  element heading 12 12 0 24 "Overlay"
+  element label 12 48 0 18 "Absolute body"
+  element button 12 80 100 32 "At (12, 80)"
+  element label 12 124 0 16 "Manual coords"
+end</pre>
+    </details>
+
+    <!-- ─────────────────────────────────────────────────────────────── -->
+    <h2>12 · Chrome elements with intrinsic insets</h2>
+    <p class="note">
+      Element types that draw a header bar — <code>card</code>, <code>modal</code>,
+      <code>window-frame</code>, <code>browser-frame</code> — automatically push
+      children below the chrome. You don't write <code>padding-top=40</code>
+      manually; the layout pass adds the inset for you.
+    </p>
+    <boceto-view width="780" height="400" code='```boceto
+element card 20 20 220 auto "" direction=col padding=12 gap=8 align=stretch :
+  element label 0 0 0 16 "Card content"
+  element label 0 0 0 16 "below the divider"
+end
+
+element modal 260 20 260 auto "Modal" direction=col padding=12 gap=8 align=stretch :
+  element label 0 0 0 16 "Body sits below"
+  element label 0 0 0 16 "the title bar"
+  row 0 0 0 32 gap=6 justify=end
+    element button 0 0 70 28 "OK"
+  end
+end
+
+element window-frame 540 20 220 auto "" direction=col padding=12 gap=8 align=stretch :
+  element label 0 0 0 16 "macOS-style"
+  element label 0 0 0 16 "titlebar"
+end
+
+element browser-frame 20 220 740 160 "" direction=col padding=12 gap=8 align=stretch :
+  element label 0 0 0 16 "Tabs + URL bar"
+  element label 0 0 0 16 "automatically inset"
+end
+```'></boceto-view>
+    <details>
+      <summary>Show source</summary>
+      <pre>element card 20 20 220 auto "" direction=col padding=12 gap=8 align=stretch :
+  element label 0 0 0 16 "Card content"
+  element label 0 0 0 16 "below the divider"
+end
+
+element modal 260 20 260 auto "Modal" direction=col padding=12 gap=8 align=stretch :
+  element label 0 0 0 16 "Body sits below"
+  element label 0 0 0 16 "the title bar"
+  row 0 0 0 32 gap=6 justify=end
+    element button 0 0 70 28 "OK"
+  end
+end
+
+element window-frame 540 20 220 auto "" direction=col padding=12 gap=8 align=stretch :
+  element label 0 0 0 16 "macOS-style"
+  element label 0 0 0 16 "titlebar"
+end
+
+element browser-frame 20 220 740 160 "" direction=col padding=12 gap=8 align=stretch :
+  element label 0 0 0 16 "Tabs + URL bar"
+  element label 0 0 0 16 "automatically inset"
+end</pre>
+    </details>
+
+    <!-- ─────────────────────────────────────────────────────────────── -->
+    <h2>13 · Generic <code>border</code> and <code>shadow</code></h2>
+    <p class="note">
+      Any element accepts <code>border=true|N|#color</code> and
+      <code>shadow=true|N</code> as optional decoration. Use them to give a plain
+      element extra visual weight, or to make a card feel "floating" with a drop
+      shadow — independent of the element type's natural chrome.
+    </p>
+    <boceto-view width="780" height="220" code='```boceto
+element box 20 30 220 140 "Plain"
+element box 270 30 220 140 "Blue border" border=#3b82c4
+element box 520 30 220 140 "Shadow + border" border=true shadow=14
+```'></boceto-view>
+    <details>
+      <summary>Show source</summary>
+      <pre>element box 20 30 220 140 "Plain"
+element box 270 30 220 140 "Blue border" border=#3b82c4
+element box 520 30 220 140 "Shadow + border" border=true shadow=14</pre>
+    </details>
+  </body>
+</html>

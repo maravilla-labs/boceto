@@ -1,4 +1,18 @@
-import { CanvasRenderer, parse, type BocetoDoc } from '@boceto/core'
+import {
+  CanvasRenderer,
+  applyFlexLayout,
+  initYoga,
+  parse,
+  type BocetoDoc,
+} from '@boceto/core'
+
+/**
+ * Singleton: `initYoga()` is idempotent and memoizes the WASM load promise,
+ * so calling it from every `<boceto-view>` instance is safe — only the first
+ * call actually fetches/instantiates Yoga. Subsequent instances await the
+ * same already-resolved promise.
+ */
+const yogaReady = initYoga()
 
 const DEFAULT_W = 860
 const DEFAULT_H = 600
@@ -87,6 +101,11 @@ export class BocetoViewElement extends HTMLElement {
     } catch {
       return
     }
+
+    // Yoga WASM is loaded once per page (singleton promise) — wait for it
+    // before laying out, then resolve container computed boxes.
+    await yogaReady
+    applyFlexLayout(doc)
 
     this.#lastDoc = doc
     const pageAttr = this.getAttribute('page')

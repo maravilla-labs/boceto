@@ -22,6 +22,14 @@ const FALLBACK_DRAW = (s: Surface, el: Element, st: DrawState): void => {
 /**
  * Draws an element with its registered renderer (or a fallback box). Also
  * paints the sticky-note annotation, group outline, and selection handles.
+ *
+ * Generic decoration attrs `shadow` and `border` are honored independently
+ * of the element's type:
+ *  - `shadow=true|N` — drop shadow under the element's chrome. Number sets
+ *    the blur radius (px); `true` defaults to 6.
+ *  - `border=true|N|"#color"` — outer stroke around the element's bounding
+ *    box, drawn after the chrome. Number = stroke width; color string =
+ *    stroke color (default `#333`). `true` = 1.5px default stroke.
  */
 export function drawElement(
   surface: Surface,
@@ -29,8 +37,24 @@ export function drawElement(
   state: DrawState = { selected: false, hovered: false, inGroup: false },
 ): void {
   const renderer = getRenderer(el.type)
-  if (renderer) renderer.draw(surface, el, state)
-  else FALLBACK_DRAW(surface, el, state)
+  const drawChrome = () => {
+    if (renderer) renderer.draw(surface, el, state)
+    else FALLBACK_DRAW(surface, el, state)
+  }
+  const shadow = parseShadowAttr(el)
+  if (shadow) {
+    surface.group({ shadow }, drawChrome)
+  } else {
+    drawChrome()
+  }
+  const border = parseBorderAttr(el)
+  if (border) {
+    sketchRect(surface, el.x, el.y, el.w, el.h, {
+      fill: 'transparent',
+      stroke: border.color,
+      lw: border.width,
+    })
+  }
 
   if (el.note) drawNote(surface, el)
 
@@ -94,4 +118,37 @@ export function strokeColor(state: DrawState): string {
 
 export function fillColor(state: DrawState): string {
   return state.selected ? '#e8f4fd' : state.hovered ? '#f0f8ff' : PALETTE.bg
+}
+
+/**
+ * Parse the `shadow` attribute into a shadow style. Accepted forms:
+ *   shadow=true    → blur 6, dx/dy 2/2, default color
+ *   shadow=N       → blur N (px), dx/dy 2/2
+ *   shadow=false   → no shadow
+ */
+function parseShadowAttr(
+  el: Element,
+): { color: string; blur: number; dx: number; dy: number } | null {
+  const v = el.attrs.shadow
+  if (v == null) return null
+  if (v === 'false' || v === 0) return null
+  let blur = 6
+  if (typeof v === 'number' && v > 0) blur = v
+  return { color: 'rgba(0, 0, 0, 0.22)', blur, dx: 2, dy: 2 }
+}
+
+/**
+ * Parse the `border` attribute into stroke style. Accepted forms:
+ *   border=true     → 1.5px default stroke
+ *   border=N        → N-px stroke, default color
+ *   border="#hex"   → 1.5px stroke of that color
+ *   border=false    → no border (default)
+ */
+function parseBorderAttr(el: Element): { width: number; color: string } | null {
+  const v = el.attrs.border
+  if (v == null) return null
+  if (v === 'false' || v === 0) return null
+  if (typeof v === 'number') return { width: v, color: '#333' }
+  if (v === 'true') return { width: 1.5, color: '#333' }
+  return { width: 1.5, color: String(v) }
 }

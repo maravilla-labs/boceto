@@ -240,7 +240,7 @@ describe('Composite components — references and expansion', () => {
     expect(item.expanded[0]!.label).toBe('Hi')
   })
 
-  it('composite references cannot appear inside row/col blocks', () => {
+  it('composite references can appear inside row/col blocks (first-class tree)', () => {
     const src = [
       '```boceto',
       'component foo()',
@@ -254,7 +254,227 @@ describe('Composite components — references and expansion', () => {
       'end',
       '```',
     ].join('\n')
-    expect(() => parse(src)).toThrow(/inside a 'row' or 'col'/)
+    const doc = parse(src)
+    const container = doc.pages[0]!.elements[0]!
+    expect('kind' in container && container.kind === 'flex-container').toBe(true)
+    // The container holds the composite instance directly — not flattened.
+    if (!('kind' in container) || container.kind !== 'flex-container') {
+      throw new Error('expected flex-container')
+    }
+    const child = container.children[0]!
+    expect(isComponentInstance(child)).toBe(true)
+  })
+
+  it('composites can be nested inside other composites', () => {
+    const src = [
+      '```boceto',
+      'component inner(name)',
+      '  element label 0 0 200 24 "$name"',
+      'end',
+      '',
+      'component outer(who)',
+      '  element box 0 0 240 80 ""',
+      '  element inner 8 30 200 24 "" name=$who',
+      'end',
+      '```',
+      '',
+      '```boceto',
+      'element outer 0 0 240 80 "" who=Alice',
+      '```',
+    ].join('\n')
+    const doc = parse(src)
+    const instance = doc.pages[0]!.elements[0]!
+    expect(isComponentInstance(instance)).toBe(true)
+    if (!isComponentInstance(instance)) throw new Error()
+    // outer.expanded preserves the nested `inner` reference as a
+    // ComponentInstance shell — its own expanded subtree carries the
+    // substituted label.
+    const nested = instance.expanded.find((e) => isComponentInstance(e))
+    expect(nested).toBeDefined()
+    if (!nested || !isComponentInstance(nested)) throw new Error()
+    expect(nested.componentName).toBe('inner')
+    expect(nested.params.name).toBe('Alice')
+    // The inner component's label, after $name substitution.
+    const labels = nested.expanded
+      .map((e) => ('label' in e ? e.label : ''))
+      .filter(Boolean)
+    expect(labels).toContain('Alice')
+  })
+
+  it('detects cyclic component references with a clear error', () => {
+    const src = [
+      '```boceto',
+      'component a()',
+      '  element b 0 0 10 10 ""',
+      'end',
+      'component b()',
+      '  element a 0 0 10 10 ""',
+      'end',
+      '```',
+      '',
+      '```boceto',
+      'element a 0 0 10 10 ""',
+      '```',
+    ].join('\n')
+    expect(() => parse(src)).toThrow(/Cyclic component reference/)
+  })
+})
+
+describe('Slots — composite children', () => {
+  it('anonymous slot fills with the call-site bare children', () => {
+    const src = [
+      '```boceto',
+      'component Card(title) direction=col padding=8 gap=4',
+      '  element heading 0 0 0 20 "$title"',
+      '  slot',
+      'end',
+      '',
+      'element Card 0 0 300 auto "" title="Hi" :',
+      '  element label 0 0 0 16 "first"',
+      '  element label 0 0 0 16 "second"',
+      'end',
+      '```',
+    ].join('\n')
+    const doc = parse(src)
+    const inst = doc.pages[0]!.elements[0]! as unknown as { expanded: Array<{ label?: string }> }
+    const labels = inst.expanded
+      .map((e) => (typeof e.label === 'string' ? e.label : ''))
+      .filter((s) => s !== '')
+    expect(labels).toEqual(['Hi', 'first', 'second'])
+  })
+
+  it('named slots route children to the matching slot marker', () => {
+    const src = [
+      '```boceto',
+      'component Card(title) direction=col padding=8 gap=4',
+      '  slot header',
+      '  element heading 0 0 0 20 "$title"',
+      '  slot body',
+      'end',
+      '',
+      'element Card 0 0 300 auto "" title="Mid" :',
+      '  slot header',
+      '    element label 0 0 0 16 "top"',
+      '  end',
+      '  slot body',
+      '    element label 0 0 0 16 "bottom-1"',
+      '    element label 0 0 0 16 "bottom-2"',
+      '  end',
+      'end',
+      '```',
+    ].join('\n')
+    const doc = parse(src)
+    const inst = doc.pages[0]!.elements[0]! as unknown as { expanded: Array<{ label?: string }> }
+    const labels = inst.expanded
+      .map((e) => (typeof e.label === 'string' ? e.label : ''))
+      .filter((s) => s !== '')
+    expect(labels).toEqual(['top', 'Mid', 'bottom-1', 'bottom-2'])
+  })
+
+  it('rejects call-site slot for a name the component does not declare', () => {
+    const src = [
+      '```boceto',
+      'component Card() direction=col',
+      '  slot body',
+      'end',
+      '',
+      'element Card 0 0 300 auto "" :',
+      '  slot header',
+      '    element label 0 0 0 16 "x"',
+      '  end',
+      'end',
+      '```',
+    ].join('\n')
+    expect(() => parse(src)).toThrow(/no slot "header"/)
+  })
+
+  it('rejects bare children when component has no anonymous slot', () => {
+    const src = [
+      '```boceto',
+      'component Card() direction=col',
+      '  slot body',
+      'end',
+      '',
+      'element Card 0 0 300 auto "" :',
+      '  element label 0 0 0 16 "stray"',
+      'end',
+      '```',
+    ].join('\n')
+    expect(() => parse(src)).toThrow(/no default slot/)
+  })
+
+  it('rejects duplicate slot blocks at the same call site', () => {
+    const src = [
+      '```boceto',
+      'component Card() direction=col',
+      '  slot header',
+      'end',
+      '',
+      'element Card 0 0 300 auto "" :',
+      '  slot header',
+      '    element label 0 0 0 16 "one"',
+      '  end',
+      '  slot header',
+      '    element label 0 0 0 16 "two"',
+      '  end',
+      'end',
+      '```',
+    ].join('\n')
+    expect(() => parse(src)).toThrow(/Duplicate 'slot header'/)
+  })
+
+  it('built-in elements accept block-form children (element-as-container)', () => {
+    const doc = parse(
+      '```boceto\nelement box 0 0 200 80 "" :\n  element label 0 0 0 16 "inside"\nend\n```',
+    )
+    const item = doc.pages[0]!.elements[0]! as unknown as {
+      type: string
+      children?: Array<{ label?: string }>
+    }
+    expect(item.type).toBe('box')
+    expect(item.children).toBeDefined()
+    expect(item.children![0]!.label).toBe('inside')
+  })
+
+  it('reports unclosed composite call', () => {
+    expect(() =>
+      parse(
+        '```boceto\ncomponent Card() direction=col\n  slot\nend\nelement Card 0 0 300 auto "" :\n  element label 0 0 0 16 "x"\n```',
+      ),
+    ).toThrow(/Unclosed composite call/)
+  })
+
+  it('round-trips: parse → serialize → parse preserves named slots', () => {
+    const src = [
+      '```boceto',
+      'component Card(title) direction=col padding=8 gap=4',
+      '  slot header',
+      '  element heading 0 0 0 20 "$title"',
+      '  slot body',
+      'end',
+      '',
+      'element Card 0 0 300 auto "" title="X" :',
+      '  slot header',
+      '    element label 0 0 0 16 "top"',
+      '  end',
+      '  slot body',
+      '    element label 0 0 0 16 "bottom"',
+      '  end',
+      'end',
+      '```',
+    ].join('\n')
+    const doc = parse(src)
+    const out = serialize(doc)
+    expect(out).toContain('slot header')
+    expect(out).toContain('slot body')
+    // Re-parsing the serialized form succeeds and produces the same shape.
+    const round = parse(out)
+    const inst = round.pages[0]!.elements[0]! as unknown as {
+      slots?: Record<string, Array<{ label?: string }>>
+    }
+    expect(inst.slots).toBeDefined()
+    expect(inst.slots!.header!.length).toBe(1)
+    expect(inst.slots!.body!.length).toBe(1)
   })
 })
 

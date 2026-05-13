@@ -17,6 +17,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "clean": "pnpm -r exec rm -rf dist .turbo node_modules/.cache",
+    "site:assets": "node scripts/build-site-assets.mjs",
     "changeset": "changeset",
     "release": "pnpm build && changeset publish"
   },
