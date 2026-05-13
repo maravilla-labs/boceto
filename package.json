@@ -1,0 +1,30 @@
+{
+  "name": "boceto-monorepo",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Boceto — wireframes as fenced code blocks. Web components + markdown plugins.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=18.17"
+  },
+  "packageManager": "pnpm@9.12.0",
+  "scripts": {
+    "build": "pnpm -r --filter \"./packages/*\" build",
+    "dev": "pnpm -r --parallel --filter \"./packages/*\" dev",
+    "test": "pnpm -r --filter \"./packages/*\" test",
+    "typecheck": "pnpm -r --filter \"./packages/*\" exec tsc --noEmit",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "clean": "pnpm -r exec rm -rf dist .turbo node_modules/.cache",
+    "changeset": "changeset",
+    "release": "pnpm build && changeset publish"
+  },
+  "devDependencies": {
+    "@changesets/cli": "^2.27.9",
+    "prettier": "^3.3.3",
+    "tsup": "^8.3.0",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.4"
+  }
+}

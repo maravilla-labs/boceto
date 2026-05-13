@@ -1,0 +1,14 @@
+{
+  "name": "@boceto/example-react-app",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "echo 'Vite scaffold goes here once @boceto/react is fleshed out — see ./README.md'"
+  },
+  "dependencies": {
+    "@boceto/react": "workspace:*",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  }
+}

@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Boceto · Element catalog</title>
+    <meta name="description" content="All 83 Boceto element types with descriptions, attributes, and rendered previews." />
+    <link rel="stylesheet" href="./assets/style.css" />
+    <script type="module" src="./assets/boceto-view.js"></script>
+  </head>
+  <body>
+    <header class="site">
+      <nav>
+        <a class="brand" href="./index.html">
+          <span class="logo-mark">B</span>
+          Boceto
+        </a>
+        <div class="links">
+          <a href="./index.html">Home</a>
+          <a href="./elements.html" class="active">Elements</a>
+          <a href="./editor.html">Editor</a>
+          <a href="https://github.com/maravilla-labs/boceto" class="gh">GitHub →</a>
+        </div>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero" style="padding-top: 32px; padding-bottom: 16px; text-align: left;">
+        <h1 style="font-size: 36px;">Element catalog</h1>
+        <p class="tagline" style="text-align: left; margin-left: 0; font-size: 17px;">All 83 element types Boceto v0.1 ships, grouped by domain. Every card shows the element rendered + the source line that produced it.</p>
+      </section>
+
+      <p class="note">
+        <span class="category-pill">Layout</span>
+        <span class="category-pill">Typography</span>
+        <span class="category-pill">Form (basic)</span>
+        <span class="category-pill">Form (modern)</span>
+        <span class="category-pill">Media</span>
+        <span class="category-pill">Content</span>
+        <span class="category-pill">Overlays</span>
+        <span class="category-pill">Feedback</span>
+        <span class="category-pill">Data viz</span>
+        <span class="category-pill">Mobile chrome</span>
+        <span class="category-pill">System chrome</span>
+        <span class="category-pill">AR / spatial</span>
+      </p>
+
+      <h2 id="layout">Layout</h2>
+      <div class="element-grid">
+        <div class="element-card"><h4>box</h4><p class="desc">Plain rectangle. Generic container.</p><boceto-view width="240" height="100" code='element box 8 8 224 84 "Box"'></boceto-view><div class="src">element box 8 8 224 84 "Box"</div></div>
+        <div class="element-card"><h4>card</h4><p class="desc">Box with a header divider — bounded content area.</p><boceto-view width="240" height="100" code='element card 8 8 224 84 "Card title"'></boceto-view><div class="src">element card 8 8 224 84 "Card title"</div></div>
+        <div class="element-card"><h4>modal</h4><p class="desc">Floating window with title bar + close.</p><boceto-view width="240" height="120" code='element modal 8 8 224 100 "Confirm"'></boceto-view><div class="src">element modal 8 8 224 100 "Confirm"</div></div>
+        <div class="element-card"><h4>navbar</h4><p class="desc">Top app bar with brand + items.</p><boceto-view width="240" height="80" code='element navbar 8 8 224 44 "Acme" items="Home|About"'></boceto-view><div class="src">element navbar 0 0 W H "Acme" items="Home|About"</div></div>
+        <div class="element-card"><h4>divider</h4><p class="desc">Horizontal rule.</p><boceto-view width="240" height="60" code='element label 8 6 220 18 "Section"
+element divider 8 30 224 12 ""
+element label 8 44 220 18 "Below"'></boceto-view><div class="src">element divider 0 0 W 12 ""</div></div>
+        <div class="element-card"><h4>sidebar</h4><p class="desc">Vertical nav rail with items + active row.</p><boceto-view width="240" height="180" code='element sidebar 8 8 160 160 "Apps" items="Inbox|Sent|Drafts" active=0'></boceto-view><div class="src">element sidebar X Y W H "Apps" items="…" active=N</div></div>
+      </div>
+
+      <h2 id="typography">Typography</h2>
+      <div class="element-grid">
+        <div class="element-card"><h4>heading</h4><p class="desc">Bold large text. <code>fontSize=N</code> overrides.</p><boceto-view width="240" height="60" code='element heading 8 8 220 32 "Heading" fontSize=22'></boceto-view><div class="src">element heading 0 0 W H "Heading" fontSize=22</div></div>
+        <div class="element-card"><h4>label</h4><p class="desc">Plain inline text, optionally wrapped.</p><boceto-view width="240" height="60" code='element label 8 14 220 24 "Just some label text"'></boceto-view><div class="src">element label 0 0 W H "label text"</div></div>
+        <div class="element-card"><h4>breadcrumb</h4><p class="desc">Slash-separated trail; last segment is current page.</p><boceto-view width="240" height="60" code='element breadcrumb 8 14 220 24 "Home / Docs / Spec"'></boceto-view><div class="src">element breadcrumb 0 0 W H "Home / Docs / Page"</div></div>
+        <div class="element-card"><h4>quote</h4><p class="desc">Italic text with a left bar — pull-quote style.</p><boceto-view width="240" height="100" code='element quote 8 8 224 80 "Less, but better."'></boceto-view><div class="src">element quote 0 0 W H "quote text"</div></div>
+      </div>
+
+      <h2 id="form-basic">Form — basic</h2>
+      <div class="element-grid">
+        <div class="element-card"><h4>input</h4><p class="desc">Single-line text input.</p><boceto-view width="240" height="60" code='element input 8 12 224 36 "Email address"'></boceto-view><div class="src">element input 0 0 W H "placeholder"</div></div>
+        <div class="element-card"><h4>textarea</h4><p class="desc">Multi-line input with corner grip.</p><boceto-view width="240" height="100" code='element textarea 8 8 224 80 "Long form text…"'></boceto-view><div class="src">element textarea 0 0 W H "placeholder"</div></div>
+        <div class="element-card"><h4>button</h4><p class="desc">Default button.</p><boceto-view width="240" height="60" code='element button 8 12 100 36 "Cancel"'></boceto-view><div class="src">element button 0 0 W H "label"</div></div>
+        <div class="element-card"><h4>primary-button</h4><p class="desc">High-emphasis button (filled blue).</p><boceto-view width="240" height="60" code='element primary-button 8 12 120 36 "Continue"'></boceto-view><div class="src">element primary-button 0 0 W H "label"</div></div>
+        <div class="element-card"><h4>select</h4><p class="desc">Closed dropdown trigger with chevron.</p><boceto-view width="240" height="60" code='element select 8 12 224 36 "Choose…"'></boceto-view><div class="src">element select 0 0 W H "label"</div></div>
+        <div class="element-card"><h4>checkbox</h4><p class="desc">Square box + checkmark + label.</p><boceto-view width="240" height="60" code='element checkbox 8 16 220 22 "I accept the terms"'></boceto-view><div class="src">element checkbox 0 0 W H "label"</div></div>
+        <div class="element-card"><h4>radio</h4><p class="desc">Round selector + label.</p><boceto-view width="240" height="60" code='element radio 8 16 220 22 "Option A"'></boceto-view><div class="src">element radio 0 0 W H "label"</div></div>
+      </div>
+
+      <h2 id="form-modern">Form — modern</h2>
+      <div class="element-grid">
+        <div class="element-card"><h4>switch</h4><p class="desc">On/off pill toggle. <code>on=true</code>.</p><boceto-view width="240" height="60" code='element switch 8 14 60 28 "Push notifications" on=true'></boceto-view><div class="src">element switch 0 0 W H "label" on=true</div></div>
+        <div class="element-card"><h4>slider</h4><p class="desc">Value selector. <code>value</code> / <code>min</code> / <code>max</code>.</p><boceto-view width="240" height="60" code='element slider 8 18 220 24 "" value=66'></boceto-view><div class="src">element slider 0 0 W H "" value=66</div></div>
+        <div class="element-card"><h4>range-slider</h4><p class="desc">Two-thumb range selector.</p><boceto-view width="240" height="60" code='element range-slider 8 18 220 24 "" low=20 high=80'></boceto-view><div class="src">element range-slider 0 0 W H "" low=20 high=80</div></div>
+        <div class="element-card"><h4>search</h4><p class="desc">Input with leading magnifier glyph.</p><boceto-view width="240" height="60" code='element search 8 12 224 36 "Find anything…"'></boceto-view><div class="src">element search 0 0 W H "placeholder"</div></div>
+        <div class="element-card"><h4>segmented-control</h4><p class="desc">iOS-style pill toggle group.</p><boceto-view width="240" height="60" code='element segmented-control 8 14 224 32 "" items="Day|Week|Month" active=1'></boceto-view><div class="src">element segmented-control 0 0 W H "" items="A|B|C" active=N</div></div>
+        <div class="element-card"><h4>combobox</h4><p class="desc">Input + open suggestions list.</p><boceto-view width="240" height="180" code='element combobox 8 8 224 160 "Pick a fruit" items="Apple|Banana|Cherry"'></boceto-view><div class="src">element combobox 0 0 W H "ph" items="…"</div></div>
+        <div class="element-card"><h4>date-picker</h4><p class="desc">Date field with calendar trigger icon.</p><boceto-view width="240" height="60" code='element date-picker 8 12 224 36 "2026-03-15"'></boceto-view><div class="src">element date-picker 0 0 W H "2026-03-15"</div></div>
+        <div class="element-card"><h4>color-picker</h4><p class="desc">Color swatch + hex code.</p><boceto-view width="240" height="60" code='element color-picker 8 12 200 36 "#22c55e"'></boceto-view><div class="src">element color-picker 0 0 W H "#hex"</div></div>
+        <div class="element-card"><h4>file-upload</h4><p class="desc">Dashed dropzone with cloud icon.</p><boceto-view width="240" height="140" code='element file-upload 8 8 224 124 "Drag &amp; drop"'></boceto-view><div class="src">element file-upload 0 0 W H "label"</div></div>
+        <div class="element-card"><h4>rating</h4><p class="desc">Star row. <code>max</code> + <code>value</code>.</p><boceto-view width="240" height="40" code='element rating 8 8 160 24 "" max=5 value=4'></boceto-view><div class="src">element rating 0 0 W H "" max=5 value=4</div></div>
+        <div class="element-card"><h4>otp-input</h4><p class="desc">N boxes for a one-time code.</p><boceto-view width="240" height="60" code='element otp-input 8 12 224 36 "1234" count=6'></boceto-view><div class="src">element otp-input 0 0 W H "1234" count=6</div></div>
+        <div class="element-card"><h4>tag-input</h4><p class="desc">Input field with chip pills inside.</p><boceto-view width="240" height="60" code='element tag-input 8 12 224 36 "" tags="design|wireframe"'></boceto-view><div class="src">element tag-input 0 0 W H "" tags="…"</div></div>
+        <div class="element-card"><h4>stepper-input</h4><p class="desc">Number with − / + buttons.</p><boceto-view width="240" height="60" code='element stepper-input 8 12 120 32 "12"'></boceto-view><div class="src">element stepper-input 0 0 W H "12"</div></div>
+      </div>
+
+      <h2 id="media">Media</h2>
+      <div class="element-grid">
+        <div class="element-card"><h4>image</h4><p class="desc">Image placeholder with diagonal cross.</p><boceto-view width="240" height="140" code='element image 8 8 224 124 "image"'></boceto-view><div class="src">element image 0 0 W H "alt"</div></div>
+        <div class="element-card"><h4>video</h4><p class="desc">Video placeholder with play triangle.</p><boceto-view width="240" height="140" code='element video 8 8 224 124 "video"'></boceto-view><div class="src">element video 0 0 W H "label"</div></div>
+        <div class="element-card"><h4>avatar</h4><p class="desc">Circular profile placeholder, optional name.</p><boceto-view width="240" height="80" code='element avatar 8 8 64 64 "Jane"'></boceto-view><div class="src">element avatar 0 0 W H "name"</div></div>
+      </div>
+
+      <h2 id="content">Content</h2>
+      <div class="element-grid">
+        <div class="element-card"><h4>list</h4><p class="desc">Bulleted list. <code>items=</code>.</p><boceto-view width="240" height="120" code='element list 8 8 224 100 "" items="One|Two|Three"'></boceto-view><div class="src">element list 0 0 W H "" items="…"</div></div>
+        <div class="element-card"><h4>table</h4><p class="desc"><code>headers=</code> + <code>data=</code> (rows separated by <code>;</code>).</p><boceto-view width="240" height="120" code='element table 8 8 224 100 "" headers="Name|Role" data="Jane|Admin;John|User"'></boceto-view><div class="src">element table 0 0 W H "" headers="…" data="r1;r2"</div></div>
+        <div class="element-card"><h4>tabs</h4><p class="desc">Tab strip + body. <code>active=N</code>.</p><boceto-view width="240" height="120" code='element tabs 8 8 224 100 "Tab body" tabNames="Files|Activity" active=0'></boceto-view><div class="src">element tabs 0 0 W H "body" tabNames="…" active=0</div></div>
+        <div class="element-card"><h4>badge</h4><p class="desc">Small status pill.</p><boceto-view width="240" height="40" code='element badge 8 8 60 22 "NEW"'></boceto-view><div class="src">element badge 0 0 W H "NEW"</div></div>
+        <div class="element-card"><h4>progress</h4><p class="desc">Horizontal bar. <code>progress=N</code>.</p><boceto-view width="240" height="40" code='element progress 8 8 224 22 "" progress=64'></boceto-view><div class="src">element progress 0 0 W H "" progress=N</div></div>
+        <div class="element-card"><h4>pagination</h4><p class="desc"><code>current=</code> + <code>total=</code>.</p><boceto-view width="240" height="40" code='element pagination 8 4 224 28 "" current=4 total=20'></boceto-view><div class="src">element pagination 0 0 W H "" current=N total=N</div></div>
+        <div class="element-card"><h4>alert</h4><p class="desc">Tinted box with info icon.</p><boceto-view width="240" height="60" code='element alert 8 12 224 36 "Heads up — alert message"'></boceto-view><div class="src">element alert 0 0 W H "message"</div></div>
+        <div class="element-card"><h4>chip</h4><p class="desc">Removable filter pill. <code>closable=true</code>.</p><boceto-view width="240" height="40" code='element chip 8 8 100 24 "Filter" closable=true'></boceto-view><div class="src">element chip 0 0 W H "label" closable=true</div></div>
+        <div class="element-card"><h4>code-block</h4><p class="desc">Monospaced text block. <code>lang=</code>.</p><boceto-view width="240" height="100" code='element code-block 8 8 224 84 "function go() {}" lang=js'></boceto-view><div class="src">element code-block 0 0 W H "code" lang=js</div></div>
+        <div class="element-card"><h4>accordion</h4><p class="desc">Collapsible panel. <code>expanded=true</code>.</p><boceto-view width="240" height="100" code='element accordion 8 8 224 80 "Settings" expanded=true'></boceto-view><div class="src">element accordion 0 0 W H "title" expanded=true</div></div>
+        <div class="element-card"><h4>chat-bubble</h4><p class="desc">Message bubble. <code>side=left|right</code>.</p><boceto-view width="240" height="80" code='element chat-bubble 8 8 200 50 "Hi there!"'></boceto-view><div class="src">element chat-bubble 0 0 W H "msg" side=left</div></div>
+        <div class="element-card"><h4>calendar</h4><p class="desc">Month grid. <code>month/year/selected</code>.</p><boceto-view width="240" height="180" code='element calendar 8 8 224 164 "" month=3 year=2026 selected=15'></boceto-view><div class="src">element calendar 0 0 W H "" month=3 year=2026 selected=15</div></div>
+        <div class="element-card"><h4>tree</h4><p class="desc">File tree with depth via leading <code>/</code>.</p><boceto-view width="240" height="160" code='element tree 8 8 224 144 "" items="src|/Button.tsx|/Card.tsx|/utils|//format.ts"'></boceto-view><div class="src">element tree 0 0 W H "" items="root|/child|//grandchild"</div></div>
+        <div class="element-card"><h4>stepper</h4><p class="desc">Numbered horizontal steps. <code>current=N</code>.</p><boceto-view width="240" height="80" code='element stepper 8 8 224 64 "" items="Account|Profile|Done" current=1'></boceto-view><div class="src">element stepper 0 0 W H "" items="…" current=N</div></div>
+        <div class="element-card"><h4>carousel</h4><p class="desc">Wide slide area + arrows + dots.</p><boceto-view width="240" height="160" code='element carousel 8 8 224 144 "Slide 1" total=5 active=0'></boceto-view><div class="src">element carousel 0 0 W H "label" total=N active=N</div></div>
+        <div class="element-card"><h4>kbd</h4><p class="desc">Keycap-shaped shortcut display.</p><boceto-view width="240" height="60" code='element kbd 8 18 56 24 "⌘K"'></boceto-view><div class="src">element kbd 0 0 W H "⌘K"</div></div>
+        <div class="element-card"><h4>mention</h4><p class="desc">Inline <code>@name</code> styled.</p><boceto-view width="240" height="40" code='element mention 8 8 100 22 "alice"'></boceto-view><div class="src">element mention 0 0 W H "username"</div></div>
+        <div class="element-card"><h4>ai-suggestion</h4><p class="desc">Inline AI suggestion + Tab hint.</p><boceto-view width="240" height="60" code='element ai-suggestion 8 12 224 32 "Apply this fix"'></boceto-view><div class="src">element ai-suggestion 0 0 W H "suggested text"</div></div>
+      </div>
+
+      <h2 id="overlays">Overlays</h2>
+      <div class="element-grid">
+        <div class="element-card"><h4>dropdown-menu</h4><p class="desc">Open menu state with rows. <code>---</code> = separator.</p><boceto-view width="240" height="160" code='element dropdown-menu 8 8 200 140 "" items="Edit|Duplicate|---|Delete"'></boceto-view><div class="src">element dropdown-menu 0 0 W H "" items="A|B|---|C"</div></div>
+        <div class="element-card"><h4>tooltip</h4><p class="desc">Dark floating box with arrow tail.</p><boceto-view width="240" height="80" code='element tooltip 60 20 120 32 "Helpful tip"'></boceto-view><div class="src">element tooltip 0 0 W H "tip" arrow=top</div></div>
+        <div class="element-card"><h4>toast</h4><p class="desc">Notification pill. <code>variant=info|success|warn|error</code>.</p><boceto-view width="240" height="60" code='element toast 8 12 224 36 "Saved!" variant=success'></boceto-view><div class="src">element toast 0 0 W H "msg" variant=success</div></div>
+        <div class="element-card"><h4>popover</h4><p class="desc">Floating box with header + body + arrow.</p><boceto-view width="240" height="120" code='element popover 8 8 200 100 "Help"'></boceto-view><div class="src">element popover 0 0 W H "title" arrow=top</div></div>
+      </div>
+
+      <h2 id="feedback">Feedback</h2>
+      <div class="element-grid">
+        <div class="element-card"><h4>spinner</h4><p class="desc">Loading arc.</p><boceto-view width="240" height="60" code='element spinner 100 14 32 32 ""'></boceto-view><div class="src">element spinner 0 0 W H ""</div></div>
+        <div class="element-card"><h4>skeleton</h4><p class="desc">Gray placeholder lines. <code>lines=N</code>.</p><boceto-view width="240" height="100" code='element skeleton 8 8 224 84 "" lines=4'></boceto-view><div class="src">element skeleton 0 0 W H "" lines=4</div></div>
+        <div class="element-card"><h4>status-dot</h4><p class="desc">Small colored dot. <code>status=online|away|offline|busy</code>.</p><boceto-view width="240" height="40" code='element status-dot 8 12 16 16 "" status=online
+element status-dot 32 12 16 16 "" status=away
+element status-dot 56 12 16 16 "" status=offline
+element status-dot 80 12 16 16 "" status=busy'></boceto-view><div class="src">element status-dot 0 0 W H "" status=online</div></div>
+        <div class="element-card"><h4>notification-bell</h4><p class="desc">Bell icon + count badge. <code>count=N</code>.</p><boceto-view width="240" height="60" code='element notification-bell 100 14 32 32 "" count=7'></boceto-view><div class="src">element notification-bell 0 0 W H "" count=N</div></div>
+        <div class="element-card"><h4>presence-cursor</h4><p class="desc">Live-cursor with name pill. <code>cursorColor=#hex</code>.</p><boceto-view width="240" height="60" code='element presence-cursor 8 8 100 40 "Jane" cursorColor=#22c55e'></boceto-view><div class="src">element presence-cursor 0 0 W H "Name" cursorColor=#hex</div></div>
+      </div>
+
+      <h2 id="data-viz">Data viz</h2>
+      <div class="element-grid">
+        <div class="element-card"><h4>chart-bar</h4><p class="desc">Vertical bars. <code>data="3,5,2,7,4"</code>.</p><boceto-view width="240" height="120" code='element chart-bar 8 8 224 104 "" data="3,5,2,7,4,6,3"'></boceto-view><div class="src">element chart-bar 0 0 W H "" data="3,5,2,7,4"</div></div>
+        <div class="element-card"><h4>chart-line</h4><p class="desc">Line chart with point markers.</p><boceto-view width="240" height="120" code='element chart-line 8 8 224 104 "" data="3,5,2,7,4,8,6"'></boceto-view><div class="src">element chart-line 0 0 W H "" data="…"</div></div>
+        <div class="element-card"><h4>chart-donut</h4><p class="desc">Donut chart with segments.</p><boceto-view width="240" height="120" code='element chart-donut 60 4 112 112 "" data="40,30,20,10"'></boceto-view><div class="src">element chart-donut 0 0 W H "" data="40,30,20,10"</div></div>
+        <div class="element-card"><h4>chart-area</h4><p class="desc">Filled area below the line.</p><boceto-view width="240" height="120" code='element chart-area 8 8 224 104 "" data="3,5,2,7,4,8,6"'></boceto-view><div class="src">element chart-area 0 0 W H "" data="…"</div></div>
+        <div class="element-card"><h4>chart-sparkline</h4><p class="desc">Tiny inline trend.</p><boceto-view width="240" height="40" code='element chart-sparkline 8 8 224 24 "" data="3,5,2,7,4,8,6,9,5,7"'></boceto-view><div class="src">element chart-sparkline 0 0 W H "" data="…"</div></div>
+        <div class="element-card"><h4>gantt</h4><p class="desc">Time-axis bars. <code>tasks="Name:start:end"</code>.</p><boceto-view width="240" height="140" code='element gantt 8 8 224 124 "" total=8 tasks="Design:0:3|Build:2:6|Ship:5:8"'></boceto-view><div class="src">element gantt 0 0 W H "" tasks="…" total=N</div></div>
+        <div class="element-card"><h4>heatmap</h4><p class="desc">Grid of intensity-shaded cells.</p><boceto-view width="240" height="120" code='element heatmap 8 8 224 104 "" cols=12 rows=7'></boceto-view><div class="src">element heatmap 0 0 W H "" cols=N rows=N</div></div>
+        <div class="element-card"><h4>map</h4><p class="desc">Map placeholder with curvy roads + pin.</p><boceto-view width="240" height="180" code='element map 8 8 224 164 "Acme HQ"'></boceto-view><div class="src">element map 0 0 W H "label"</div></div>
+        <div class="element-card"><h4>code-diff</h4><p class="desc">Red/green +/- diff lines.</p><boceto-view width="240" height="120" code='element code-diff 8 8 224 104 ""'></boceto-view><div class="src">element code-diff 0 0 W H "+ added\n- removed"</div></div>
+      </div>
+
+      <h2 id="mobile-chrome">Mobile chrome</h2>
+      <div class="element-grid">
+        <div class="element-card"><h4>phone-frame</h4><p class="desc">Outer device chrome with notch + side buttons.</p><boceto-view width="240" height="320" code='element phone-frame 40 8 160 300 ""'></boceto-view><div class="src">element phone-frame 0 0 W H "" model=iphone</div></div>
+        <div class="element-card"><h4>status-bar</h4><p class="desc">Time + signal/wifi/battery icons.</p><boceto-view width="240" height="40" code='element status-bar 8 8 224 24 "9:41"'></boceto-view><div class="src">element status-bar 0 0 W H "9:41"</div></div>
+        <div class="element-card"><h4>home-indicator</h4><p class="desc">iOS bottom gesture pill.</p><boceto-view width="240" height="40" code='element home-indicator 8 14 224 12 ""'></boceto-view><div class="src">element home-indicator 0 0 W H ""</div></div>
+        <div class="element-card"><h4>fab</h4><p class="desc">Circular floating action button.</p><boceto-view width="240" height="80" code='element fab 92 8 56 56 "+"'></boceto-view><div class="src">element fab 0 0 W H "+"</div></div>
+        <div class="element-card"><h4>app-icon</h4><p class="desc">Rounded icon. <code>bg/glyph/badge</code>.</p><boceto-view width="240" height="80" code='element app-icon 8 8 60 60 "" glyph="A" bg=#3b82c4 badge=3'></boceto-view><div class="src">element app-icon 0 0 W H "" glyph="A" bg=#hex badge=N</div></div>
+      </div>
+
+      <h2 id="system-chrome">System chrome</h2>
+      <div class="element-grid">
+        <div class="element-card"><h4>window-frame</h4><p class="desc">macOS window with traffic lights + title.</p><boceto-view width="320" height="180" code='element window-frame 8 8 304 164 "untitled.txt"'></boceto-view><div class="src">element window-frame 0 0 W H "title"</div></div>
+        <div class="element-card"><h4>browser-frame</h4><p class="desc">Browser chrome with tabs + URL bar.</p><boceto-view width="320" height="200" code='element browser-frame 8 8 304 184 "https://example.com"'></boceto-view><div class="src">element browser-frame 0 0 W H "url"</div></div>
+        <div class="element-card"><h4>terminal</h4><p class="desc">Black box, monospace, blinking cursor.</p><boceto-view width="320" height="160" code='element terminal 8 8 304 144 ""'></boceto-view><div class="src">element terminal 0 0 W H "$ command\noutput"</div></div>
+      </div>
+
+      <h2 id="ar-spatial">AR / spatial</h2>
+      <div class="element-grid">
+        <div class="element-card"><h4>glass-window</h4><p class="desc">visionOS translucent window with handle bar.</p><boceto-view width="320" height="200" code='element glass-window 16 16 288 168 "Settings"'></boceto-view><div class="src">element glass-window 0 0 W H "title"</div></div>
+        <div class="element-card"><h4>gaze-cursor</h4><p class="desc">Hover ring + center dot for eye tracking.</p><boceto-view width="240" height="80" code='element gaze-cursor 100 16 40 40 ""'></boceto-view><div class="src">element gaze-cursor 0 0 W H ""</div></div>
+        <div class="element-card"><h4>pinch-indicator</h4><p class="desc">Two-finger pinch gesture marker.</p><boceto-view width="240" height="80" code='element pinch-indicator 88 8 64 64 ""'></boceto-view><div class="src">element pinch-indicator 0 0 W H ""</div></div>
+        <div class="element-card"><h4>volumetric-scene</h4><p class="desc">Stage + perspective grid + 3D cube.</p><boceto-view width="320" height="200" code='element volumetric-scene 8 8 304 184 "Demo scene"'></boceto-view><div class="src">element volumetric-scene 0 0 W H "title"</div></div>
+        <div class="element-card"><h4>passthrough-frame</h4><p class="desc">Camera-edge frame with live indicator.</p><boceto-view width="320" height="200" code='element passthrough-frame 8 8 304 184 ""'></boceto-view><div class="src">element passthrough-frame 0 0 W H ""</div></div>
+        <div class="element-card"><h4>voice-input</h4><p class="desc">Listening waveform indicator.</p><boceto-view width="240" height="80" code='element voice-input 8 8 224 64 "Listening…"'></boceto-view><div class="src">element voice-input 0 0 W H "label"</div></div>
+      </div>
+
+      <h2 style="margin-top: 56px;">DSL essentials</h2>
+
+      <h3>Layout primitives</h3>
+      <p>Stop hand-computing X/Y. <code>row</code> stacks left-to-right, <code>col</code> stacks top-to-bottom. <code>gap</code> spaces, <code>align</code> controls perpendicular placement.</p>
+      <boceto-view width="600" height="60" code='```boceto
+row 8 8 584 44 gap=8 align=middle
+  element button 0 0 100 32 "One"
+  element button 0 0 100 32 "Two"
+  element button 0 0 100 32 "Three"
+  element button 0 0 100 32 "Four"
+  element button 0 0 100 32 "Five"
+end
+```'></boceto-view>
+
+      <h3>Named IDs (two ways)</h3>
+      <p>Inline shorthand: <code>element button#submit 0 0 100 36 "Save"</code>. Or attribute form: <code>element button 0 0 100 36 "Save" id=submit</code>. Both produce <code>id: "submit"</code>; the serializer always emits the shorthand.</p>
+
+      <h3>Composite components</h3>
+      <p>Define a reusable widget once; reference it many times. <code>$name</code> / <code>${name}</code> placeholders inside the body get filled from caller-supplied attributes.</p>
+      <pre>component user-card(name, role)
+  element card 0 0 240 80 ""
+  element avatar 8 8 40 40 ""
+  element heading 56 12 180 24 "$name"
+  element label 56 38 180 18 "$role"
+end
+
+element user-card 100 50 240 80 "" name="Jane" role="Admin"
+element user-card 100 150 240 80 "" name="John" role="User"</pre>
+      <boceto-view width="600" height="240" code='```boceto
+component user-card(name, role)
+  element card 0 0 240 80 ""
+  element avatar 8 8 40 40 ""
+  element heading 56 12 180 24 "$name"
+  element label 56 38 180 18 "$role"
+end
+
+element user-card 8 8 240 80 "" name="Jane Doe" role="Admin"
+element user-card 8 100 240 80 "" name="John Roe" role="User"
+```'></boceto-view>
+
+    </main>
+
+    <footer class="site">
+      Boceto v0.1 · MIT licensed · <a href="https://github.com/maravilla-labs/boceto">github.com/maravilla-labs/boceto</a>
+    </footer>
+  </body>
+</html>

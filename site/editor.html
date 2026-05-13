@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Boceto · Editor (coming soon)</title>
+    <meta name="description" content="The Boceto canvas editor — drag, resize, multi-select, undo. Coming soon." />
+    <link rel="stylesheet" href="./assets/style.css" />
+    <script type="module" src="./assets/boceto-view.js"></script>
+  </head>
+  <body>
+    <header class="site">
+      <nav>
+        <a class="brand" href="./index.html">
+          <span class="logo-mark">B</span>
+          Boceto
+        </a>
+        <div class="links">
+          <a href="./index.html">Home</a>
+          <a href="./elements.html">Elements</a>
+          <a href="./editor.html" class="active">Editor</a>
+          <a href="https://github.com/maravilla-labs/boceto" class="gh">GitHub →</a>
+        </div>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero" style="padding-top: 32px; padding-bottom: 16px; text-align: left;">
+        <h1 style="font-size: 36px;">Boceto editor</h1>
+        <p class="tagline" style="text-align: left; margin-left: 0; font-size: 17px;">A canvas editor for hand-drawn wireframes — drag, resize, multi-select, undo. Built directly on top of <code>&lt;boceto-edit&gt;</code>.</p>
+      </section>
+
+      <div class="coming-soon">
+        <div>
+          <h3>Coming soon</h3>
+          <p>The interactive editor lands in a future release. The data model and component contract are already stable; the next step is wiring up canvas interactions onto the renderer that ships today.</p>
+          <p style="margin-top: 18px;">In the meantime, author wireframes by typing the DSL directly into a markdown file or a fenced code block and using <a href="./elements.html"><code>&lt;boceto-view&gt;</code></a> to render.</p>
+        </div>
+      </div>
+
+      <h2>What it'll look like</h2>
+      <p>This is a static preview of the planned editor chrome — toolbar on the left, canvas in the middle, properties panel on the right.</p>
+      <boceto-view width="900" height="520" code='```boceto
+element navbar 0 0 900 40 "Boceto Editor — Untitled.boceto"
+
+element sidebar 0 40 64 480 "" items="Box|Card|Button|Input|Image|Tabs|Chart" active=2 collapsed=true
+
+element box 80 60 580 440 "Canvas"
+element box 100 100 200 80 "Header"
+element button 120 200 100 36 "Save"
+element button 240 200 100 36 "Cancel"
+element image 100 260 200 120 "Hero image"
+
+element sidebar 680 40 220 480 "Properties"
+element label 700 90 200 18 "Type"
+element select 700 110 200 32 "button"
+element label 700 154 200 18 "Label"
+element input 700 174 200 32 "Save"
+element label 700 218 100 18 "X"
+element stepper-input 700 238 90 32 "120"
+element label 800 218 100 18 "Y"
+element stepper-input 800 238 90 32 "200"
+element label 700 282 100 18 "W"
+element stepper-input 700 302 90 32 "100"
+element label 800 282 100 18 "H"
+element stepper-input 800 302 90 32 "36"
+```'></boceto-view>
+
+      <h2>Stable API now</h2>
+      <p>Even though interactions aren't shipping yet, the <code>&lt;boceto-edit&gt;</code> component already exposes the API surface the editor will use:</p>
+      <pre>&lt;boceto-edit
+  code='element box 0 0 100 50 "Hello"'
+  width="600"
+  height="400"
+&gt;&lt;/boceto-edit&gt;
+
+// Listen for changes
+document.querySelector('boceto-edit')
+  .addEventListener('change', (e) =&gt; console.log(e.detail.code))</pre>
+
+    </main>
+
+    <footer class="site">
+      Boceto v0.1 · MIT licensed · <a href="https://github.com/maravilla-labs/boceto">github.com/maravilla-labs/boceto</a>
+    </footer>
+  </body>
+</html>

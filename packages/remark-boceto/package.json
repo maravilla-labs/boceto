@@ -1,0 +1,41 @@
+{
+  "name": "@boceto/remark",
+  "version": "0.1.0",
+  "description": "remark plugin: render fenced ```boceto blocks as <boceto-view> custom elements.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": ["dist", "README.md"],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run"
+  },
+  "peerDependencies": {
+    "unified": "^11.0.0"
+  },
+  "dependencies": {
+    "@boceto/core": "workspace:*",
+    "unist-util-visit": "^5.0.0"
+  },
+  "devDependencies": {
+    "@types/mdast": "^4.0.4",
+    "remark": "^15.0.1",
+    "remark-html": "^16.0.1",
+    "tsup": "^8.3.0",
+    "typescript": "^5.6.3",
+    "unified": "^11.0.5",
+    "unist-util-visit": "^5.0.0",
+    "vitest": "^2.1.4"
+  }
+}

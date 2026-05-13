@@ -1,0 +1,14 @@
+{
+  "name": "@boceto/example-remark-demo",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node index.mjs"
+  },
+  "dependencies": {
+    "@boceto/remark": "workspace:*",
+    "remark": "^15.0.1",
+    "remark-html": "^16.0.1"
+  }
+}

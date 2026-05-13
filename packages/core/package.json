@@ -1,0 +1,30 @@
+{
+  "name": "@boceto/core",
+  "version": "0.1.0",
+  "description": "Boceto DSL — parser, serializer, types, and canvas renderer.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": ["**/elements/register.*"],
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": ["dist", "README.md"],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "tsup": "^8.3.0",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.4"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "name": "@boceto/example-vanilla-html",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "start": "pnpm dlx serve ."
+  },
+  "dependencies": {
+    "@boceto/view": "workspace:*",
+    "@boceto/edit": "workspace:*"
+  }
+}
