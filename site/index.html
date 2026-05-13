@@ -133,6 +133,26 @@ element spinner 220 370 28 28 ""
 element label 256 380 200 18 "Claude is typing…"
 element chat-input 220 430 600 56 "" placeholder="Reply to Claude…"
 ```'></boceto-view>
+          <details>
+            <summary>Show source</summary>
+            <pre>```boceto
+component chat-input(placeholder)
+  element box 0 0 600 56 ""
+  element button 8 12 32 32 "+"
+  element input 48 12 480 32 "$placeholder"
+  element primary-button 536 12 56 32 "Send"
+end
+
+element sidebar 0 0 200 500 "Claude" items="New chat|Boceto v0.1 spec|Refactor parser|Plan Q2 OKRs|Docs review" active=1
+element navbar 200 0 700 44 "Boceto v0.1 spec"
+element chat-bubble 220 60 320 50 "What is missing for a 2026 desktop UI?"
+element chat-bubble 220 130 580 100 "Looking at your 25 element types..." side=right
+element code-block 220 250 580 100 "// add to ELEMENT_TYPES\nswitch, slider, chart-bar, ..." lang=ts
+element spinner 220 370 28 28 ""
+element label 256 380 200 18 "Claude is typing…"
+element chat-input 220 430 600 56 "" placeholder="Reply to Claude…"
+```</pre>
+          </details>
         </article>
 
         <article>
@@ -169,6 +189,40 @@ element chart-bar 200 390 480 110 "" data="34,52,40,68,55,72,48"
 
 element calendar 700 360 200 140 "" month=3 year=2026 selected=15
 ```'></boceto-view>
+          <details>
+            <summary>Show source</summary>
+            <pre>```boceto
+component stat(label, value, trend)
+  element card 0 0 200 100 ""
+  element label 12 12 180 18 "$label"
+  element heading 12 36 180 36 "$value" fontSize=28
+  element chart-sparkline 100 76 88 18 "" data="$trend"
+end
+
+element sidebar 0 0 180 540 "Acme" items="Overview|Customers|Reports|Billing|Settings" active=0
+element navbar 180 0 720 44 "Overview"
+element search 700 8 180 28 "Search…"
+
+element stat 200 60 200 100 "" label="Active users" value="1,284" trend="3,5,4,7,6,8,7"
+element stat 410 60 200 100 "" label="Revenue (MTD)" value="$42k" trend="2,4,3,5,7,6,8"
+element stat 620 60 130 100 "" label="Churn" value="2.1%" trend="5,4,4,3,3,2,2"
+element stat 760 60 130 100 "" label="NPS" value="64" trend="3,4,5,6,5,7,8"
+
+element heading 200 180 300 24 "Last 7 days"
+element chart-line 200 210 280 130 "" data="120,180,150,200,170,240,210"
+
+element heading 500 180 300 24 "By plan"
+element chart-donut 500 210 130 130 "" data="55,30,15"
+element label 650 230 180 16 "● Pro      55%"
+element label 650 254 180 16 "● Team    30%"
+element label 650 278 180 16 "● Free      15%"
+
+element heading 200 360 300 24 "Activity by day"
+element chart-bar 200 390 480 110 "" data="34,52,40,68,55,72,48"
+
+element calendar 700 360 200 140 "" month=3 year=2026 selected=15
+```</pre>
+          </details>
         </article>
 
         <article>
@@ -194,6 +248,29 @@ element app-icon 470 60 56 56 "" glyph="M" bg=#22c55e
 element app-icon 540 60 56 56 "" glyph="C" bg=#f59e0b badge=12
 element app-icon 610 60 56 56 "" glyph="X" bg=#dc2626
 ```'></boceto-view>
+          <details>
+            <summary>Show source</summary>
+            <pre>```boceto
+element phone-frame 50 20 320 580 ""
+element status-bar 60 36 300 24 "9:41"
+element navbar 60 60 300 44 "Inbox"
+element search 70 116 280 32 "Search messages"
+
+element chat-bubble 70 158 250 56 "Welcome to Boceto Mobile! Tap any message to reply."
+element chat-bubble 70 226 250 40 "Got it, thanks!" side=right
+element chat-bubble 70 280 250 56 "Let me know if you have feedback on the new flow."
+element chat-bubble 70 350 250 40 "Will do." side=right
+
+element fab 300 460 56 56 "+"
+element home-indicator 60 580 300 8 ""
+
+element label 400 30 280 24 "App icons"
+element app-icon 400 60 56 56 "" glyph="A" bg=#3b82c4 badge=3
+element app-icon 470 60 56 56 "" glyph="M" bg=#22c55e
+element app-icon 540 60 56 56 "" glyph="C" bg=#f59e0b badge=12
+element app-icon 610 60 56 56 "" glyph="X" bg=#dc2626
+```</pre>
+          </details>
         </article>
 
         <article>
@@ -221,6 +298,31 @@ element label 36 460 620 18 "Manage what others can see about you."
 element accordion 20 480 660 40 "Connected apps"
 element accordion 20 528 660 40 "Danger zone"
 ```'></boceto-view>
+          <details>
+            <summary>Show source</summary>
+            <pre>```boceto
+element navbar 0 0 700 44 "Settings"
+
+element heading 20 60 660 28 "Notifications"
+element switch 20 100 60 28 "Email notifications" on=true
+element switch 20 138 60 28 "Push notifications" on=true
+element switch 20 176 60 28 "SMS alerts" on=false
+
+element heading 20 220 660 28 "Display"
+element label 20 256 200 20 "Theme"
+element segmented-control 220 254 440 28 "" items="System|Light|Dark" active=2
+element label 20 296 200 20 "Density"
+element segmented-control 220 294 440 28 "" items="Compact|Default|Comfortable" active=1
+element label 20 336 200 20 "Volume"
+element slider 220 340 440 24 "" value=72
+
+element heading 20 380 660 28 "Account"
+element accordion 20 420 660 50 "Privacy" expanded=true
+element label 36 460 620 18 "Manage what others can see about you."
+element accordion 20 480 660 40 "Connected apps"
+element accordion 20 528 660 40 "Danger zone"
+```</pre>
+          </details>
         </article>
 
         <article>
@@ -260,6 +362,36 @@ element article-card 76  380 280 220 "" title="The case for hand-drawn wireframe
 element article-card 376 380 280 220 "" title="Boceto v0.1 ships" excerpt="83 element types, composite components, layout primitives, SVG…" author="John Roe · Mar 8"
 element article-card 676 380 200 220 "" title="Designing in markdown" excerpt="Why text-first design tools survive longer than visual-first ones." author="Sam Vick · Feb 27"
 ```'></boceto-view>
+          <details>
+            <summary>Show source</summary>
+            <pre>```boceto
+component hero(title, sub, cta)
+  element heading 0 0 600 48 "$title" fontSize=36
+  element label 0 56 600 24 "$sub"
+  element primary-button 0 100 160 44 "$cta"
+end
+
+component article-card(title, excerpt, author)
+  element card 0 0 280 220 ""
+  element image 8 8 264 110 ""
+  element heading 12 126 256 22 "$title"
+  element label 12 154 256 32 "$excerpt"
+  element avatar 12 192 24 24 ""
+  element label 44 198 200 18 "$author"
+end
+
+element browser-frame 0 0 900 660 "https://acme.studio"
+element navbar 16 80 868 56 "Acme Studio" items="Home|Work|About|Journal|Contact"
+
+element hero 76 156 600 160 "" title="Beautifully crafted software." sub="We design and ship products that people love." cta="See our work"
+element image 696 156 184 160 ""
+
+element heading 76 336 800 28 "From the journal"
+element article-card 76  380 280 220 "" title="The case for hand-drawn wireframes" excerpt="..." author="Jane Doe · Mar 14"
+element article-card 376 380 280 220 "" title="Boceto v0.1 ships" excerpt="..." author="John Roe · Mar 8"
+element article-card 676 380 200 220 "" title="Designing in markdown" excerpt="..." author="Sam Vick · Feb 27"
+```</pre>
+          </details>
         </article>
 
         <article>
@@ -289,6 +421,33 @@ element button 88 510 64 36 "Camera"
 element button 160 510 64 36 "Share"
 element button 232 510 100 36 "Leave" id=leave-btn
 ```'></boceto-view>
+          <details>
+            <summary>Show source</summary>
+            <pre>```boceto
+component video-tile(name)
+  element video 0 0 320 200 ""
+  element label 8 172 200 22 "$name"
+end
+
+element navbar 0 0 900 44 "Sprint planning · Conference room"
+
+element video-tile 16  60 320 200 "" name="Jane Doe (you)"
+element video-tile 350 60 320 200 "" name="John Roe"
+element video-tile 16  280 320 200 "" name="Sam Vick"
+element video-tile 350 280 320 200 "" name="Lee Park"
+
+element sidebar 690 60 200 380 "Participants" items="Jane Doe (you)|John Roe|Sam Vick|Lee Park" active=0
+
+element heading 690 460 200 22 "Chat"
+element chat-bubble 690 488 200 44 "Sharing my screen now"
+element input 690 540 200 36 "Send a message"
+
+element button 16 510 64 36 "Mute"
+element button 88 510 64 36 "Camera"
+element button 160 510 64 36 "Share"
+element button 232 510 100 36 "Leave" id=leave-btn
+```</pre>
+          </details>
         </article>
 
       </div>
