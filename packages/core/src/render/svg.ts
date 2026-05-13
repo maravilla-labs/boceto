@@ -52,8 +52,14 @@ export class SvgRenderer {
       })
     }
 
+    const selected = options.selectedIds
+    const hovered = options.hoveredId
     for (const el of iterateRenderables(page.elements)) {
-      drawElement(surface, el)
+      drawElement(surface, el, {
+        selected: selected?.has(el.id) ?? false,
+        hovered: hovered === el.id,
+        inGroup: false,
+      })
     }
 
     return surface.flush(w, h, {

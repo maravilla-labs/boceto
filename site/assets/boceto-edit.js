@@ -1753,6 +1753,9 @@ async function initYoga() {
   if (!yogaPromise) yogaPromise = loadYoga2();
   yogaInstance = await yogaPromise;
 }
+function isYogaReady() {
+  return yogaInstance !== null;
+}
 function applyFlexLayout(doc) {
   if (!yogaInstance) {
     throw new Error(
@@ -3282,6 +3285,267 @@ function parse(source, options = {}) {
     pages.push({ id: "p0", name: "Page 1", elements: [], arrows: [] });
   }
   return { pages, components };
+}
+function serialize(doc, options = {}) {
+  const format = options.format ?? "markdown";
+  const blocks = [];
+  const componentMap = new Map(doc.components.map((c) => [c.name, c]));
+  if (doc.components.length > 0) {
+    const defs = doc.components.map((c) => serializeComponent(c, componentMap)).join("\n\n");
+    blocks.push(format === "markdown" ? "```boceto\n" + defs + "\n```" : defs);
+  }
+  for (const page of doc.pages) {
+    blocks.push(serializePage(page, format, componentMap));
+  }
+  return format === "markdown" ? blocks.join("\n\n") : blocks.join("\n\n");
+}
+function serializePage(page, format, componentMap) {
+  const body = serializePageBody(page, componentMap);
+  if (format === "markdown") return "```boceto:" + page.name + "\n" + body + "\n```";
+  return `--- ${page.name}
+${body}`;
+}
+function serializePageBody(page, componentMap) {
+  const lines = [];
+  for (const item of page.elements) appendItem(lines, item, 0, componentMap);
+  for (const ar of page.arrows) {
+    const label = ar.label ? ` ${quote(ar.label)}` : "";
+    lines.push(`arrow ${ar.from} ${ar.to}${label}`);
+  }
+  return lines.join("\n");
+}
+function appendItem(lines, item, indent, componentMap) {
+  const pad = "  ".repeat(indent);
+  if (isFlexContainer(item)) {
+    const [open, ...rest] = serializeFlexContainer(item, indent, componentMap).split("\n");
+    lines.push(pad + open);
+    for (const r2 of rest) lines.push(r2);
+    return;
+  }
+  if (isComponentInstance(item)) {
+    lines.push(pad + serializeInstance(item, componentMap));
+    return;
+  }
+  const rendered = serializeElement(item, componentMap, indent).split("\n");
+  lines.push(pad + rendered[0]);
+  for (let i = 1; i < rendered.length; i++) lines.push(rendered[i]);
+}
+function serializeComponent(c, componentMap) {
+  const parts = [
+    "component",
+    `${c.name}${c.params.length ? "(" + c.params.join(", ") + ")" : ""}`
+  ];
+  if (c.shell) {
+    const s = c.shell;
+    parts.push(`direction=${s.direction}`);
+    if (s.padding !== 0) parts.push(`padding=${s.padding}`);
+    if (s.gap !== 0) parts.push(`gap=${s.gap}`);
+    const defaultAlign = s.direction === "row" ? "middle" : "start";
+    if (s.align !== defaultAlign) parts.push(`align=${s.align}`);
+    if (s.justify !== "start") parts.push(`justify=${s.justify}`);
+    if (s.wrap !== "nowrap") parts.push(`wrap=${s.wrap}`);
+  }
+  if (c.defaults) {
+    const d = c.defaults;
+    if (d.w !== void 0) parts.push(`w=${formatDim(d.w)}`);
+    if (d.h !== void 0) parts.push(`h=${formatDim(d.h)}`);
+    appendFlexChildAttrs(parts, d);
+  }
+  const header = parts.join(" ");
+  const bodyLines = [];
+  for (const item of c.body) {
+    if ("from" in item && "to" in item) {
+      const label = item.label ? ` ${quote(item.label)}` : "";
+      bodyLines.push(`  arrow ${item.from} ${item.to}${label}`);
+      continue;
+    }
+    if (isSlot(item)) {
+      bodyLines.push("  " + (item.name ? `slot ${item.name}` : "slot"));
+      continue;
+    }
+    if (isFlexContainer(item)) {
+      const nested = serializeFlexContainer(item, 1, componentMap).split("\n");
+      for (const n of nested) bodyLines.push(n);
+      continue;
+    }
+    if (isComponentInstance(item)) {
+      bodyLines.push("  " + serializeInstance(item, componentMap));
+      continue;
+    }
+    const rendered = serializeElement(item, componentMap, 1).split("\n");
+    bodyLines.push("  " + rendered[0]);
+    for (let j = 1; j < rendered.length; j++) bodyLines.push(rendered[j]);
+  }
+  bodyLines.push("end");
+  return `${header}
+${bodyLines.join("\n")}`;
+}
+var AUTO_ID_RE = /^p\d+e\d+$/;
+var AUTO_INSTANCE_ID_RE = /^p\d+c\d+$/;
+var AUTO_FLEX_ID_RE = /^p\d+f\d+$/;
+var NAMED_ID_RE2 = /^[A-Za-z][A-Za-z0-9_-]*$/;
+function serializeElement(el, componentMap, indent = 0) {
+  const isAuto = AUTO_ID_RE.test(el.id) || el.id.includes(".");
+  if (!isAuto && !NAMED_ID_RE2.test(el.id)) {
+    throw new Error(
+      `Cannot serialize element with id "${el.id}": ids must match [A-Za-z][A-Za-z0-9_-]*`
+    );
+  }
+  const typeToken = isAuto ? el.type : `${el.type}#${el.id}`;
+  const parts = [
+    "element",
+    typeToken,
+    String(el.x),
+    String(el.y),
+    String(el.w),
+    String(el.h),
+    quote(el.label)
+  ];
+  if (el.note !== void 0 && el.note !== "") parts.push(quote(el.note));
+  if (el.direction != null) parts.push(`direction=${el.direction}`);
+  if (el.gap != null) parts.push(`gap=${el.gap}`);
+  if (el.padding != null) parts.push(`padding=${el.padding}`);
+  if (el.justify != null) parts.push(`justify=${el.justify}`);
+  if (el.align != null) parts.push(`align=${el.align}`);
+  if (el.wrap != null) parts.push(`wrap=${el.wrap}`);
+  appendFlexChildAttrs(parts, el);
+  for (const [k, v] of Object.entries(el.attrs)) parts.push(`${k}=${formatAttr(v)}`);
+  if (!el.children || el.children.length === 0) {
+    return parts.join(" ");
+  }
+  const pad = "  ".repeat(indent + 1);
+  const lines = [parts.join(" ") + " :"];
+  const cm = componentMap ?? /* @__PURE__ */ new Map();
+  for (const child of el.children) {
+    lines.push(...serializeSlotChild(child, cm, indent + 1).map((l) => pad + l));
+  }
+  lines.push("  ".repeat(indent) + "end");
+  return lines.join("\n");
+}
+function serializeFlexContainer(c, indent, componentMap) {
+  const isAuto = AUTO_FLEX_ID_RE.test(c.id);
+  if (!isAuto && !NAMED_ID_RE2.test(c.id)) {
+    throw new Error(
+      `Cannot serialize flex container with id "${c.id}": ids must match [A-Za-z][A-Za-z0-9_-]*`
+    );
+  }
+  const kind = c.direction;
+  const head = isAuto ? kind : `${kind}#${c.id}`;
+  const parts = [head, String(c.x), String(c.y), formatDim(c.w), formatDim(c.h)];
+  const defaultAlign = c.direction === "row" ? "middle" : "start";
+  if (c.gap !== 0) parts.push(`gap=${c.gap}`);
+  if (c.padding !== 0) parts.push(`padding=${c.padding}`);
+  if (c.align !== defaultAlign) parts.push(`align=${c.align}`);
+  if (c.justify !== "start") parts.push(`justify=${c.justify}`);
+  if (c.wrap !== "nowrap") parts.push(`wrap=${c.wrap}`);
+  appendFlexChildAttrs(parts, c);
+  const open = parts.join(" ");
+  const lines = [open];
+  const pad = "  ".repeat(indent + 1);
+  for (const child of c.children) {
+    if (isFlexContainer(child)) {
+      const nested = serializeFlexContainer(child, indent + 1, componentMap).split("\n");
+      lines.push(pad + nested[0]);
+      for (let i = 1; i < nested.length; i++) lines.push(nested[i]);
+    } else if (isComponentInstance(child)) {
+      lines.push(pad + serializeInstance(child, componentMap));
+    } else {
+      const rendered = serializeElement(child, componentMap, indent + 1).split("\n");
+      lines.push(pad + rendered[0]);
+      for (let i = 1; i < rendered.length; i++) lines.push(rendered[i]);
+    }
+  }
+  lines.push("  ".repeat(indent) + "end");
+  return lines.join("\n");
+}
+function appendFlexChildAttrs(parts, item) {
+  if (item.grow != null) parts.push(`grow=${item.grow}`);
+  if (item.shrink != null) parts.push(`shrink=${item.shrink}`);
+  if (item.basis != null) parts.push(`basis=${item.basis}`);
+  if (item.alignSelf != null) parts.push(`align-self=${item.alignSelf}`);
+  if (item.minW != null) parts.push(`min-w=${item.minW}`);
+  if (item.minH != null) parts.push(`min-h=${item.minH}`);
+  if (item.maxW != null) parts.push(`max-w=${item.maxW}`);
+  if (item.maxH != null) parts.push(`max-h=${item.maxH}`);
+}
+function formatDim(d) {
+  return d === "auto" ? "auto" : String(d);
+}
+function serializeInstance(ci, componentMap, indent = 0) {
+  const isAuto = AUTO_INSTANCE_ID_RE.test(ci.id);
+  if (!isAuto && !NAMED_ID_RE2.test(ci.id)) {
+    throw new Error(
+      `Cannot serialize component instance with id "${ci.id}": ids must match [A-Za-z][A-Za-z0-9_-]*`
+    );
+  }
+  const typeToken = isAuto ? ci.componentName : `${ci.componentName}#${ci.id}`;
+  const defaults = componentMap.get(ci.componentName)?.defaults;
+  const w = defaults && eqDim(ci.w, defaults.w) ? "auto" : ci.w;
+  const h = defaults && eqDim(ci.h, defaults.h) ? "auto" : ci.h;
+  const parts = [
+    "element",
+    typeToken,
+    String(ci.x),
+    String(ci.y),
+    formatDim(w),
+    formatDim(h),
+    '""'
+  ];
+  appendFlexChildAttrsSkippingDefaults(parts, ci, defaults);
+  for (const [k, v] of Object.entries(ci.params)) parts.push(`${k}=${formatAttr(v)}`);
+  if (!ci.slots || Object.keys(ci.slots).length === 0) {
+    return parts.join(" ");
+  }
+  const pad = "  ".repeat(indent + 1);
+  const lines = [parts.join(" ") + " :"];
+  const defaultChildren = ci.slots[DEFAULT_SLOT] ?? [];
+  for (const child of defaultChildren) {
+    lines.push(...serializeSlotChild(child, componentMap, indent + 1).map((l) => pad + l));
+  }
+  for (const [slotName, children] of Object.entries(ci.slots)) {
+    if (slotName === DEFAULT_SLOT) continue;
+    lines.push(`${pad}slot ${slotName}`);
+    const innerPad = "  ".repeat(indent + 2);
+    for (const child of children) {
+      lines.push(...serializeSlotChild(child, componentMap, indent + 2).map((l) => innerPad + l));
+    }
+    lines.push(`${pad}end`);
+  }
+  lines.push("  ".repeat(indent) + "end");
+  return lines.join("\n");
+}
+function serializeSlotChild(item, componentMap, indent) {
+  if (isFlexContainer(item)) {
+    return serializeFlexContainer(item, indent, componentMap).split("\n");
+  }
+  if (isComponentInstance(item)) {
+    return serializeInstance(item, componentMap, indent).split("\n");
+  }
+  return serializeElement(item, componentMap, indent).split("\n");
+}
+function eqDim(a, b) {
+  return a === b;
+}
+function appendFlexChildAttrsSkippingDefaults(parts, ci, defaults) {
+  const defs = defaults ?? {};
+  if (ci.grow != null && ci.grow !== defs.grow) parts.push(`grow=${ci.grow}`);
+  if (ci.shrink != null && ci.shrink !== defs.shrink) parts.push(`shrink=${ci.shrink}`);
+  if (ci.basis != null && ci.basis !== defs.basis) parts.push(`basis=${ci.basis}`);
+  if (ci.alignSelf != null && ci.alignSelf !== defs.alignSelf) parts.push(`align-self=${ci.alignSelf}`);
+  if (ci.minW != null && ci.minW !== defs.minW) parts.push(`min-w=${ci.minW}`);
+  if (ci.minH != null && ci.minH !== defs.minH) parts.push(`min-h=${ci.minH}`);
+  if (ci.maxW != null && ci.maxW !== defs.maxW) parts.push(`max-w=${ci.maxW}`);
+  if (ci.maxH != null && ci.maxH !== defs.maxH) parts.push(`max-h=${ci.maxH}`);
+}
+function quote(s) {
+  return '"' + s.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n").replace(/\t/g, "\\t") + '"';
+}
+function formatAttr(v) {
+  if (typeof v === "number") return String(v);
+  if (/[\s"\\\n\t]/.test(v)) {
+    return '"' + v.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n").replace(/\t/g, "\\t") + '"';
+  }
+  return v;
 }
 var REGISTRY = /* @__PURE__ */ new Map();
 function registerElement(type, renderer) {
@@ -5742,96 +6006,1743 @@ function drawContainerChrome(surface, items, selected) {
   }
 }
 
-// src/boceto-view.ts
-var yogaReady = initYoga();
+// src/editor/history.ts
+var History = class {
+  #past = [];
+  #future = [];
+  #cap;
+  #txnDepth = 0;
+  #txnBase = null;
+  constructor(cap = 100) {
+    this.#cap = Math.max(1, cap);
+  }
+  get canUndo() {
+    return this.#past.length > 0;
+  }
+  get canRedo() {
+    return this.#future.length > 0;
+  }
+  /**
+   * Begin a transaction. Subsequent `push()` calls are coalesced into a
+   * single history entry committed when the transaction closes. Nested
+   * `begin`/`commit` pairs share the same outermost base.
+   */
+  begin(currentSnapshot) {
+    if (this.#txnDepth === 0) this.#txnBase = currentSnapshot;
+    this.#txnDepth += 1;
+  }
+  /** Commit the open transaction. The active snapshot is what's stored. */
+  commit(currentSnapshot) {
+    if (this.#txnDepth === 0) {
+      this.push(currentSnapshot, this.#txnBase ?? currentSnapshot);
+      return;
+    }
+    this.#txnDepth -= 1;
+    if (this.#txnDepth === 0) {
+      const base = this.#txnBase;
+      this.#txnBase = null;
+      if (base != null && base !== currentSnapshot) {
+        this.#past.push(base);
+        if (this.#past.length > this.#cap) this.#past.shift();
+        this.#future.length = 0;
+      }
+    }
+  }
+  /**
+   * Push a history entry. If a transaction is open, this is a no-op — the
+   * snapshot at `begin()` time is what gets recorded on `commit()`. Without
+   * an open transaction, the previous snapshot becomes the undo target.
+   */
+  push(_nextSnapshot, previousSnapshot) {
+    if (this.#txnDepth > 0) return;
+    if (previousSnapshot === _nextSnapshot) return;
+    this.#past.push(previousSnapshot);
+    if (this.#past.length > this.#cap) this.#past.shift();
+    this.#future.length = 0;
+  }
+  /** Pop the latest undo entry; push current onto the redo stack. Returns the snapshot to restore, or null. */
+  undo(currentSnapshot) {
+    const prev = this.#past.pop();
+    if (prev == null) return null;
+    this.#future.push(currentSnapshot);
+    return prev;
+  }
+  /** Pop the latest redo entry; push current onto the undo stack. */
+  redo(currentSnapshot) {
+    const next = this.#future.pop();
+    if (next == null) return null;
+    this.#past.push(currentSnapshot);
+    return next;
+  }
+  /** Clear all history. Called by `setCode()` (external source-of-truth reset). */
+  clear() {
+    this.#past.length = 0;
+    this.#future.length = 0;
+    this.#txnDepth = 0;
+    this.#txnBase = null;
+  }
+};
+
+// src/editor/mutations.ts
+function findTopLevel(doc, id) {
+  for (const page of doc.pages) {
+    for (let i = 0; i < page.elements.length; i++) {
+      const item = page.elements[i];
+      if (item.id === id) return { page, item, index: i };
+    }
+  }
+  return null;
+}
+function findAny(doc, id) {
+  for (const page of doc.pages) {
+    const hit = findInItems(page.elements, id);
+    if (hit) return hit;
+  }
+  return null;
+}
+function findInItems(items, id) {
+  for (const item of items) {
+    if (item.id === id) return item;
+    if (isFlexContainer(item)) {
+      const hit = findInItems(item.children, id);
+      if (hit) return hit;
+    } else if (isComponentInstance(item)) {
+      const hit = findInItems(item.expanded, id);
+      if (hit) return hit;
+    } else if (item.children) {
+      const hit = findInItems(item.children, id);
+      if (hit) return hit;
+    }
+  }
+  return null;
+}
+function moveItem(item, dx, dy) {
+  item.x = Math.max(0, Math.round(item.x + dx));
+  item.y = Math.max(0, Math.round(item.y + dy));
+}
+function resizeItem(item, edge, dx, dy, origin, minSize = 16) {
+  let { x, y, w, h } = origin;
+  if (edge.includes("w")) {
+    const newX = x + dx;
+    const newW = w - dx;
+    if (newW >= minSize) {
+      x = newX;
+      w = newW;
+    }
+  }
+  if (edge.includes("e")) {
+    const newW = w + dx;
+    if (newW >= minSize) w = newW;
+  }
+  if (edge.includes("n")) {
+    const newY = y + dy;
+    const newH = h - dy;
+    if (newH >= minSize) {
+      y = newY;
+      h = newH;
+    }
+  }
+  if (edge.includes("s")) {
+    const newH = h + dy;
+    if (newH >= minSize) h = newH;
+  }
+  item.x = Math.max(0, Math.round(x));
+  item.y = Math.max(0, Math.round(y));
+  if (isAutoSizedContainer(item, "w")) ; else {
+    item.w = Math.max(minSize, Math.round(w));
+  }
+  if (isAutoSizedContainer(item, "h")) ; else {
+    item.h = Math.max(minSize, Math.round(h));
+  }
+}
+function isAutoSizedContainer(item, axis) {
+  if (isFlexContainer(item) || isComponentInstance(item)) {
+    return item[axis] === "auto";
+  }
+  return false;
+}
+function appendElement(page, type, x, y, opts = {}) {
+  const id = mintElementId(page);
+  const el = {
+    id,
+    type,
+    x,
+    y,
+    w: opts.w ?? 120,
+    h: opts.h ?? 36,
+    label: opts.label ?? "",
+    attrs: {}
+  };
+  page.elements.push(el);
+  return el;
+}
+function mintElementId(page) {
+  const pageNum = pageNumberFromId(page.id);
+  const used = /* @__PURE__ */ new Set();
+  for (const it of page.elements) collectIds(it, used);
+  let n = 0;
+  while (used.has(`p${pageNum}e${n}`)) n++;
+  return `p${pageNum}e${n}`;
+}
+function collectIds(item, into) {
+  into.add(item.id);
+  if (isFlexContainer(item)) {
+    for (const c of item.children) collectIds(c, into);
+  } else if (isComponentInstance(item)) {
+    for (const c of item.expanded) collectIds(c, into);
+  } else if (item.children) {
+    for (const c of item.children) collectIds(c, into);
+  }
+}
+function pageNumberFromId(pageId) {
+  const m = /^p(\d+)$/.exec(pageId);
+  return m ? Number(m[1]) : 0;
+}
+function removeTopLevel(doc, ids) {
+  let removed = 0;
+  for (const page of doc.pages) {
+    const next = page.elements.filter((it) => {
+      if (ids.has(it.id)) {
+        removed++;
+        return false;
+      }
+      return true;
+    });
+    if (next.length !== page.elements.length) page.elements = next;
+    if (removed > 0) {
+      page.arrows = page.arrows.filter((a) => !ids.has(a.from) && !ids.has(a.to));
+    }
+  }
+  return removed;
+}
+function duplicateTopLevel(doc, ids) {
+  const created = [];
+  for (const page of doc.pages) {
+    const targets = page.elements.filter((it) => ids.has(it.id));
+    for (const item of targets) {
+      if (isFlexContainer(item) || isComponentInstance(item)) continue;
+      const clone = {
+        ...item,
+        id: mintElementId(page),
+        x: item.x + 12,
+        y: item.y + 12,
+        attrs: { ...item.attrs }
+      };
+      page.elements.push(clone);
+      created.push(clone.id);
+    }
+  }
+  return created;
+}
+function setLabelOf(doc, id, label) {
+  const item = findAny(doc, id);
+  if (!item) return false;
+  if (isFlexContainer(item) || isComponentInstance(item)) return false;
+  item.label = label;
+  return true;
+}
+function setAttrOf(doc, id, key, value) {
+  const item = findAny(doc, id);
+  if (!item) return false;
+  if (isFlexContainer(item)) return false;
+  if (isComponentInstance(item)) {
+    if (value === void 0) delete item.params[key];
+    else item.params[key] = String(value);
+    return true;
+  }
+  const el = item;
+  if (value === void 0) delete el.attrs[key];
+  else el.attrs[key] = value;
+  return true;
+}
+function addPage(doc, name) {
+  const idx = doc.pages.length;
+  const page = {
+    id: `p${idx}`,
+    name: name ?? `Page ${idx + 1}`,
+    elements: [],
+    arrows: []
+  };
+  doc.pages.push(page);
+  return page;
+}
+function removePage(doc, id) {
+  const i = doc.pages.findIndex((p) => p.id === id);
+  if (i < 0) return false;
+  if (doc.pages.length === 1) return false;
+  doc.pages.splice(i, 1);
+  return true;
+}
+function renamePage(doc, id, name) {
+  const p = doc.pages.find((p2) => p2.id === id);
+  if (!p) return false;
+  p.name = name;
+  return true;
+}
+function currentBox(item) {
+  return layoutBox(item);
+}
+function relayout(doc) {
+  if (!isYogaReady()) return;
+  applyFlexLayout(doc);
+}
+function reorderItems(doc, ids, mode) {
+  if (ids.size === 0) return 0;
+  let touched = 0;
+  for (const page of doc.pages) {
+    const before = page.elements;
+    if (!before.some((it) => ids.has(it.id))) continue;
+    const next = reorderArray(before, ids, mode);
+    if (!sameRefs(before, next)) {
+      page.elements = next;
+      touched++;
+    }
+  }
+  return touched;
+}
+function reorderArray(items, ids, mode) {
+  if (mode === "front") {
+    const stay = [];
+    const moved = [];
+    for (const it of items) (ids.has(it.id) ? moved : stay).push(it);
+    return [...stay, ...moved];
+  }
+  if (mode === "back") {
+    const stay = [];
+    const moved = [];
+    for (const it of items) (ids.has(it.id) ? moved : stay).push(it);
+    return [...moved, ...stay];
+  }
+  const arr = items.slice();
+  if (mode === "forward") {
+    for (let i = arr.length - 2; i >= 0; i--) {
+      if (ids.has(arr[i].id) && !ids.has(arr[i + 1].id)) {
+        [arr[i], arr[i + 1]] = [arr[i + 1], arr[i]];
+      }
+    }
+  } else {
+    for (let i = 1; i < arr.length; i++) {
+      if (ids.has(arr[i].id) && !ids.has(arr[i - 1].id)) {
+        [arr[i], arr[i - 1]] = [arr[i - 1], arr[i]];
+      }
+    }
+  }
+  return arr;
+}
+function sameRefs(a, b) {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
+
+// src/editor/state.ts
+var HANDLES = [
+  "nw",
+  "n",
+  "ne",
+  "e",
+  "se",
+  "s",
+  "sw",
+  "w"
+];
+
+// src/editor/hit-test.ts
+var HANDLE_HIT = 7;
+function hitTestTop(page, x, y) {
+  for (let i = page.elements.length - 1; i >= 0; i--) {
+    const item = page.elements[i];
+    const b = layoutBox(item);
+    if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) {
+      return item;
+    }
+  }
+  return null;
+}
+function hitTestLeaf(page, x, y) {
+  return hitLeafRec(page.elements, x, y);
+}
+function hitLeafRec(items, x, y) {
+  for (let i = items.length - 1; i >= 0; i--) {
+    const item = items[i];
+    const b = layoutBox(item);
+    if (!(x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h)) continue;
+    const deeperChildren = getRecurseChildren(item);
+    if (deeperChildren) {
+      const inner = hitLeafRec(deeperChildren, x, y);
+      if (inner) return inner;
+    }
+    return item;
+  }
+  return null;
+}
+function getRecurseChildren(item) {
+  if ("kind" in item) {
+    if (item.kind === "flex-container") return item.children;
+    if (item.kind === "component-instance") return item.expanded;
+  }
+  if ("children" in item && Array.isArray(item.children)) return item.children;
+  return null;
+}
+function hitHandle(box, x, y) {
+  const { x: bx, y: by, w, h } = box;
+  const anchors = {
+    nw: [bx, by],
+    n: [bx + w / 2, by],
+    ne: [bx + w, by],
+    e: [bx + w, by + h / 2],
+    se: [bx + w, by + h],
+    s: [bx + w / 2, by + h],
+    sw: [bx, by + h],
+    w: [bx, by + h / 2]
+  };
+  for (const edge of HANDLES) {
+    const [ax, ay] = anchors[edge];
+    if (Math.abs(x - ax) <= HANDLE_HIT && Math.abs(y - ay) <= HANDLE_HIT) {
+      return { edge };
+    }
+  }
+  return null;
+}
+function selectionBox(page, selected) {
+  let x0 = Infinity;
+  let y0 = Infinity;
+  let x1 = -Infinity;
+  let y1 = -Infinity;
+  let any = false;
+  for (const item of page.elements) {
+    if (!selected.has(item.id)) continue;
+    const b = layoutBox(item);
+    if (b.x < x0) x0 = b.x;
+    if (b.y < y0) y0 = b.y;
+    if (b.x + b.w > x1) x1 = b.x + b.w;
+    if (b.y + b.h > y1) y1 = b.y + b.h;
+    any = true;
+  }
+  if (!any) return null;
+  return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+}
+function itemsInRect(page, rect) {
+  const out = [];
+  for (const item of page.elements) {
+    const b = layoutBox(item);
+    if (rectsOverlap(b, rect)) out.push(item.id);
+  }
+  return out;
+}
+function rectsOverlap(a, b) {
+  return !(a.x + a.w < b.x || b.x + b.w < a.x || a.y + a.h < b.y || b.y + b.h < a.y);
+}
+
+// src/editor/editor.ts
+var BocetoEditor = class {
+  #state;
+  #history;
+  #subs = /* @__PURE__ */ new Map();
+  #serializedCache = null;
+  constructor(init = {}) {
+    const doc = parseInitial(init.code);
+    const firstPage = doc.pages[0];
+    this.#state = {
+      doc,
+      selection: /* @__PURE__ */ new Set(),
+      currentPageId: resolvePageId(doc, init.page) ?? firstPage.id,
+      mode: "select",
+      readonly: init.readonly === true
+    };
+    this.#history = new History(init.historyLimit ?? 100);
+    relayout(doc);
+  }
+  // ── State accessors ────────────────────────────────────────────────────
+  get doc() {
+    return this.#state.doc;
+  }
+  get code() {
+    if (this.#serializedCache != null) return this.#serializedCache;
+    this.#serializedCache = serialize(this.#state.doc);
+    return this.#serializedCache;
+  }
+  get selection() {
+    return this.#state.selection;
+  }
+  get currentPageId() {
+    return this.#state.currentPageId;
+  }
+  get currentPage() {
+    const p = this.#state.doc.pages.find((p2) => p2.id === this.#state.currentPageId);
+    return p ?? this.#state.doc.pages[0];
+  }
+  get mode() {
+    return this.#state.mode;
+  }
+  get readonly() {
+    return this.#state.readonly;
+  }
+  setReadonly(v) {
+    this.#state.readonly = v;
+  }
+  get canUndo() {
+    return this.#history.canUndo;
+  }
+  get canRedo() {
+    return this.#history.canRedo;
+  }
+  // ── Source-of-truth setter ─────────────────────────────────────────────
+  /**
+   * Replace the doc from a code string. Clears history, selection, and
+   * collapses to the first page if the current one no longer exists.
+   * Does NOT emit a `change` event — external sets are not user mutations.
+   */
+  setCode(code) {
+    const doc = parseInitial(code);
+    this.#state.doc = doc;
+    this.#state.selection = /* @__PURE__ */ new Set();
+    if (!doc.pages.find((p) => p.id === this.#state.currentPageId)) {
+      this.#state.currentPageId = doc.pages[0].id;
+    }
+    this.#history.clear();
+    this.#serializedCache = null;
+    relayout(doc);
+  }
+  // ── Selection ──────────────────────────────────────────────────────────
+  select(ids, mode = "replace") {
+    const cur = this.#state.selection;
+    let changed = false;
+    if (mode === "replace") {
+      const next = new Set(ids);
+      if (!setsEqual(cur, next)) {
+        this.#state.selection = next;
+        changed = true;
+      }
+    } else if (mode === "add") {
+      for (const id of ids) {
+        if (!cur.has(id)) {
+          cur.add(id);
+          changed = true;
+        }
+      }
+    } else {
+      for (const id of ids) {
+        if (cur.has(id)) cur.delete(id);
+        else cur.add(id);
+        changed = true;
+      }
+    }
+    if (changed) this.#emit("select", { ids: [...this.#state.selection] });
+  }
+  clearSelection() {
+    if (this.#state.selection.size === 0) return;
+    this.#state.selection = /* @__PURE__ */ new Set();
+    this.#emit("select", { ids: [] });
+  }
+  // ── Geometry ───────────────────────────────────────────────────────────
+  /**
+   * Translate every top-level item in `ids` by (dx, dy). Items nested inside
+   * a container are silently skipped (and an `error` event fires) so the UI
+   * can show the rejection. By default each call commits a history entry;
+   * during drags, wrap in `beginTransaction` / `commitTransaction` to
+   * coalesce.
+   */
+  move(ids, dx, dy, opts = {}) {
+    if (this.#state.readonly) return;
+    const before = this.code;
+    let anyMoved = false;
+    for (const id of ids) {
+      const hit = findTopLevel(this.#state.doc, id);
+      if (!hit) {
+        this.#emit("error", { message: `Cannot move nested item ${id}` });
+        continue;
+      }
+      moveItem(hit.item, dx, dy);
+      anyMoved = true;
+    }
+    if (!anyMoved) return;
+    relayout(this.#state.doc);
+    this.#afterMutation(before, opts.commit !== false);
+  }
+  /**
+   * Resize the top-level item `id` by dragging `edge`. `origin` is the box
+   * at pointer-down time; `dx`/`dy` are total deltas since then.
+   */
+  resize(id, edge, dx, dy, origin, opts = {}) {
+    if (this.#state.readonly) return;
+    const hit = findTopLevel(this.#state.doc, id);
+    if (!hit) {
+      this.#emit("error", { message: `Cannot resize nested item ${id}` });
+      return;
+    }
+    const before = this.code;
+    resizeItem(hit.item, edge, dx, dy, origin);
+    relayout(this.#state.doc);
+    this.#afterMutation(before, opts.commit !== false);
+  }
+  /** Convenience: current bbox for a top-level item (for capturing drag origin). */
+  boxOf(id) {
+    const hit = findTopLevel(this.#state.doc, id);
+    return hit ? currentBox(hit.item) : null;
+  }
+  /**
+   * Re-run the flex layout pass. Useful when consumers construct the
+   * controller before Yoga's WASM has loaded (the constructor's initial
+   * pass is a no-op in that case) and want to recompute boxes once
+   * `await initYoga()` resolves. Does NOT emit `change` — purely
+   * recomputes `computed` boxes on existing items.
+   */
+  relayout() {
+    relayout(this.#state.doc);
+  }
+  // ── Properties ─────────────────────────────────────────────────────────
+  setLabel(id, label) {
+    if (this.#state.readonly) return;
+    const before = this.code;
+    if (!setLabelOf(this.#state.doc, id, label)) return;
+    relayout(this.#state.doc);
+    this.#afterMutation(before, true);
+  }
+  setAttr(id, key, value) {
+    if (this.#state.readonly) return;
+    const before = this.code;
+    if (!setAttrOf(this.#state.doc, id, key, value)) return;
+    relayout(this.#state.doc);
+    this.#afterMutation(before, true);
+  }
+  // ── Doc shape ──────────────────────────────────────────────────────────
+  addElement(type, x, y, opts = {}) {
+    if (this.#state.readonly) return null;
+    const page = opts.page ? this.#state.doc.pages.find((p) => p.id === opts.page) ?? this.currentPage : this.currentPage;
+    const before = this.code;
+    const el = appendElement(page, type, x, y, opts);
+    relayout(this.#state.doc);
+    this.#afterMutation(before, true);
+    return el.id;
+  }
+  removeItems(ids) {
+    if (this.#state.readonly) return;
+    if (ids.length === 0) return;
+    const set = new Set(ids);
+    const before = this.code;
+    const removed = removeTopLevel(this.#state.doc, set);
+    if (removed === 0) return;
+    for (const id of set) this.#state.selection.delete(id);
+    this.#emit("select", { ids: [...this.#state.selection] });
+    relayout(this.#state.doc);
+    this.#afterMutation(before, true);
+  }
+  /**
+   * Z-order operations. Rendering walks `page.elements` in source order;
+   * the last item is painted on top. Each method preserves the relative
+   * order of the selected items to each other.
+   */
+  bringToFront(ids = [...this.#state.selection]) {
+    this.#reorder(ids, "front");
+  }
+  sendToBack(ids = [...this.#state.selection]) {
+    this.#reorder(ids, "back");
+  }
+  bringForward(ids = [...this.#state.selection]) {
+    this.#reorder(ids, "forward");
+  }
+  sendBackward(ids = [...this.#state.selection]) {
+    this.#reorder(ids, "backward");
+  }
+  #reorder(ids, mode) {
+    if (this.#state.readonly) return;
+    if (ids.length === 0) return;
+    const before = this.code;
+    const touched = reorderItems(this.#state.doc, new Set(ids), mode);
+    if (touched === 0) return;
+    relayout(this.#state.doc);
+    this.#afterMutation(before, true);
+  }
+  duplicateItems(ids) {
+    if (this.#state.readonly) return [];
+    if (ids.length === 0) return [];
+    const before = this.code;
+    const set = new Set(ids);
+    const created = duplicateTopLevel(this.#state.doc, set);
+    if (created.length === 0) return [];
+    relayout(this.#state.doc);
+    this.#afterMutation(before, true);
+    this.select(created, "replace");
+    return created;
+  }
+  // ── Pages ──────────────────────────────────────────────────────────────
+  addPage(name) {
+    if (this.#state.readonly) return this.#state.currentPageId;
+    const before = this.code;
+    const p = addPage(this.#state.doc, name);
+    this.#afterMutation(before, true);
+    return p.id;
+  }
+  removePage(id) {
+    if (this.#state.readonly) return;
+    const before = this.code;
+    if (!removePage(this.#state.doc, id)) return;
+    if (this.#state.currentPageId === id) {
+      this.#state.currentPageId = this.#state.doc.pages[0].id;
+      this.#emit("page", { pageId: this.#state.currentPageId });
+    }
+    this.#afterMutation(before, true);
+  }
+  renamePage(id, name) {
+    if (this.#state.readonly) return;
+    const before = this.code;
+    if (!renamePage(this.#state.doc, id, name)) return;
+    this.#afterMutation(before, true);
+  }
+  setPage(idOrIndex) {
+    const id = resolvePageId(this.#state.doc, idOrIndex);
+    if (!id || id === this.#state.currentPageId) return;
+    this.#state.currentPageId = id;
+    this.#state.selection = /* @__PURE__ */ new Set();
+    this.#emit("page", { pageId: id });
+    this.#emit("select", { ids: [] });
+  }
+  // ── History ────────────────────────────────────────────────────────────
+  undo() {
+    if (!this.#history.canUndo) return;
+    const snapshot = this.#history.undo(this.code);
+    if (snapshot == null) return;
+    this.#restoreFromSnapshot(snapshot);
+  }
+  redo() {
+    if (!this.#history.canRedo) return;
+    const snapshot = this.#history.redo(this.code);
+    if (snapshot == null) return;
+    this.#restoreFromSnapshot(snapshot);
+  }
+  beginTransaction() {
+    this.#history.begin(this.code);
+  }
+  commitTransaction() {
+    this.#history.commit(this.code);
+    this.#emitChange();
+  }
+  // ── Hit-testing (exposed for the canvas binding) ───────────────────────
+  hitTestTop(x, y) {
+    return hitTestTop(this.currentPage, x, y);
+  }
+  hitTestLeaf(x, y) {
+    return hitTestLeaf(this.currentPage, x, y);
+  }
+  hitHandle(x, y) {
+    const box = selectionBox(this.currentPage, this.#state.selection);
+    if (!box) return null;
+    return hitHandle(box, x, y);
+  }
+  selectionBox() {
+    return selectionBox(this.currentPage, this.#state.selection);
+  }
+  itemsInRect(rect) {
+    return itemsInRect(this.currentPage, rect);
+  }
+  findItem(id) {
+    return findAny(this.#state.doc, id);
+  }
+  // ── Render bridge ──────────────────────────────────────────────────────
+  /**
+   * Render the current page onto `canvas`. Used by the web component; can
+   * also be called by any other adapter. The `selectedIds` / `hoveredId`
+   * options reflect the editor's selection state, so the renderer paints
+   * the right chrome.
+   */
+  render(renderer, w, h, extra) {
+    renderer.render(this.#state.doc, {
+      width: w,
+      height: h,
+      page: this.#state.currentPageId,
+      selectedIds: this.#state.selection,
+      hoveredId: extra?.hoveredId,
+      zoom: extra?.zoom
+    });
+  }
+  // ── Event subscription ─────────────────────────────────────────────────
+  on(event, fn) {
+    let set = this.#subs.get(event);
+    if (!set) {
+      set = /* @__PURE__ */ new Set();
+      this.#subs.set(event, set);
+    }
+    set.add(fn);
+    return () => set.delete(fn);
+  }
+  // ── Internal ───────────────────────────────────────────────────────────
+  #afterMutation(snapshotBefore, commit) {
+    this.#serializedCache = null;
+    if (commit) {
+      this.#history.push(this.code, snapshotBefore);
+      this.#emitChange();
+    }
+  }
+  #restoreFromSnapshot(snapshot) {
+    const doc = parseInitial(snapshot);
+    this.#state.doc = doc;
+    if (!doc.pages.find((p) => p.id === this.#state.currentPageId)) {
+      this.#state.currentPageId = doc.pages[0].id;
+      this.#emit("page", { pageId: this.#state.currentPageId });
+    }
+    for (const id of [...this.#state.selection]) {
+      if (!findAny(doc, id)) this.#state.selection.delete(id);
+    }
+    relayout(doc);
+    this.#serializedCache = snapshot;
+    this.#emit("select", { ids: [...this.#state.selection] });
+    this.#emit("change", { code: snapshot, doc });
+  }
+  #emit(event, payload) {
+    const set = this.#subs.get(event);
+    if (!set) return;
+    for (const fn of set) fn(payload);
+  }
+  #emitChange() {
+    this.#emit("change", { code: this.code, doc: this.#state.doc });
+  }
+};
+function parseInitial(code) {
+  const src = code ?? "";
+  return parse(src, { raw: !src.includes("```") && !/^---/m.test(src.trim()) });
+}
+function resolvePageId(doc, page) {
+  if (page == null) return doc.pages[0]?.id ?? null;
+  if (typeof page === "number") return doc.pages[page]?.id ?? null;
+  const hit = doc.pages.find((p) => p.id === page || p.name === page);
+  return hit?.id ?? null;
+}
+function setsEqual(a, b) {
+  if (a.size !== b.size) return false;
+  for (const x of a) if (!b.has(x)) return false;
+  return true;
+}
+
+// src/editor/context-menu.ts
+function createContextMenu(mount = document.body) {
+  const el = document.createElement("div");
+  el.dataset.bocetoContextMenu = "root";
+  el.className = "boceto-context-menu";
+  Object.assign(el.style, {
+    position: "fixed",
+    display: "none",
+    minWidth: "180px",
+    padding: "4px 0",
+    background: "#fff",
+    border: "1px solid #d4d4d8",
+    borderRadius: "6px",
+    boxShadow: "0 6px 18px rgba(0,0,0,0.12), 0 2px 4px rgba(0,0,0,0.08)",
+    fontFamily: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
+    fontSize: "13px",
+    color: "#222",
+    zIndex: "2147483000",
+    userSelect: "none"
+  });
+  mount.appendChild(el);
+  let isOpen = false;
+  function renderItems(items) {
+    el.replaceChildren();
+    for (const item of items) {
+      if (item.separator) {
+        const sep = document.createElement("div");
+        sep.dataset.bocetoContextMenu = "separator";
+        Object.assign(sep.style, {
+          height: "1px",
+          background: "#e4e4e7",
+          margin: "4px 0"
+        });
+        el.appendChild(sep);
+        continue;
+      }
+      const row = document.createElement("button");
+      row.dataset.bocetoContextMenu = "item";
+      row.type = "button";
+      row.disabled = item.disabled === true;
+      Object.assign(row.style, {
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: "24px",
+        width: "100%",
+        padding: "6px 14px",
+        background: "transparent",
+        border: "0",
+        textAlign: "left",
+        font: "inherit",
+        color: item.disabled ? "#a1a1aa" : "inherit",
+        cursor: item.disabled ? "default" : "pointer"
+      });
+      const label = document.createElement("span");
+      label.textContent = item.label;
+      row.appendChild(label);
+      if (item.hint) {
+        const hint = document.createElement("span");
+        hint.textContent = item.hint;
+        Object.assign(hint.style, {
+          color: "#71717a",
+          fontSize: "11px",
+          marginLeft: "auto",
+          letterSpacing: "0.02em"
+        });
+        row.appendChild(hint);
+      }
+      if (!item.disabled) {
+        row.addEventListener("mouseenter", () => {
+          row.style.background = "#f4f4f5";
+        });
+        row.addEventListener("mouseleave", () => {
+          row.style.background = "transparent";
+        });
+        row.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          close();
+          item.onSelect();
+        });
+      }
+      el.appendChild(row);
+    }
+  }
+  function open(x, y, items) {
+    renderItems(items);
+    el.style.display = "block";
+    el.style.left = `${x}px`;
+    el.style.top = `${y}px`;
+    queueMicrotask(() => {
+      const menuRect = el.getBoundingClientRect();
+      const vw = document.documentElement.clientWidth;
+      const vh = document.documentElement.clientHeight;
+      let dx = 0;
+      let dy = 0;
+      if (menuRect.right > vw) dx = vw - menuRect.right - 8;
+      if (menuRect.bottom > vh) dy = vh - menuRect.bottom - 8;
+      if (dx || dy) {
+        el.style.left = `${parseFloat(el.style.left) + dx}px`;
+        el.style.top = `${parseFloat(el.style.top) + dy}px`;
+      }
+    });
+    isOpen = true;
+    document.addEventListener("pointerdown", onOutsidePointer, true);
+    document.addEventListener("keydown", onKey, true);
+    window.addEventListener("blur", close);
+    window.addEventListener("resize", close);
+    window.addEventListener("scroll", close, true);
+  }
+  function close() {
+    if (!isOpen) return;
+    isOpen = false;
+    el.style.display = "none";
+    el.replaceChildren();
+    document.removeEventListener("pointerdown", onOutsidePointer, true);
+    document.removeEventListener("keydown", onKey, true);
+    window.removeEventListener("blur", close);
+    window.removeEventListener("resize", close);
+    window.removeEventListener("scroll", close, true);
+  }
+  function onOutsidePointer(e) {
+    const path = e.composedPath?.() ?? [];
+    if (path.includes(el)) return;
+    close();
+  }
+  function onKey(e) {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      close();
+    }
+  }
+  function dispose() {
+    close();
+    el.remove();
+  }
+  return { el, open, close, dispose };
+}
+
+// src/editor/element-catalog.ts
+var ELEMENT_CATALOG = [
+  {
+    name: "Layout",
+    types: [
+      { type: "box", w: 200, h: 120, label: "Box" },
+      { type: "card", w: 280, h: 160, label: "Card" },
+      { type: "modal", w: 420, h: 260, label: "Modal" },
+      { type: "navbar", w: 600, h: 44, label: "Navbar" },
+      { type: "divider", w: 300, h: 1 },
+      { type: "sidebar", w: 220, h: 360, label: "Sidebar" }
+    ]
+  },
+  {
+    name: "Typography",
+    types: [
+      { type: "heading", w: 400, h: 32, label: "Heading" },
+      { type: "label", w: 200, h: 22, label: "Text label" },
+      { type: "breadcrumb", w: 320, h: 24 }
+    ]
+  },
+  {
+    name: "Form",
+    types: [
+      { type: "input", w: 240, h: 36, label: "Placeholder\u2026" },
+      { type: "textarea", w: 240, h: 120, label: "" },
+      { type: "button", w: 120, h: 36, label: "Button" },
+      { type: "primary-button", w: 140, h: 36, label: "Submit" },
+      { type: "select", w: 200, h: 36, label: "Choose\u2026" },
+      { type: "checkbox", w: 160, h: 24, label: "Option" },
+      { type: "radio", w: 160, h: 24, label: "Option" },
+      { type: "switch", w: 80, h: 28 },
+      { type: "slider", w: 200, h: 24 },
+      { type: "range-slider", w: 200, h: 24 },
+      { type: "search", w: 280, h: 36, label: "Search\u2026" },
+      { type: "segmented-control", w: 240, h: 32 },
+      { type: "combobox", w: 220, h: 36, label: "Pick one\u2026" },
+      { type: "date-picker", w: 200, h: 36, label: "Pick a date" },
+      { type: "color-picker", w: 180, h: 36 },
+      { type: "file-upload", w: 280, h: 80, label: "Drop a file" },
+      { type: "rating", w: 140, h: 24 },
+      { type: "otp-input", w: 220, h: 40 },
+      { type: "tag-input", w: 260, h: 40 },
+      { type: "stepper-input", w: 120, h: 32, label: "0" }
+    ]
+  },
+  {
+    name: "Media",
+    types: [
+      { type: "image", w: 240, h: 160, label: "Image" },
+      { type: "video", w: 280, h: 160, label: "Video" },
+      { type: "avatar", w: 48, h: 48 }
+    ]
+  },
+  {
+    name: "Content",
+    types: [
+      { type: "list", w: 240, h: 160 },
+      { type: "table", w: 320, h: 180 },
+      { type: "tabs", w: 320, h: 200, label: "" },
+      { type: "badge", w: 60, h: 22, label: "New" },
+      { type: "progress", w: 200, h: 18 },
+      { type: "pagination", w: 240, h: 32 },
+      { type: "alert", w: 320, h: 56, label: "Alert message here" },
+      { type: "chip", w: 90, h: 26, label: "Chip" },
+      { type: "code-block", w: 320, h: 140 },
+      { type: "accordion", w: 320, h: 80, label: "Section title" },
+      { type: "chat-bubble", w: 240, h: 60, label: "Hi there" },
+      { type: "calendar", w: 240, h: 220 },
+      { type: "tree", w: 220, h: 180 },
+      { type: "stepper", w: 320, h: 56 },
+      { type: "carousel", w: 320, h: 180 },
+      { type: "popover", w: 220, h: 120, label: "Popover" },
+      { type: "kbd", w: 36, h: 22, label: "\u2318K" },
+      { type: "quote", w: 320, h: 100, label: "Quoted text\u2026" },
+      { type: "status-dot", w: 12, h: 12 },
+      { type: "notification-bell", w: 32, h: 32 },
+      { type: "mention", w: 90, h: 22, label: "@name" },
+      { type: "ai-suggestion", w: 320, h: 60, label: "Try: summarize this thread" },
+      { type: "presence-cursor", w: 18, h: 18, label: "You" }
+    ]
+  },
+  {
+    name: "Navigation / overlays",
+    types: [
+      { type: "dropdown-menu", w: 200, h: 140 },
+      { type: "tooltip", w: 100, h: 28, label: "Tooltip" },
+      { type: "toast", w: 320, h: 56, label: "Toast notification" }
+    ]
+  },
+  {
+    name: "Feedback",
+    types: [
+      { type: "spinner", w: 32, h: 32 },
+      { type: "skeleton", w: 240, h: 80 }
+    ]
+  },
+  {
+    name: "Data viz",
+    types: [
+      { type: "chart-bar", w: 240, h: 160 },
+      { type: "chart-line", w: 240, h: 160 },
+      { type: "chart-donut", w: 180, h: 180 },
+      { type: "chart-area", w: 240, h: 160 },
+      { type: "chart-sparkline", w: 140, h: 40 },
+      { type: "gantt", w: 320, h: 180 },
+      { type: "heatmap", w: 240, h: 160 },
+      { type: "map", w: 280, h: 180 },
+      { type: "code-diff", w: 320, h: 200 }
+    ]
+  },
+  {
+    name: "Mobile chrome",
+    types: [
+      { type: "phone-frame", w: 320, h: 600 },
+      { type: "status-bar", w: 320, h: 24 },
+      { type: "home-indicator", w: 320, h: 8 },
+      { type: "fab", w: 56, h: 56, label: "+" },
+      { type: "app-icon", w: 72, h: 96, label: "App" }
+    ]
+  },
+  {
+    name: "System chrome",
+    types: [
+      { type: "window-frame", w: 400, h: 300 },
+      { type: "browser-frame", w: 480, h: 320 },
+      { type: "terminal", w: 400, h: 240 }
+    ]
+  },
+  {
+    name: "AR / spatial",
+    types: [
+      { type: "glass-window", w: 300, h: 200 },
+      { type: "gaze-cursor", w: 32, h: 32 },
+      { type: "pinch-indicator", w: 60, h: 60 },
+      { type: "volumetric-scene", w: 300, h: 200 },
+      { type: "passthrough-frame", w: 320, h: 200 },
+      { type: "voice-input", w: 280, h: 56 }
+    ]
+  }
+];
+var FLAT = new Map(
+  ELEMENT_CATALOG.flatMap(
+    (c) => c.types.map((t) => [t.type, { ...t, category: c.name }])
+  )
+);
+function catalogEntry(type) {
+  return FLAT.get(type) ?? null;
+}
+
+// src/editor/interactions.ts
+function bindCanvas(editor, canvas, opts = {}) {
+  let drag = { mode: "idle" };
+  const paint = (extra) => opts.onPaint?.(extra);
+  const zoomNow = () => opts.getZoom?.() ?? 1;
+  const onPointerDown = (e) => {
+    if (editor.readonly) return;
+    if (e.button !== 0) return;
+    const { x, y } = toCanvasCoords(canvas, e, zoomNow());
+    canvas.setPointerCapture(e.pointerId);
+    opts.focusTarget?.focus();
+    const handle = editor.hitHandle(x, y);
+    if (handle) {
+      const selected = [...editor.selection];
+      if (selected.length === 0) return;
+      const id = selected[0];
+      const origin = editor.boxOf(id);
+      if (!origin) return;
+      editor.beginTransaction();
+      drag = {
+        mode: "resize",
+        id,
+        edge: handle.edge,
+        pointerId: e.pointerId,
+        startX: x,
+        startY: y,
+        origin
+      };
+      e.preventDefault();
+      return;
+    }
+    const hit = editor.hitTestTop(x, y);
+    if (hit) {
+      const additive = e.shiftKey || e.metaKey || e.ctrlKey;
+      if (additive) {
+        editor.select([hit.id], "toggle");
+      } else if (!editor.selection.has(hit.id)) {
+        editor.select([hit.id], "replace");
+      }
+      paint();
+      if (editor.selection.has(hit.id)) {
+        editor.beginTransaction();
+        drag = {
+          mode: "move",
+          ids: [...editor.selection],
+          pointerId: e.pointerId,
+          lastX: x,
+          lastY: y
+        };
+      }
+      e.preventDefault();
+      return;
+    }
+    if (!e.shiftKey && !e.metaKey && !e.ctrlKey) editor.clearSelection();
+    drag = {
+      mode: "rubber",
+      pointerId: e.pointerId,
+      startX: x,
+      startY: y,
+      rect: { x, y, w: 0, h: 0 }
+    };
+    paint({ rubberBand: drag.rect });
+    e.preventDefault();
+  };
+  const onPointerMove = (e) => {
+    if (drag.mode === "idle") return;
+    if (e.pointerId !== drag.pointerId) return;
+    const { x, y } = toCanvasCoords(canvas, e, zoomNow());
+    if (drag.mode === "move") {
+      const dx = x - drag.lastX;
+      const dy = y - drag.lastY;
+      drag.lastX = x;
+      drag.lastY = y;
+      if (dx === 0 && dy === 0) return;
+      editor.move(drag.ids, dx, dy, { commit: false });
+      paint();
+    } else if (drag.mode === "resize") {
+      const dx = x - drag.startX;
+      const dy = y - drag.startY;
+      editor.resize(drag.id, drag.edge, dx, dy, drag.origin, { commit: false });
+      paint();
+    } else {
+      const rx = Math.min(drag.startX, x);
+      const ry = Math.min(drag.startY, y);
+      const rw = Math.abs(x - drag.startX);
+      const rh = Math.abs(y - drag.startY);
+      drag.rect = { x: rx, y: ry, w: rw, h: rh };
+      paint({ rubberBand: drag.rect });
+    }
+  };
+  const onPointerUp = (e) => {
+    if (drag.mode === "idle") return;
+    if (e.pointerId !== drag.pointerId) return;
+    try {
+      canvas.releasePointerCapture(e.pointerId);
+    } catch {
+    }
+    if (drag.mode === "move" || drag.mode === "resize") {
+      editor.commitTransaction();
+    } else if (drag.mode === "rubber") {
+      const ids = editor.itemsInRect(drag.rect);
+      editor.select(ids, "replace");
+      paint();
+    }
+    drag = { mode: "idle" };
+    paint();
+  };
+  const onDoubleClick = (e) => {
+    if (editor.readonly) return;
+    const { x, y } = toCanvasCoords(canvas, e, zoomNow());
+    const hit = editor.hitTestLeaf(x, y);
+    if (!hit) return;
+    opts.onLabelEdit?.(hit.id);
+  };
+  const onContextMenu = (e) => {
+    e.preventDefault();
+    if (editor.readonly) return;
+    if (!opts.onContextMenu) return;
+    const { x, y } = toCanvasCoords(canvas, e, zoomNow());
+    const hit = editor.hitTestTop(x, y);
+    if (hit && !editor.selection.has(hit.id)) {
+      editor.select([hit.id], "replace");
+      paint();
+    }
+    opts.onContextMenu({ x: e.clientX, y: e.clientY, ids: [...editor.selection] });
+  };
+  const onKeyDown = (e) => {
+    if (editor.readonly) return;
+    const meta = e.metaKey || e.ctrlKey;
+    if (meta && (e.key === "z" || e.key === "Z")) {
+      if (e.shiftKey) editor.redo();
+      else editor.undo();
+      e.preventDefault();
+      paint();
+      return;
+    }
+    if (meta && (e.key === "d" || e.key === "D")) {
+      editor.duplicateItems([...editor.selection]);
+      e.preventDefault();
+      paint();
+      return;
+    }
+    if (meta && (e.key === "]" || e.key === "[")) {
+      if (editor.selection.size === 0) return;
+      const ids = [...editor.selection];
+      if (e.key === "]") {
+        e.shiftKey ? editor.bringToFront(ids) : editor.bringForward(ids);
+      } else {
+        e.shiftKey ? editor.sendToBack(ids) : editor.sendBackward(ids);
+      }
+      e.preventDefault();
+      paint();
+      return;
+    }
+    if (e.key === "Backspace" || e.key === "Delete") {
+      if (editor.selection.size === 0) return;
+      editor.removeItems([...editor.selection]);
+      e.preventDefault();
+      paint();
+      return;
+    }
+    if (e.key === "ArrowLeft" || e.key === "ArrowRight" || e.key === "ArrowUp" || e.key === "ArrowDown") {
+      if (editor.selection.size === 0) return;
+      const step = e.shiftKey ? 10 : 1;
+      const dx = e.key === "ArrowLeft" ? -step : e.key === "ArrowRight" ? step : 0;
+      const dy = e.key === "ArrowUp" ? -step : e.key === "ArrowDown" ? step : 0;
+      editor.move([...editor.selection], dx, dy);
+      e.preventDefault();
+      paint();
+    }
+  };
+  const onDragOver = (e) => {
+    if (editor.readonly) return;
+    if (!opts.onDrop) return;
+    const types = e.dataTransfer?.types;
+    if (!types || !Array.from(types).includes("application/boceto-element-type")) return;
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
+  };
+  const onDrop = (e) => {
+    if (editor.readonly) return;
+    if (!opts.onDrop) return;
+    const type = e.dataTransfer?.getData("application/boceto-element-type");
+    if (!type) return;
+    e.preventDefault();
+    const { x, y } = toCanvasCoords(canvas, e, zoomNow());
+    opts.onDrop({ x, y, type });
+  };
+  canvas.addEventListener("pointerdown", onPointerDown);
+  canvas.addEventListener("pointermove", onPointerMove);
+  canvas.addEventListener("pointerup", onPointerUp);
+  canvas.addEventListener("pointercancel", onPointerUp);
+  canvas.addEventListener("dblclick", onDoubleClick);
+  canvas.addEventListener("contextmenu", onContextMenu);
+  canvas.addEventListener("dragover", onDragOver);
+  canvas.addEventListener("drop", onDrop);
+  canvas.addEventListener("keydown", onKeyDown);
+  return () => {
+    canvas.removeEventListener("pointerdown", onPointerDown);
+    canvas.removeEventListener("pointermove", onPointerMove);
+    canvas.removeEventListener("pointerup", onPointerUp);
+    canvas.removeEventListener("pointercancel", onPointerUp);
+    canvas.removeEventListener("dblclick", onDoubleClick);
+    canvas.removeEventListener("contextmenu", onContextMenu);
+    canvas.removeEventListener("dragover", onDragOver);
+    canvas.removeEventListener("drop", onDrop);
+    canvas.removeEventListener("keydown", onKeyDown);
+  };
+}
+function toCanvasCoords(canvas, e, zoom = 1) {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / rect.width || 1;
+  const scaleY = canvas.height / rect.height || 1;
+  const z = zoom > 0 ? zoom : 1;
+  return {
+    x: (e.clientX - rect.left) * scaleX / z,
+    y: (e.clientY - rect.top) * scaleY / z
+  };
+}
+
+// src/editor/inline-edit.ts
+function createInlineEditor(host, canvas, editor, getZoom = () => 1) {
+  const div = document.createElement("div");
+  div.setAttribute("part", "inline-edit");
+  div.className = "inline-edit";
+  div.contentEditable = "true";
+  Object.assign(div.style, {
+    position: "absolute",
+    display: "none",
+    boxSizing: "border-box",
+    minWidth: "20px",
+    minHeight: "20px",
+    padding: "2px 4px",
+    border: "1.5px solid #6e9bd8",
+    background: "rgba(255,255,255,0.95)",
+    fontFamily: "inherit",
+    fontSize: "13px",
+    outline: "none",
+    zIndex: "2"
+  });
+  host.appendChild(div);
+  let openId = null;
+  function open(id) {
+    const item = editor.findItem(id);
+    if (!item) return;
+    if (isFlexContainer(item)) return;
+    const box = layoutBox(item);
+    const rect = canvas.getBoundingClientRect();
+    const hostRect = host.getBoundingClientRect();
+    const scaleX = rect.width / (canvas.width || 1);
+    const scaleY = rect.height / (canvas.height || 1);
+    const zoom = getZoom() || 1;
+    div.style.left = `${rect.left - hostRect.left + box.x * zoom * scaleX}px`;
+    div.style.top = `${rect.top - hostRect.top + box.y * zoom * scaleY}px`;
+    div.style.width = `${Math.max(20, box.w * zoom * scaleX)}px`;
+    div.style.height = `${Math.max(20, box.h * zoom * scaleY)}px`;
+    div.style.display = "block";
+    div.textContent = "label" in item ? item.label ?? "" : "";
+    openId = id;
+    queueMicrotask(() => {
+      div.focus();
+      const range = document.createRange();
+      range.selectNodeContents(div);
+      const sel = window.getSelection();
+      sel?.removeAllRanges();
+      sel?.addRange(range);
+    });
+  }
+  function close(commit) {
+    if (openId == null) return;
+    const id = openId;
+    const text = div.textContent ?? "";
+    openId = null;
+    div.style.display = "none";
+    div.textContent = "";
+    if (commit) editor.setLabel(id, text);
+  }
+  div.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      close(true);
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      close(false);
+    }
+  });
+  div.addEventListener("blur", () => {
+    if (openId != null) close(true);
+  });
+  return { open, close, el: div };
+}
+
+// src/boceto-edit.ts
 var DEFAULT_W = 860;
 var DEFAULT_H = 600;
-var BocetoViewElement = class extends HTMLElement {
+var yogaReady = initYoga();
+var BocetoEditElement = class extends HTMLElement {
   static get observedAttributes() {
-    return ["code", "src", "width", "height", "page", "fit", "padding"];
+    return ["code", "src", "width", "height", "page", "readonly", "mode", "fit"];
   }
+  #shadow;
   #canvas;
   #renderer;
-  #shadow;
-  #lastDoc = null;
+  #host;
+  #editor;
+  #inline = null;
+  #contextMenu = null;
+  #unbind = null;
+  #paintScheduled = false;
+  #rubberBand = null;
+  #resizeObs = null;
+  /** True once the host has been sized by CSS (any non-zero rect). After
+   * that point, attribute changes to `width`/`height` are ignored in favour
+   * of CSS-driven sizing — that's how authors get a resizable canvas. */
+  #cssSized = false;
+  /** Current zoom factor (1 when `fit !== 'content'` or content fits). The
+   * editor's pointer handler reads this via `getZoom()` so canvas-pixel
+   * coords map back to doc coords. */
+  #zoom = 1;
   constructor() {
     super();
     this.#shadow = this.attachShadow({ mode: "open" });
+    const style = document.createElement("style");
+    style.textContent = `
+      :host { display: block; position: relative; }
+      .host {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        min-height: inherit;
+      }
+      canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+        touch-action: none;
+        outline: none;
+      }
+      .rubber {
+        position: absolute;
+        border: 1px dashed #6e9bd8;
+        background: rgba(110,155,216,0.08);
+        pointer-events: none;
+      }
+    `;
+    this.#shadow.appendChild(style);
+    this.#host = document.createElement("div");
+    this.#host.className = "host";
+    this.#host.setAttribute("part", "host");
+    this.#shadow.appendChild(this.#host);
     this.#canvas = document.createElement("canvas");
+    this.#canvas.setAttribute("part", "canvas");
+    this.#canvas.tabIndex = 0;
     this.#canvas.width = DEFAULT_W;
     this.#canvas.height = DEFAULT_H;
-    this.#canvas.style.maxWidth = "100%";
-    this.#canvas.style.height = "auto";
-    const style = document.createElement("style");
-    style.textContent = `:host { display: block; } canvas { display: block; }`;
-    this.#shadow.appendChild(style);
-    this.#shadow.appendChild(this.#canvas);
+    this.#host.appendChild(this.#canvas);
     this.#renderer = new CanvasRenderer(this.#canvas);
-  }
-  connectedCallback() {
-    void this.#refresh();
-  }
-  attributeChangedCallback() {
-    void this.#refresh();
-  }
-  /** Programmatic alternative to setting the `code` attribute. */
-  setCode(code) {
-    this.setAttribute("code", code);
-  }
-  /** Latest parsed document, if any. */
-  get document() {
-    return this.#lastDoc;
-  }
-  async #refresh() {
-    let w = numAttr2(this, "width", DEFAULT_W);
-    let h = numAttr2(this, "height", DEFAULT_H);
-    let source = this.getAttribute("code");
-    if (source == null) {
-      const src = this.getAttribute("src");
-      if (src) {
-        try {
-          const res = await fetch(src);
-          if (res.ok) source = await res.text();
-        } catch {
-          source = null;
-        }
-      }
-    }
-    if (source == null) source = this.textContent ?? "";
-    let doc;
-    try {
-      doc = parse(source, { raw: !source.includes("```") && !/^---/m.test(source.trim()) });
-    } catch {
-      return;
-    }
-    await yogaReady;
-    applyFlexLayout(doc);
-    const pageAttr = this.getAttribute("page");
-    const pageOpt = pageAttr == null ? void 0 : isNumeric(pageAttr) ? Number(pageAttr) : pageAttr;
-    if (this.getAttribute("fit") === "content") {
-      const page = selectPage(doc, pageOpt);
-      if (page) {
-        const bb = pageContentBox(page.elements);
-        if (bb) {
-          const pad = Math.max(0, numAttr2(this, "padding", 16));
-          const need = {
-            w: Math.ceil(bb.x + bb.w + pad),
-            h: Math.ceil(bb.y + bb.h + pad)
-          };
-          w = Math.max(w, need.w);
-          h = Math.max(h, need.h);
-        }
-      }
-    }
-    if (this.#canvas.width !== w) this.#canvas.width = w;
-    if (this.#canvas.height !== h) this.#canvas.height = h;
-    this.#lastDoc = doc;
-    this.#renderer.render(doc, { width: w, height: h, page: pageOpt });
-    this.dispatchEvent(
-      new CustomEvent("boceto-render", { detail: { doc, page: pageOpt }, bubbles: true })
+    this.#editor = new BocetoEditor({
+      code: "",
+      readonly: this.hasAttribute("readonly")
+    });
+    this.#editor.on("change", () => this.#schedulePaint());
+    this.#editor.on("select", () => {
+      this.dispatchEvent(
+        new CustomEvent("select", {
+          detail: { ids: [...this.#editor.selection] },
+          bubbles: true
+        })
+      );
+      this.#schedulePaint();
+    });
+    this.#editor.on("page", (e) => {
+      this.dispatchEvent(new CustomEvent("page", { detail: e, bubbles: true }));
+    });
+    this.#editor.on(
+      "change",
+      (e) => this.dispatchEvent(
+        new CustomEvent("change", { detail: { code: e.code }, bubbles: true })
+      )
     );
   }
+  // ── Public accessors ───────────────────────────────────────────────────
+  /** Underlying controller. Use for programmatic mutation + subscription. */
+  get editor() {
+    return this.#editor;
+  }
+  /** Latest parsed document. */
+  get document() {
+    return this.#editor.doc;
+  }
+  /** Current DSL source. Mirrors the `code` attribute on read; setting writes through. */
+  get code() {
+    return this.#editor.code;
+  }
+  set code(v) {
+    this.setAttribute("code", v);
+  }
+  // ── Lifecycle ──────────────────────────────────────────────────────────
+  async connectedCallback() {
+    await yogaReady;
+    const src = await this.#readInitialSource();
+    if (src !== this.#editor.code) this.#editor.setCode(src);
+    else this.#editor.relayout();
+    this.#applyDimsAttrs();
+    this.#applyPageAttr();
+    this.#bindInteractions();
+    this.#observeResize();
+    this.#schedulePaint();
+  }
+  disconnectedCallback() {
+    this.#unbind?.();
+    this.#unbind = null;
+    this.#contextMenu?.dispose();
+    this.#contextMenu = null;
+    this.#resizeObs?.disconnect();
+    this.#resizeObs = null;
+  }
+  attributeChangedCallback(name, _old, value) {
+    if (name === "readonly") {
+      this.#editor.setReadonly(value !== null);
+      return;
+    }
+    if (!this.isConnected) return;
+    if (name === "code") {
+      const src = value ?? "";
+      if (src !== this.#editor.code) this.#editor.setCode(src);
+      this.#schedulePaint();
+    } else if (name === "src") {
+      void this.#refreshFromSrc();
+    } else if (name === "width" || name === "height") {
+      this.#applyDimsAttrs();
+      this.#schedulePaint();
+    } else if (name === "page") {
+      this.#applyPageAttr();
+    }
+  }
+  // ── Internals ──────────────────────────────────────────────────────────
+  async #readInitialSource() {
+    const code = this.getAttribute("code");
+    if (code != null) return code;
+    const src = this.getAttribute("src");
+    if (src) {
+      try {
+        const res = await fetch(src);
+        if (res.ok) return await res.text();
+      } catch {
+      }
+    }
+    return this.textContent ?? "";
+  }
+  async #refreshFromSrc() {
+    if (this.hasAttribute("code")) return;
+    const src = await this.#readInitialSource();
+    this.#editor.setCode(src);
+    this.#schedulePaint();
+  }
+  /**
+   * Apply the `width` / `height` *attributes* as a fallback initial size.
+   * Once a `ResizeObserver` reports a non-zero CSS-laid-out size (host got
+   * sized by stylesheet/layout), `#cssSized` flips and these attributes are
+   * ignored — the canvas tracks the rendered size from then on. That lets
+   * a host stretch the editor by resizing its container (e.g. CSS `resize:
+   * both` on a wrapper).
+   */
+  #applyDimsAttrs() {
+    if (this.#cssSized) return;
+    const w = numAttr2(this, "width", DEFAULT_W);
+    const h = numAttr2(this, "height", DEFAULT_H);
+    this.#applyCanvasSize(w, h);
+  }
+  #applyCanvasSize(w, h) {
+    const iw = Math.max(1, Math.round(w));
+    const ih = Math.max(1, Math.round(h));
+    if (this.#canvas.width !== iw) this.#canvas.width = iw;
+    if (this.#canvas.height !== ih) this.#canvas.height = ih;
+  }
+  #observeResize() {
+    if (this.#resizeObs) return;
+    if (typeof ResizeObserver === "undefined") return;
+    this.#resizeObs = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      const box = entry.contentBoxSize?.[0];
+      const w = box ? box.inlineSize : entry.contentRect.width;
+      const h = box ? box.blockSize : entry.contentRect.height;
+      if (w < 1 || h < 1) return;
+      this.#cssSized = true;
+      this.#applyCanvasSize(w, h);
+      this.#schedulePaint();
+    });
+    this.#resizeObs.observe(this.#canvas);
+  }
+  #applyPageAttr() {
+    const v = this.getAttribute("page");
+    if (v == null) return;
+    const target = isNumeric(v) ? Number(v) : v;
+    this.#editor.setPage(target);
+  }
+  #bindInteractions() {
+    if (this.#unbind) this.#unbind();
+    this.#inline = createInlineEditor(this.#host, this.#canvas, this.#editor, () => this.#zoom);
+    this.#contextMenu ??= createContextMenu();
+    this.#unbind = bindCanvas(this.#editor, this.#canvas, {
+      onPaint: (extra) => {
+        this.#rubberBand = extra?.rubberBand ?? null;
+        this.#schedulePaint();
+      },
+      onLabelEdit: (id) => this.#inline?.open(id),
+      onContextMenu: (info) => this.#openContextMenu(info),
+      onDrop: (info) => this.#dropElement(info),
+      getZoom: () => this.#zoom,
+      focusTarget: this.#canvas
+    });
+  }
+  /**
+   * Drop handler for palette → canvas DnD. The dataTransfer carries the
+   * element type; `<boceto-palette>` set it on `dragstart`. We look up the
+   * type's default size from the catalog and insert at the drop point
+   * (centered on the cursor).
+   */
+  #dropElement(info) {
+    const entry = catalogEntry(info.type);
+    const w = entry?.w ?? 120;
+    const h = entry?.h ?? 36;
+    const cx = Math.max(0, Math.round(info.x - w / 2));
+    const cy = Math.max(0, Math.round(info.y - h / 2));
+    const id = this.#editor.addElement(info.type, cx, cy, {
+      w,
+      h,
+      label: entry?.label
+    });
+    if (id) this.#editor.select([id], "replace");
+  }
+  #openContextMenu(info) {
+    if (!this.#contextMenu) return;
+    const ed = this.#editor;
+    const meta = isMacLike() ? "\u2318" : "Ctrl";
+    const shift = "\u21E7";
+    const hasSelection = info.ids.length > 0;
+    this.#contextMenu.open(info.x, info.y, [
+      {
+        label: "Bring to Front",
+        hint: `${meta}${shift}]`,
+        disabled: !hasSelection,
+        onSelect: () => ed.bringToFront(info.ids)
+      },
+      {
+        label: "Bring Forward",
+        hint: `${meta}]`,
+        disabled: !hasSelection,
+        onSelect: () => ed.bringForward(info.ids)
+      },
+      {
+        label: "Send Backward",
+        hint: `${meta}[`,
+        disabled: !hasSelection,
+        onSelect: () => ed.sendBackward(info.ids)
+      },
+      {
+        label: "Send to Back",
+        hint: `${meta}${shift}[`,
+        disabled: !hasSelection,
+        onSelect: () => ed.sendToBack(info.ids)
+      },
+      { label: "", separator: true, onSelect: () => void 0 },
+      {
+        label: "Duplicate",
+        hint: `${meta}D`,
+        disabled: !hasSelection,
+        onSelect: () => ed.duplicateItems(info.ids)
+      },
+      {
+        label: "Delete",
+        hint: "Del",
+        disabled: !hasSelection,
+        onSelect: () => ed.removeItems(info.ids)
+      }
+    ]);
+  }
+  #schedulePaint() {
+    if (this.#paintScheduled) return;
+    this.#paintScheduled = true;
+    queueMicrotask(() => {
+      this.#paintScheduled = false;
+      this.#paint();
+    });
+  }
+  #paint() {
+    this.#zoom = this.#computeZoom();
+    this.#editor.render(this.#renderer, this.#canvas.width, this.#canvas.height, {
+      zoom: this.#zoom
+    });
+    this.#updateRubberBand();
+  }
+  /** Current zoom factor (1 = no zoom). Surfaces it to interaction code so
+   *  pointer events can be mapped back to doc coords. */
+  getZoom() {
+    return this.#zoom;
+  }
+  #computeZoom() {
+    if (this.getAttribute("fit") !== "content") return 1;
+    const page = selectPage(this.#editor.doc, this.#editor.currentPageId);
+    if (!page) return 1;
+    const bb = pageContentBox(page.elements);
+    if (!bb) return 1;
+    const padding = numAttr2(this, "padding", 16);
+    const needW = Math.max(1, bb.x + bb.w + padding);
+    const needH = Math.max(1, bb.y + bb.h + padding);
+    const fitW = this.#canvas.width / needW;
+    const fitH = this.#canvas.height / needH;
+    return Math.min(1, fitW, fitH);
+  }
+  #updateRubberBand() {
+    let div = this.#shadow.querySelector(".rubber");
+    if (!this.#rubberBand) {
+      div?.remove();
+      return;
+    }
+    const rect = this.#canvas.getBoundingClientRect();
+    const hostRect = this.#host.getBoundingClientRect();
+    const scaleX = rect.width / (this.#canvas.width || 1);
+    const scaleY = rect.height / (this.#canvas.height || 1);
+    if (!div) {
+      div = document.createElement("div");
+      div.className = "rubber";
+      div.setAttribute("part", "rubber-band");
+      this.#host.appendChild(div);
+    }
+    const z = this.#zoom;
+    div.style.left = `${rect.left - hostRect.left + this.#rubberBand.x * z * scaleX}px`;
+    div.style.top = `${rect.top - hostRect.top + this.#rubberBand.y * z * scaleY}px`;
+    div.style.width = `${this.#rubberBand.w * z * scaleX}px`;
+    div.style.height = `${this.#rubberBand.h * z * scaleY}px`;
+  }
 };
+function isMacLike() {
+  if (typeof navigator === "undefined") return false;
+  const p = navigator.platform || "";
+  return /Mac|iPhone|iPad/.test(p);
+}
 function numAttr2(el, name, fallback) {
   const v = el.getAttribute(name);
   if (v == null) return fallback;
@@ -5841,13 +7752,1208 @@ function numAttr2(el, name, fallback) {
 function isNumeric(s) {
   return s !== "" && !Number.isNaN(Number(s));
 }
-var TAG = "boceto-view";
-function defineBocetoView(tag = TAG) {
+var TAG = "boceto-edit";
+function defineBocetoEdit(tag = TAG) {
   if (typeof customElements === "undefined") return;
-  if (!customElements.get(tag)) customElements.define(tag, BocetoViewElement);
+  if (!customElements.get(tag)) customElements.define(tag, BocetoEditElement);
+}
+
+// src/editor/floating-panel.ts
+function createFloatingPanel(opts) {
+  const root = document.createElement("div");
+  root.dataset.bocetoPanel = "root";
+  Object.assign(root.style, {
+    position: "fixed",
+    left: `${opts.x ?? 16}px`,
+    top: `${opts.y ?? 16}px`,
+    width: `${opts.width ?? 280}px`,
+    maxHeight: opts.height ? `${opts.height}px` : "80vh",
+    background: "#fff",
+    border: "1px solid #d4d4d8",
+    borderRadius: "8px",
+    boxShadow: "0 6px 20px rgba(0,0,0,0.10), 0 2px 4px rgba(0,0,0,0.06)",
+    fontFamily: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
+    fontSize: "13px",
+    color: "#222",
+    zIndex: "2147482000",
+    display: "flex",
+    flexDirection: "column",
+    overflow: "hidden",
+    userSelect: "none"
+  });
+  const header = document.createElement("div");
+  header.dataset.bocetoPanel = "header";
+  Object.assign(header.style, {
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+    padding: "8px 10px",
+    borderBottom: "1px solid #e4e4e7",
+    background: "#fafafa",
+    cursor: "grab",
+    fontSize: "12px",
+    letterSpacing: "0.04em",
+    textTransform: "uppercase",
+    color: "#52525b",
+    fontWeight: "600"
+  });
+  const grip = document.createElement("span");
+  grip.dataset.bocetoPanel = "grip";
+  grip.textContent = "\u22EE\u22EE";
+  Object.assign(grip.style, { color: "#a1a1aa", letterSpacing: "-3px" });
+  header.appendChild(grip);
+  const titleEl = document.createElement("span");
+  titleEl.dataset.bocetoPanel = "title";
+  titleEl.textContent = opts.title;
+  titleEl.style.flex = "1";
+  header.appendChild(titleEl);
+  if (opts.onClose) {
+    const close = document.createElement("button");
+    close.dataset.bocetoPanel = "close";
+    close.type = "button";
+    close.textContent = "\xD7";
+    Object.assign(close.style, {
+      width: "22px",
+      height: "22px",
+      border: "0",
+      background: "transparent",
+      color: "#71717a",
+      fontSize: "16px",
+      lineHeight: "1",
+      cursor: "pointer",
+      borderRadius: "4px"
+    });
+    close.addEventListener("mouseenter", () => close.style.background = "#f4f4f5");
+    close.addEventListener("mouseleave", () => close.style.background = "transparent");
+    close.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      opts.onClose?.();
+    });
+    header.appendChild(close);
+  }
+  const body = document.createElement("div");
+  body.dataset.bocetoPanel = "body";
+  Object.assign(body.style, {
+    // No top padding: callers may use `position: sticky; top: 0` on the
+    // first child to keep it pinned (e.g. the palette's search row). A
+    // top padding here would cause the sticky child to "slide up" by the
+    // padding amount before sticking, which looks like a 1-frame jolt.
+    padding: "0 0 8px 0",
+    overflowY: "auto",
+    flex: "1 1 auto",
+    minHeight: "0",
+    // Don't chain scroll to the page underneath when the body reaches its
+    // top or bottom edge.
+    overscrollBehavior: "contain"
+  });
+  root.append(header, body);
+  document.body.appendChild(root);
+  let dragging = false;
+  let pid = -1;
+  let originX = 0;
+  let originY = 0;
+  let panelOriginX = 0;
+  let panelOriginY = 0;
+  header.addEventListener("pointerdown", (e) => {
+    if (e.target !== header && e.target.dataset.bocetoPanel !== "grip" && e.target.dataset.bocetoPanel !== "title") {
+      return;
+    }
+    dragging = true;
+    pid = e.pointerId;
+    originX = e.clientX;
+    originY = e.clientY;
+    const rect = root.getBoundingClientRect();
+    panelOriginX = rect.left;
+    panelOriginY = rect.top;
+    header.setPointerCapture(e.pointerId);
+    header.style.cursor = "grabbing";
+    e.preventDefault();
+  });
+  header.addEventListener("pointermove", (e) => {
+    if (!dragging || e.pointerId !== pid) return;
+    const dx = e.clientX - originX;
+    const dy = e.clientY - originY;
+    const next = clampToViewport(panelOriginX + dx, panelOriginY + dy, root);
+    root.style.left = `${next.x}px`;
+    root.style.top = `${next.y}px`;
+  });
+  function endDrag(e) {
+    if (!dragging || e.pointerId !== pid) return;
+    dragging = false;
+    try {
+      header.releasePointerCapture(pid);
+    } catch {
+    }
+    header.style.cursor = "grab";
+  }
+  header.addEventListener("pointerup", endDrag);
+  header.addEventListener("pointercancel", endDrag);
+  let visible = true;
+  return {
+    el: root,
+    header,
+    body,
+    show() {
+      if (visible) return;
+      visible = true;
+      root.style.display = "flex";
+    },
+    hide() {
+      if (!visible) return;
+      visible = false;
+      root.style.display = "none";
+    },
+    isVisible() {
+      return visible;
+    },
+    dispose() {
+      root.remove();
+    }
+  };
+}
+function clampToViewport(x, y, el) {
+  const w = el.offsetWidth;
+  const h = el.offsetHeight;
+  const vw = document.documentElement.clientWidth;
+  const vh = document.documentElement.clientHeight;
+  const clampedX = Math.max(4, Math.min(x, vw - w - 4));
+  const clampedY = Math.max(4, Math.min(y, vh - h - 4));
+  return { x: clampedX, y: clampedY };
+}
+
+// src/boceto-palette.ts
+var BocetoPaletteElement = class extends HTMLElement {
+  static get observedAttributes() {
+    return ["for", "x", "y", "open"];
+  }
+  #panel = null;
+  #search = null;
+  #list = null;
+  #targetId = null;
+  #cachedTarget = null;
+  #onGlobalKey = null;
+  #onTargetFocus = null;
+  #toast = null;
+  connectedCallback() {
+    if (this.#panel) return;
+    this.style.display = "none";
+    const x = numAttr3(this, "x", NaN);
+    const y = numAttr3(this, "y", NaN);
+    this.#panel = createFloatingPanel({
+      title: "Add element  (\u2318K)",
+      x: Number.isFinite(x) ? x : 16,
+      y: Number.isFinite(y) ? y : 16,
+      width: 520,
+      height: void 0,
+      onClose: () => this.removeAttribute("open")
+    });
+    this.#buildBody();
+    if (this.hasAttribute("open")) {
+      this.#positionOverEditor();
+      this.#panel.show();
+    } else this.#panel.hide();
+    this.#installGlobalHotkey();
+    this.#installFocusToast();
+  }
+  disconnectedCallback() {
+    this.#panel?.dispose();
+    this.#panel = null;
+    this.#cachedTarget = null;
+    if (this.#onGlobalKey) window.removeEventListener("keydown", this.#onGlobalKey, true);
+    this.#onGlobalKey = null;
+    if (this.#onTargetFocus) {
+      const target = this.#cachedTarget ?? this.#findTargetMaybe();
+      target?.removeEventListener("focusin", this.#onTargetFocus, true);
+    }
+    this.#onTargetFocus = null;
+    this.#toast?.remove();
+    this.#toast = null;
+  }
+  attributeChangedCallback(name, _old, value) {
+    if (!this.#panel) return;
+    if (name === "for") {
+      this.#targetId = value;
+      this.#cachedTarget = null;
+    } else if (name === "open") {
+      if (value == null) this.#panel.hide();
+      else {
+        this.#positionOverEditor();
+        this.#panel.show();
+        queueMicrotask(() => {
+          this.#search?.focus();
+          this.#search?.select();
+        });
+      }
+    } else if (name === "x" || name === "y") {
+      const v = numAttr3(this, name, 16);
+      this.#panel.el.style[name === "x" ? "left" : "top"] = `${v}px`;
+    }
+  }
+  // ── Build the panel body ───────────────────────────────────────────────
+  #buildBody() {
+    if (!this.#panel) return;
+    const body = this.#panel.body;
+    const searchWrap = document.createElement("div");
+    searchWrap.dataset.bocetoPanel = "search-row";
+    Object.assign(searchWrap.style, {
+      position: "sticky",
+      top: "0",
+      padding: "10px",
+      background: "#fff",
+      borderBottom: "1px solid #e4e4e7",
+      zIndex: "1"
+    });
+    this.#search = document.createElement("input");
+    this.#search.type = "search";
+    this.#search.placeholder = "Search 83 elements\u2026";
+    this.#search.dataset.bocetoPanel = "search";
+    Object.assign(this.#search.style, {
+      width: "100%",
+      boxSizing: "border-box",
+      padding: "6px 10px",
+      border: "1px solid #d4d4d8",
+      borderRadius: "6px",
+      font: "inherit",
+      fontSize: "13px",
+      outline: "none"
+    });
+    this.#search.addEventListener("input", () => this.#renderList());
+    this.#search.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        if (this.#search.value) {
+          this.#search.value = "";
+          this.#renderList();
+        } else {
+          this.removeAttribute("open");
+        }
+      }
+    });
+    searchWrap.appendChild(this.#search);
+    body.appendChild(searchWrap);
+    this.#list = document.createElement("div");
+    this.#list.dataset.bocetoPanel = "list";
+    Object.assign(this.#list.style, {
+      padding: "4px 0"
+    });
+    body.appendChild(this.#list);
+    this.#renderList();
+  }
+  #renderList() {
+    if (!this.#list) return;
+    const query = (this.#search?.value ?? "").trim().toLowerCase();
+    this.#list.replaceChildren();
+    const filtered = query === "";
+    if (filtered) {
+      for (const category of ELEMENT_CATALOG) {
+        const header = document.createElement("div");
+        header.dataset.bocetoPanel = "category";
+        header.textContent = category.name;
+        Object.assign(header.style, {
+          padding: "10px 14px 4px",
+          fontSize: "10.5px",
+          textTransform: "uppercase",
+          letterSpacing: "0.06em",
+          color: "#a1a1aa",
+          fontWeight: "600"
+        });
+        this.#list.appendChild(header);
+        const grid = this.#newGrid();
+        for (const entry of category.types) grid.appendChild(this.#makeItem(entry));
+        this.#list.appendChild(grid);
+      }
+    } else {
+      const matches = ELEMENT_CATALOG.flatMap((c) => c.types).filter(
+        (t) => t.type.toLowerCase().includes(query)
+      );
+      if (matches.length === 0) {
+        const empty = document.createElement("div");
+        empty.textContent = `No matches for "${query}".`;
+        Object.assign(empty.style, {
+          padding: "20px 14px",
+          textAlign: "center",
+          color: "#71717a"
+        });
+        this.#list.appendChild(empty);
+        return;
+      }
+      const grid = this.#newGrid();
+      for (const entry of matches) grid.appendChild(this.#makeItem(entry));
+      this.#list.appendChild(grid);
+    }
+  }
+  /**
+   * A CSS-grid container that wraps element-type buttons into multiple
+   * compact columns. Column width is set so a 520px panel comfortably
+   * fits 3–4 columns of element-type identifiers.
+   */
+  #newGrid() {
+    const grid = document.createElement("div");
+    grid.dataset.bocetoPanel = "grid";
+    Object.assign(grid.style, {
+      display: "grid",
+      gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))",
+      gap: "2px 6px",
+      padding: "2px 10px 6px"
+    });
+    return grid;
+  }
+  #makeItem(entry) {
+    const row = document.createElement("button");
+    row.type = "button";
+    row.dataset.bocetoPanel = "item";
+    row.dataset.elementType = entry.type;
+    row.draggable = true;
+    row.textContent = entry.type;
+    Object.assign(row.style, {
+      display: "block",
+      width: "100%",
+      padding: "4px 8px",
+      background: "transparent",
+      border: "1px solid transparent",
+      borderRadius: "4px",
+      textAlign: "left",
+      font: "inherit",
+      fontSize: "12.5px",
+      color: "#27272a",
+      cursor: "pointer",
+      fontFamily: "ui-monospace, SF Mono, Menlo, Consolas, monospace",
+      whiteSpace: "nowrap",
+      overflow: "hidden",
+      textOverflow: "ellipsis"
+    });
+    row.addEventListener("mouseenter", () => {
+      row.style.background = "#f4f4f5";
+      row.style.borderColor = "#e4e4e7";
+    });
+    row.addEventListener("mouseleave", () => {
+      row.style.background = "transparent";
+      row.style.borderColor = "transparent";
+    });
+    row.addEventListener("click", () => this.#insertAtCanvasCenter(entry));
+    row.addEventListener("dragstart", (e) => {
+      e.dataTransfer?.setData("application/boceto-element-type", entry.type);
+      e.dataTransfer?.setData("text/plain", entry.type);
+      if (e.dataTransfer) e.dataTransfer.effectAllowed = "copy";
+    });
+    return row;
+  }
+  // ── Target binding + insertion ─────────────────────────────────────────
+  #target() {
+    if (this.#cachedTarget?.isConnected) return this.#cachedTarget;
+    const id = this.getAttribute("for") ?? this.#targetId;
+    let target = null;
+    if (id) target = document.getElementById(id);
+    if (!target) {
+      let cur = this.parentElement;
+      while (cur) {
+        if (cur.tagName.toLowerCase() === "boceto-edit") {
+          target = cur;
+          break;
+        }
+        cur = cur.parentElement;
+      }
+    }
+    if (!target) {
+      target = document.querySelector("boceto-edit");
+    }
+    this.#cachedTarget = target ?? null;
+    return this.#cachedTarget;
+  }
+  #insertAtCanvasCenter(entry) {
+    const target = this.#target();
+    if (!target?.editor) return;
+    const canvas = target.shadowRoot?.querySelector("canvas");
+    if (!canvas) return;
+    const zoom = typeof target.getZoom === "function" ? target.getZoom() || 1 : 1;
+    const docCenterX = canvas.width / 2 / zoom;
+    const docCenterY = canvas.height / 2 / zoom;
+    const x = Math.max(0, Math.round(docCenterX - entry.w / 2));
+    const y = Math.max(0, Math.round(docCenterY - entry.h / 2));
+    const id = target.editor.addElement(entry.type, x, y, {
+      w: entry.w,
+      h: entry.h,
+      label: entry.label
+    });
+    if (id) target.editor.select([id], "replace");
+    this.#search?.focus();
+  }
+  /**
+   * Position the panel horizontally centered over the bound editor with a
+   * top gutter. Only applies when no explicit `x` / `y` attributes were set
+   * by the author — those take precedence and pin the panel in place.
+   */
+  #positionOverEditor() {
+    if (!this.#panel) return;
+    if (this.hasAttribute("x") || this.hasAttribute("y")) return;
+    const target = this.#findTargetMaybe();
+    const targetRect = target?.getBoundingClientRect();
+    const panelW = this.#panel.el.offsetWidth || 520;
+    const padTop = numAttr3(this, "top-padding", 32);
+    let cx;
+    let top;
+    if (targetRect && targetRect.width > 0) {
+      cx = targetRect.left + targetRect.width / 2 - panelW / 2;
+      top = targetRect.top + padTop;
+    } else {
+      cx = (document.documentElement.clientWidth - panelW) / 2;
+      top = padTop;
+    }
+    const vw = document.documentElement.clientWidth;
+    const vh = document.documentElement.clientHeight;
+    const clampedX = Math.max(8, Math.min(cx, vw - panelW - 8));
+    const clampedY = Math.max(8, Math.min(top, vh - 60));
+    this.#panel.el.style.left = `${clampedX}px`;
+    this.#panel.el.style.top = `${clampedY}px`;
+  }
+  // ── ⌘/Ctrl + K hotkey + focus toast ────────────────────────────────────
+  #installGlobalHotkey() {
+    this.#onGlobalKey = (e) => {
+      const isK = e.code === "KeyK" || e.key === "k" || e.key === "K";
+      if (!isK) return;
+      if (!(e.metaKey || e.ctrlKey)) return;
+      const target = this.#findTargetMaybe();
+      if (!target) return;
+      const active = document.activeElement;
+      if (active && active !== document.body) {
+        const tag = active.tagName.toLowerCase();
+        const editable = active.isContentEditable;
+        const inOurPanel = !!this.#panel && (this.#panel.el === active || this.#panel.el.contains(active));
+        const inThisCanvas = active === target || target.contains(active);
+        if ((tag === "input" || tag === "textarea" || tag === "select" || editable) && !inOurPanel && !inThisCanvas) {
+          return;
+        }
+      }
+      e.preventDefault();
+      if (this.hasAttribute("open")) this.removeAttribute("open");
+      else this.setAttribute("open", "");
+      this.#dismissToast();
+    };
+    window.addEventListener("keydown", this.#onGlobalKey, true);
+  }
+  /** Look up the target without forcing a fallback search-the-page. */
+  #findTargetMaybe() {
+    const id = this.getAttribute("for") ?? this.#targetId;
+    if (id) return document.getElementById(id);
+    let cur = this.parentElement;
+    while (cur) {
+      if (cur.tagName.toLowerCase() === "boceto-edit") return cur;
+      cur = cur.parentElement;
+    }
+    return document.querySelector("boceto-edit") ?? null;
+  }
+  #installFocusToast() {
+    const storageKey = "boceto:palette-toast-dismissed";
+    let dismissed = false;
+    try {
+      dismissed = sessionStorage.getItem(storageKey) === "1";
+    } catch {
+    }
+    if (dismissed) return;
+    const tryAttach = () => {
+      const target = this.#findTargetMaybe();
+      if (!target) {
+        window.setTimeout(tryAttach, 80);
+        return;
+      }
+      this.#onTargetFocus = () => {
+        if (this.hasAttribute("open")) return;
+        this.#showToast();
+      };
+      target.addEventListener("focusin", this.#onTargetFocus, true);
+    };
+    tryAttach();
+  }
+  #showToast() {
+    if (this.#toast || this.hasAttribute("open")) return;
+    const isMac = /Mac|iPhone|iPad/.test(
+      typeof navigator !== "undefined" ? navigator.platform || "" : ""
+    );
+    const shortcut = isMac ? "\u2318 K" : "Ctrl K";
+    const t = document.createElement("div");
+    t.dataset.bocetoPanel = "toast";
+    t.textContent = `Press ${shortcut} to add elements`;
+    Object.assign(t.style, {
+      position: "fixed",
+      top: "20px",
+      left: "50%",
+      transform: "translateX(-50%)",
+      background: "rgba(30, 30, 46, 0.95)",
+      color: "#fff",
+      padding: "10px 16px",
+      borderRadius: "999px",
+      fontFamily: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
+      fontSize: "13px",
+      fontWeight: "500",
+      boxShadow: "0 8px 24px rgba(0,0,0,0.20)",
+      zIndex: "2147482500",
+      opacity: "0",
+      transition: "opacity 200ms ease-out",
+      cursor: "pointer"
+    });
+    t.addEventListener("click", () => this.#dismissToast());
+    document.body.appendChild(t);
+    this.#toast = t;
+    requestAnimationFrame(() => {
+      if (this.#toast) this.#toast.style.opacity = "1";
+    });
+    window.setTimeout(() => this.#dismissToast(), 4e3);
+  }
+  #dismissToast() {
+    const t = this.#toast;
+    if (!t) return;
+    this.#toast = null;
+    t.style.opacity = "0";
+    window.setTimeout(() => t.remove(), 220);
+    try {
+      sessionStorage.setItem("boceto:palette-toast-dismissed", "1");
+    } catch {
+    }
+  }
+  /**
+   * Called by the editor's drop handler when a palette item is dropped onto
+   * the canvas. Public so power users can wire alternate drop targets.
+   */
+  insertAt(type, canvasX, canvasY) {
+    const target = this.#target();
+    if (!target?.editor) return null;
+    const entry = ELEMENT_CATALOG.flatMap((c) => c.types).find((t) => t.type === type);
+    const w = entry?.w ?? 120;
+    const h = entry?.h ?? 36;
+    const x = Math.max(0, Math.round(canvasX - w / 2));
+    const y = Math.max(0, Math.round(canvasY - h / 2));
+    const id = target.editor.addElement(type, x, y, {
+      w,
+      h,
+      label: entry?.label
+    });
+    if (id) target.editor.select([id], "replace");
+    return id;
+  }
+};
+function numAttr3(el, name, fallback) {
+  const v = el.getAttribute(name);
+  if (v == null) return fallback;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fallback;
+}
+var PALETTE_TAG = "boceto-palette";
+function defineBocetoPalette(tag = PALETTE_TAG) {
+  if (typeof customElements === "undefined") return;
+  if (!customElements.get(tag)) customElements.define(tag, BocetoPaletteElement);
+}
+
+// src/editor/element-attrs.ts
+var ITEMS = (def, hint = "Pipe-separated items") => ({
+  key: "items",
+  kind: "pipe-list",
+  default: def,
+  hint
+});
+var ATTR_SCHEMAS = {
+  // ── Layout ───────────────────────────────────────────────────────────
+  navbar: [ITEMS("Home|About|Contact", "Right-aligned menu items")],
+  sidebar: [
+    ITEMS("Home|Inbox|Settings", "Sidebar rows"),
+    { key: "active", kind: "number", default: 0, hint: "0-based index" },
+    { key: "collapsed", kind: "bool", default: "false", hint: "Icon-only mode" }
+  ],
+  // ── Form ─────────────────────────────────────────────────────────────
+  tabs: [
+    { key: "tabNames", kind: "pipe-list", default: "Tab 1|Tab 2|Tab 3" },
+    { key: "active", kind: "number", default: 0, hint: "0-based index" }
+  ],
+  "segmented-control": [
+    { key: "items", kind: "pipe-list", default: "Day|Week|Month" },
+    { key: "active", kind: "number", default: 0 }
+  ],
+  switch: [{ key: "on", kind: "bool", default: "false" }],
+  slider: [
+    { key: "value", kind: "number", default: 50 },
+    { key: "min", kind: "number", default: 0 },
+    { key: "max", kind: "number", default: 100 }
+  ],
+  "range-slider": [
+    { key: "low", kind: "number", default: 25 },
+    { key: "high", kind: "number", default: 75 },
+    { key: "min", kind: "number", default: 0 },
+    { key: "max", kind: "number", default: 100 }
+  ],
+  search: [{ key: "value", kind: "string", hint: "Current search text" }],
+  "tag-input": [
+    { key: "tags", kind: "pipe-list", default: "design|wireframe|ui" }
+  ],
+  // ── Media ────────────────────────────────────────────────────────────
+  // ── Content ──────────────────────────────────────────────────────────
+  list: [ITEMS("Item one|Item two|Item three", "Bullet list items")],
+  table: [
+    { key: "headers", kind: "pipe-list", default: "Col 1|Col 2|Col 3" },
+    {
+      key: "data",
+      kind: "string",
+      hint: '"r1c1|r1c2;r2c1|r2c2" \u2014 `;` between rows, `|` between cells'
+    },
+    { key: "rows", kind: "number", default: 4 },
+    { key: "cols", kind: "number", default: 3 }
+  ],
+  badge: [
+    { key: "badgeColor", kind: "color", default: "#e94560" }
+  ],
+  progress: [
+    { key: "progress", kind: "number", default: 60, hint: "0\u2013100" }
+  ],
+  pagination: [
+    { key: "current", kind: "number", default: 2 },
+    { key: "total", kind: "number", default: 10 }
+  ],
+  alert: [
+    { key: "alertColor", kind: "color", default: "#4a90d9" }
+  ],
+  chip: [
+    { key: "closable", kind: "bool", default: "false" },
+    { key: "chipColor", kind: "color", default: "#e4e4e7" }
+  ],
+  "code-block": [
+    { key: "lang", kind: "string", hint: "e.g. js, ts, py" }
+  ],
+  accordion: [{ key: "expanded", kind: "bool", default: "false" }],
+  "chat-bubble": [
+    { key: "side", kind: "enum", enum: ["left", "right"], default: "left" },
+    { key: "bubbleColor", kind: "color" },
+    { key: "textColor", kind: "color" }
+  ],
+  calendar: [
+    { key: "month", kind: "number", default: 1, hint: "1\u201312" },
+    { key: "year", kind: "number", default: 2026 },
+    { key: "selected", kind: "number", hint: "Highlighted day-of-month" }
+  ],
+  stepper: [
+    { key: "steps", kind: "pipe-list", default: "Cart|Address|Payment|Done" },
+    { key: "active", kind: "number", default: 1 }
+  ],
+  rating: [
+    { key: "value", kind: "number", default: 3, hint: "0\u20135" },
+    { key: "max", kind: "number", default: 5 }
+  ],
+  carousel: [
+    { key: "slides", kind: "number", default: 4 },
+    { key: "active", kind: "number", default: 0 }
+  ],
+  // ── Navigation / overlays ────────────────────────────────────────────
+  "dropdown-menu": [
+    {
+      key: "items",
+      kind: "pipe-list",
+      default: "Edit|Duplicate|---|Delete",
+      hint: "Use `---` for a separator"
+    }
+  ],
+  tooltip: [
+    {
+      key: "arrow",
+      kind: "enum",
+      enum: ["top", "bottom", "left", "right"],
+      default: "top"
+    }
+  ],
+  toast: [
+    {
+      key: "variant",
+      kind: "enum",
+      enum: ["info", "success", "warn", "error"],
+      default: "info"
+    }
+  ],
+  // ── Feedback ─────────────────────────────────────────────────────────
+  skeleton: [{ key: "lines", kind: "number", default: 3 }],
+  // ── Data viz ─────────────────────────────────────────────────────────
+  "chart-bar": [
+    { key: "data", kind: "comma-list", default: "3,5,2,7,4" }
+  ],
+  "chart-line": [
+    { key: "data", kind: "comma-list", default: "3,5,2,7,4,6,5" }
+  ],
+  "chart-donut": [
+    { key: "data", kind: "comma-list", default: "40,30,20,10" }
+  ],
+  "chart-area": [
+    { key: "data", kind: "comma-list", default: "2,4,3,5,4,6,5" }
+  ],
+  "chart-sparkline": [
+    { key: "data", kind: "comma-list", default: "1,3,2,4,3,5" }
+  ],
+  gantt: [{ key: "tasks", kind: "number", default: 5 }],
+  // ── Mobile / system chrome ───────────────────────────────────────────
+  "phone-frame": [
+    {
+      key: "model",
+      kind: "enum",
+      enum: ["iphone", "android", "generic"],
+      default: "iphone"
+    }
+  ],
+  "app-icon": [
+    { key: "bg", kind: "color", default: "#3b82c4" },
+    { key: "glyph", kind: "string", hint: "Single character / emoji" },
+    { key: "badge", kind: "number", hint: "Notification count" }
+  ],
+  "browser-frame": [
+    { key: "url", kind: "string", default: "example.com" }
+  ],
+  terminal: [
+    { key: "prompt", kind: "string", default: "$" }
+  ]
+};
+function attrsFor(type) {
+  return ATTR_SCHEMAS[type] ?? [];
+}
+
+// src/boceto-inspector.ts
+var BocetoInspectorElement = class extends HTMLElement {
+  static get observedAttributes() {
+    return ["for", "x", "y", "auto", "open"];
+  }
+  #panel = null;
+  #body = null;
+  #target = null;
+  #unsubSelect = null;
+  #unsubChange = null;
+  #attachRetry = null;
+  connectedCallback() {
+    if (this.#panel) return;
+    this.style.display = "none";
+    const x = numAttr4(this, "x", Math.max(16, window.innerWidth - 320));
+    const y = numAttr4(this, "y", 120);
+    this.#panel = createFloatingPanel({
+      title: "Inspector",
+      x,
+      y,
+      width: 300,
+      onClose: () => this.removeAttribute("open")
+    });
+    this.#body = this.#panel.body;
+    this.#panel.hide();
+    this.#attachToTarget();
+  }
+  disconnectedCallback() {
+    this.#detach();
+    this.#panel?.dispose();
+    this.#panel = null;
+    if (this.#attachRetry != null) clearTimeout(this.#attachRetry);
+    this.#attachRetry = null;
+  }
+  attributeChangedCallback(name, _old, value) {
+    if (!this.#panel) return;
+    if (name === "for") {
+      this.#detach();
+      this.#attachToTarget();
+    } else if (name === "open") {
+      if (value == null) this.#panel.hide();
+      else {
+        this.#panel.show();
+        this.#render();
+      }
+    } else if (name === "x" || name === "y") {
+      const v = numAttr4(this, name, 16);
+      this.#panel.el.style[name === "x" ? "left" : "top"] = `${v}px`;
+    }
+  }
+  // ── Editor binding ─────────────────────────────────────────────────────
+  #findTarget() {
+    const id = this.getAttribute("for");
+    let target = null;
+    if (id) target = document.getElementById(id);
+    if (!target) {
+      let cur = this.parentElement;
+      while (cur) {
+        if (cur.tagName.toLowerCase() === "boceto-edit") {
+          target = cur;
+          break;
+        }
+        cur = cur.parentElement;
+      }
+    }
+    if (!target) {
+      target = document.querySelector("boceto-edit");
+    }
+    return target ?? null;
+  }
+  #attachToTarget() {
+    const target = this.#findTarget();
+    if (!target || !target.editor) {
+      this.#attachRetry = window.setTimeout(() => this.#attachToTarget(), 60);
+      return;
+    }
+    this.#target = target;
+    this.#unsubSelect = target.editor.on("select", () => this.#onSelectionChange());
+    this.#unsubChange = target.editor.on("change", () => {
+      if (this.#panel?.isVisible()) this.#render();
+    });
+    this.#onSelectionChange();
+  }
+  #detach() {
+    this.#unsubSelect?.();
+    this.#unsubChange?.();
+    this.#unsubSelect = null;
+    this.#unsubChange = null;
+    this.#target = null;
+  }
+  #onSelectionChange() {
+    if (!this.#target || !this.#panel) return;
+    const ids = [...this.#target.editor.selection];
+    const auto = this.getAttribute("auto") !== null || !this.hasAttribute("auto");
+    if (ids.length === 0) {
+      if (auto) this.#panel.hide();
+      else this.#render();
+      return;
+    }
+    if (auto) this.#panel.show();
+    this.#render();
+  }
+  // ── Render ─────────────────────────────────────────────────────────────
+  #render() {
+    if (!this.#body || !this.#target) return;
+    const editor = this.#target.editor;
+    const ids = [...editor.selection];
+    this.#body.replaceChildren();
+    if (ids.length === 0) {
+      const empty = document.createElement("div");
+      empty.textContent = "Nothing selected.";
+      Object.assign(empty.style, {
+        padding: "20px 14px",
+        color: "#a1a1aa",
+        textAlign: "center"
+      });
+      this.#body.appendChild(empty);
+      return;
+    }
+    if (ids.length > 1) {
+      const multi = document.createElement("div");
+      multi.textContent = `${ids.length} items selected.`;
+      Object.assign(multi.style, {
+        padding: "20px 14px",
+        color: "#a1a1aa",
+        textAlign: "center"
+      });
+      this.#body.appendChild(multi);
+      return;
+    }
+    const item = editor.findItem(ids[0]);
+    if (!item) return;
+    const isElement = !("kind" in item);
+    const el = item;
+    const sectionCommon = section("Common");
+    addRow(sectionCommon, "ID", plainText(el.id));
+    addRow(
+      sectionCommon,
+      "Type",
+      plainText(item.type ?? item.kind ?? "\u2014")
+    );
+    if (isElement) {
+      addRow(
+        sectionCommon,
+        "Label",
+        textInput(el.label ?? "", (v) => editor.setLabel(el.id, v))
+      );
+    }
+    this.#body.appendChild(sectionCommon);
+    if (isElement) {
+      const sectionGeo = section("Geometry");
+      addRow(
+        sectionGeo,
+        "X",
+        numberInput(el.x, (v) => {
+          const dx = v - el.x;
+          if (dx !== 0) editor.move([el.id], dx, 0);
+        })
+      );
+      addRow(
+        sectionGeo,
+        "Y",
+        numberInput(el.y, (v) => {
+          const dy = v - el.y;
+          if (dy !== 0) editor.move([el.id], 0, dy);
+        })
+      );
+      addRow(
+        sectionGeo,
+        "W",
+        numberInput(el.w, (v) => {
+          if (v === el.w) return;
+          editor.resize(el.id, "e", v - el.w, 0, { x: el.x, y: el.y, w: el.w, h: el.h });
+        })
+      );
+      addRow(
+        sectionGeo,
+        "H",
+        numberInput(el.h, (v) => {
+          if (v === el.h) return;
+          editor.resize(el.id, "s", 0, v - el.h, { x: el.x, y: el.y, w: el.w, h: el.h });
+        })
+      );
+      this.#body.appendChild(sectionGeo);
+      const sectionText = section("Text");
+      addRow(
+        sectionText,
+        "fontSize",
+        numberInput(
+          numericAttr2(el.attrs.fontSize, defaultFontSize(el.type)),
+          (v) => editor.setAttr(el.id, "fontSize", v)
+        )
+      );
+      addRow(
+        sectionText,
+        "overflow",
+        selectInput(
+          asString(el.attrs.overflow) ?? "",
+          ["", "ellipsis", "wrap", "clip", "shrink"],
+          (v) => editor.setAttr(el.id, "overflow", v === "" ? void 0 : v)
+        )
+      );
+      addRow(
+        sectionText,
+        "textAlign",
+        selectInput(
+          asString(el.attrs.textAlign) ?? "",
+          ["", "left", "center", "right"],
+          (v) => editor.setAttr(el.id, "textAlign", v === "" ? void 0 : v)
+        )
+      );
+      this.#body.appendChild(sectionText);
+      const schema = attrsFor(el.type);
+      const handledKeys = /* @__PURE__ */ new Set([
+        "fontSize",
+        "overflow",
+        "textAlign",
+        "minFontSize",
+        ...schema.map((s) => s.key)
+      ]);
+      if (schema.length > 0) {
+        const sectionType = section(`${el.type} attrs`);
+        for (const spec of schema) {
+          addRow(
+            sectionType,
+            spec.key,
+            renderSchemaInput(
+              spec,
+              el.attrs[spec.key],
+              (v) => editor.setAttr(el.id, spec.key, v)
+            )
+          );
+        }
+        this.#body.appendChild(sectionType);
+      }
+      const generic = Object.entries(el.attrs).filter(([k]) => !handledKeys.has(k));
+      if (generic.length > 0) {
+        const sectionAttrs = section("Other attrs");
+        for (const [k, v] of generic) {
+          addRow(
+            sectionAttrs,
+            k,
+            textInput(
+              String(v),
+              (nv) => editor.setAttr(el.id, k, nv === "" ? void 0 : maybeNumber(nv))
+            )
+          );
+        }
+        this.#body.appendChild(sectionAttrs);
+      }
+    }
+  }
+};
+function section(title) {
+  const sec = document.createElement("div");
+  sec.dataset.bocetoPanel = "inspector-section";
+  Object.assign(sec.style, {
+    padding: "8px 14px 12px",
+    borderBottom: "1px solid #f4f4f5"
+  });
+  const h = document.createElement("div");
+  h.textContent = title;
+  Object.assign(h.style, {
+    fontSize: "10.5px",
+    textTransform: "uppercase",
+    letterSpacing: "0.06em",
+    color: "#a1a1aa",
+    fontWeight: "600",
+    marginBottom: "6px"
+  });
+  sec.appendChild(h);
+  return sec;
+}
+function addRow(parent, label, control) {
+  const row = document.createElement("label");
+  Object.assign(row.style, {
+    display: "grid",
+    gridTemplateColumns: "80px 1fr",
+    alignItems: "center",
+    gap: "8px",
+    marginBottom: "4px",
+    fontSize: "12.5px"
+  });
+  const l = document.createElement("span");
+  l.textContent = label;
+  l.style.color = "#52525b";
+  row.append(l, control);
+  parent.appendChild(row);
+}
+function plainText(s) {
+  const el = document.createElement("span");
+  el.textContent = s;
+  el.style.color = "#3f3f46";
+  el.style.fontFamily = "ui-monospace, SF Mono, Menlo, Consolas, monospace";
+  el.style.fontSize = "12px";
+  return el;
+}
+function textInput(value, onCommit) {
+  const i = document.createElement("input");
+  i.type = "text";
+  i.value = value;
+  styleField(i);
+  i.addEventListener("change", () => onCommit(i.value));
+  return i;
+}
+function numberInput(value, onCommit) {
+  const i = document.createElement("input");
+  i.type = "number";
+  i.value = String(value);
+  styleField(i);
+  i.addEventListener("change", () => {
+    const n = Number(i.value);
+    if (Number.isFinite(n)) onCommit(n);
+  });
+  return i;
+}
+function selectInput(value, options, onCommit) {
+  const s = document.createElement("select");
+  styleField(s);
+  for (const opt of options) {
+    const o = document.createElement("option");
+    o.value = opt;
+    o.textContent = opt === "" ? "(default)" : opt;
+    if (opt === value) o.selected = true;
+    s.appendChild(o);
+  }
+  s.addEventListener("change", () => onCommit(s.value));
+  return s;
+}
+function colorInput(value, onCommit) {
+  const c = document.createElement("input");
+  c.type = "color";
+  c.value = value || "#cccccc";
+  Object.assign(c.style, {
+    width: "36px",
+    height: "24px",
+    border: "1px solid #d4d4d8",
+    borderRadius: "4px",
+    padding: "0",
+    cursor: "pointer",
+    background: "#fff"
+  });
+  c.addEventListener("change", () => onCommit(c.value));
+  return c;
+}
+function boolInput(value, onCommit) {
+  const c = document.createElement("input");
+  c.type = "checkbox";
+  c.checked = value;
+  Object.assign(c.style, {
+    width: "16px",
+    height: "16px",
+    margin: "0",
+    cursor: "pointer"
+  });
+  c.addEventListener("change", () => onCommit(c.checked));
+  return c;
+}
+function renderSchemaInput(spec, current, onCommit) {
+  switch (spec.kind) {
+    case "number": {
+      const v = numericAttr2(current, typeof spec.default === "number" ? spec.default : 0);
+      return numberInput(v, (n) => onCommit(n));
+    }
+    case "enum": {
+      const enums = spec.enum ?? [];
+      const v = asString(current) ?? (spec.default != null ? String(spec.default) : "");
+      return selectInput(v, ["", ...enums], (nv) => onCommit(nv === "" ? void 0 : nv));
+    }
+    case "bool": {
+      const s = asString(current) ?? (spec.default != null ? String(spec.default) : "false");
+      const v = s === "true" || s === "1";
+      return boolInput(v, (nv) => onCommit(nv ? "true" : "false"));
+    }
+    case "color": {
+      const v = asString(current) ?? (spec.default != null ? String(spec.default) : "");
+      return colorInput(v, (nv) => onCommit(nv));
+    }
+    case "pipe-list":
+    case "comma-list":
+    case "string":
+    default: {
+      const v = asString(current) ?? (spec.default != null ? String(spec.default) : "");
+      const input = textInput(v, (nv) => onCommit(nv === "" ? void 0 : nv));
+      if (spec.hint) input.title = spec.hint;
+      return input;
+    }
+  }
+}
+function styleField(el) {
+  Object.assign(el.style, {
+    width: "100%",
+    boxSizing: "border-box",
+    padding: "4px 6px",
+    border: "1px solid #d4d4d8",
+    borderRadius: "4px",
+    font: "inherit",
+    fontSize: "12.5px",
+    outline: "none",
+    background: "#fff"
+  });
+  el.addEventListener("focus", () => {
+    el.style.borderColor = "#4a90d9";
+  });
+  el.addEventListener("blur", () => {
+    el.style.borderColor = "#d4d4d8";
+  });
+}
+function asString(v) {
+  if (v == null) return void 0;
+  return String(v);
+}
+function numericAttr2(v, fallback) {
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (typeof v === "string") {
+    const n = Number(v);
+    if (Number.isFinite(n)) return n;
+  }
+  return fallback;
+}
+function maybeNumber(v) {
+  if (v === "") return v;
+  const n = Number(v);
+  if (v.match(/^-?\d+(\.\d+)?$/) && Number.isFinite(n)) return n;
+  return v;
+}
+function defaultFontSize(type) {
+  if (type === "heading") return 22;
+  if (type === "label") return 15;
+  return 13;
+}
+function numAttr4(el, name, fallback) {
+  const v = el.getAttribute(name);
+  if (v == null) return fallback;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fallback;
+}
+var INSPECTOR_TAG = "boceto-inspector";
+function defineBocetoInspector(tag = INSPECTOR_TAG) {
+  if (typeof customElements === "undefined") return;
+  if (!customElements.get(tag)) customElements.define(tag, BocetoInspectorElement);
 }
 
 // src/auto.ts
-defineBocetoView();
+defineBocetoEdit();
+defineBocetoPalette();
+defineBocetoInspector();
 //# sourceMappingURL=auto.js.map
 //# sourceMappingURL=auto.js.map

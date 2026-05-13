@@ -1,7 +1,7 @@
 {
   "name": "@boceto/edit",
   "version": "0.1.0",
-  "description": "<boceto-edit> editor web component (v0.1 stub: textarea + live preview).",
+  "description": "<boceto-edit> editor — headless BocetoEditor controller + thin web component (selection, drag, resize, undo).",
   "license": "MIT",
   "type": "module",
   "sideEffects": ["**/auto.*"],

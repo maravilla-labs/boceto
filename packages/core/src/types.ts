@@ -444,6 +444,39 @@ export function* iterateRenderables(
 }
 
 /**
+ * Compute the union bounding box of every renderable on a page (after a
+ * layout pass has run). Walks the same tree as `iterateRenderables`, so the
+ * returned box mirrors exactly what the renderer would paint. Useful for
+ * auto-sizing surfaces (e.g. `<boceto-view fit="content">`) to whatever the
+ * mockup actually occupies.
+ *
+ * Returns `null` when the page has no renderables — callers should fall back
+ * to their declared / default dimensions.
+ */
+export function pageContentBox(
+  items: readonly PageItem[],
+): { x: number; y: number; w: number; h: number } | null {
+  let x0 = Infinity
+  let y0 = Infinity
+  let x1 = -Infinity
+  let y1 = -Infinity
+  let any = false
+  for (const el of iterateRenderables(items)) {
+    const ex0 = el.x
+    const ey0 = el.y
+    const ex1 = el.x + el.w
+    const ey1 = el.y + el.h
+    if (ex0 < x0) x0 = ex0
+    if (ey0 < y0) y0 = ey0
+    if (ex1 > x1) x1 = ex1
+    if (ey1 > y1) y1 = ey1
+    any = true
+  }
+  if (!any) return null
+  return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 }
+}
+
+/**
  * Find a `PageItem` by `id` anywhere in a tree. Walks into `FlexContainer`
  * children and `ComponentInstance.expanded` subtrees; returns `undefined` if
  * no match. Used by renderers to resolve arrow endpoints.

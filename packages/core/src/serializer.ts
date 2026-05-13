@@ -364,13 +364,29 @@ function appendFlexChildAttrsSkippingDefaults(
 }
 
 function quote(s: string): string {
-  return '"' + s.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"'
+  return (
+    '"' +
+    s
+      .replace(/\\/g, '\\\\')
+      .replace(/"/g, '\\"')
+      .replace(/\n/g, '\\n')
+      .replace(/\t/g, '\\t') +
+    '"'
+  )
 }
 
 function formatAttr(v: AttrValue): string {
   if (typeof v === 'number') return String(v)
-  if (/[\s"\\]/.test(v)) {
-    return '"' + v.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"'
+  if (/[\s"\\\n\t]/.test(v)) {
+    return (
+      '"' +
+      v
+        .replace(/\\/g, '\\\\')
+        .replace(/"/g, '\\"')
+        .replace(/\n/g, '\\n')
+        .replace(/\t/g, '\\t') +
+      '"'
+    )
   }
   return v
 }

@@ -90,8 +90,13 @@ Boceto is **line-oriented**. Each statement occupies exactly one line.
 A line is split into **tokens** by whitespace, with the following exceptions:
 
 - A token enclosed in double quotes (`"..."`) preserves its internal whitespace.
-- Inside a quoted token, `\"` represents a literal double quote and `\\` represents a literal backslash. No
-  other escape sequences are defined in v0.1.
+- Inside a quoted token, the following escape sequences are recognised:
+  - `\"` — literal double quote.
+  - `\\` — literal backslash.
+  - `\n` — newline (used for multi-line labels in elements like `textarea`, `alert`, `chat-bubble`).
+  - `\t` — horizontal tab.
+
+  Any other backslash sequence inside a quoted token is preserved verbatim.
 - Quotes MAY contain any printable Unicode character.
 - A bare token MAY contain a quoted segment, in which case the segment's contents are absorbed into the
   surrounding token. This is the form used for attribute values that contain whitespace:
@@ -619,10 +624,33 @@ v0.1 defines the following set of element type identifiers (83 total):
 The visual rendering of each type is implementation-defined but should follow the hand-drawn aesthetic
 described in `@boceto/core`'s default `CanvasRenderer`. Implementations MAY provide alternate themes.
 
-### 5.1 Element-specific attributes
+### 5.1 Generic text-rendering attributes
 
-In addition to the common `id` and `fontSize` attributes (§4.4), several element types accept
-content-shaping attributes:
+Every text-bearing element honors the following attributes for label layout. Element-specific
+defaults are listed in the per-type table that follows.
+
+| Attribute     | Values                                    | Meaning                                                                                  |
+| ------------- | ----------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `overflow`    | `ellipsis` \| `wrap` \| `clip` \| `shrink` | What happens when the label is wider than the element. Default: per element type.        |
+| `textAlign`   | `left` \| `center` \| `right`              | Horizontal alignment of the label inside its box. Default: per element type.             |
+| `fontSize`    | integer (px)                              | Upper bound for the rendered font size.                                                  |
+| `minFontSize` | integer (px)                              | Lower bound when `overflow=shrink`. Default: `9`. Ignored for other policies.            |
+
+Notes:
+- `overflow=wrap` is multi-line; line count is bounded by the element's height (`floor(h / lineH)`)
+  with `…` appended when more text remains. Hard line breaks `\n` (§3.2) are respected before
+  word-wrapping each segment.
+- `overflow=shrink` keeps a single line and binary-searches a font size in
+  `[minFontSize, fontSize]` until the text fits.
+- `textAlign` applies to every line in `wrap` mode (each line uses the same anchor).
+  It is named `textAlign` (not `align`) to avoid collision with the flex container's
+  cross-axis `align` attribute (§4.6), which uses a different value set
+  (`start | middle | end | stretch`).
+
+### 5.2 Element-specific attributes
+
+In addition to the common `id`, `fontSize`, `overflow`, `textAlign`, and `minFontSize` attributes
+(§4.4 + §5.1), several element types accept content-shaping attributes:
 
 | Element              | Attribute                       | Meaning                                                                |
 | -------------------- | ------------------------------- | ---------------------------------------------------------------------- |

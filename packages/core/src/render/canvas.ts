@@ -1,7 +1,13 @@
-import type { BocetoDoc } from '../types'
-import { findItemById, iterateRenderables, layoutBox } from '../types'
+import type { BocetoDoc, PageItem } from '../types'
+import {
+  findItemById,
+  isComponentInstance,
+  isFlexContainer,
+  iterateRenderables,
+  layoutBox,
+} from '../types'
 import { drawElement } from '../elements'
-import { arrow as drawArrow } from '../elements/primitives'
+import { PALETTE, arrow as drawArrow } from '../elements/primitives'
 import { CanvasSurface } from './canvas-surface'
 import { selectPage, type Renderer, type RenderOptions } from './types'
 
@@ -34,6 +40,18 @@ export class CanvasRenderer implements Renderer {
     if (!page) return
 
     const surface = new CanvasSurface(ctx)
+    const selected = options.selectedIds
+    const hovered = options.hoveredId
+    const zoom = options.zoom && options.zoom > 0 ? options.zoom : 1
+
+    // Apply uniform zoom around the canvas origin. Page coords are in
+    // doc-space; multiplying the matrix here shrinks/enlarges everything
+    // drawn after this point. The paper + grid above were drawn at full
+    // canvas size so the background still covers the whole viewport.
+    if (zoom !== 1) {
+      ctx.save()
+      ctx.scale(zoom, zoom)
+    }
 
     for (const ar of page.arrows) {
       const from = findItemById(page.elements, ar.from)
@@ -47,7 +65,58 @@ export class CanvasRenderer implements Renderer {
     }
 
     for (const el of iterateRenderables(page.elements)) {
-      drawElement(surface, el)
+      drawElement(surface, el, {
+        selected: selected?.has(el.id) ?? false,
+        hovered: hovered === el.id,
+        inGroup: false,
+      })
+    }
+
+    if (selected && selected.size > 0) {
+      drawContainerChrome(surface, page.elements, selected)
+    }
+
+    if (zoom !== 1) ctx.restore()
+  }
+}
+
+/**
+ * Second pass that paints selection chrome (outline + 8 resize handles) for
+ * any top-level `FlexContainer` or `ComponentInstance` that's currently
+ * selected. Top-level `Element` selections are skipped — the element
+ * renderer's own `state.selected` branch already paints the handles.
+ */
+function drawContainerChrome(
+  surface: CanvasSurface,
+  items: readonly PageItem[],
+  selected: ReadonlySet<string>,
+): void {
+  for (const item of items) {
+    if (!selected.has(item.id)) continue
+    if (!isFlexContainer(item) && !isComponentInstance(item)) continue
+    const { x, y, w, h } = layoutBox(item)
+    // Outline.
+    surface.rect(x - 1, y - 1, w + 2, h + 2, {
+      stroke: PALETTE.selection,
+      strokeWidth: 1.5,
+    })
+    // Handles.
+    const pts: [number, number][] = [
+      [x, y],
+      [x + w / 2, y],
+      [x + w, y],
+      [x + w, y + h / 2],
+      [x + w, y + h],
+      [x + w / 2, y + h],
+      [x, y + h],
+      [x, y + h / 2],
+    ]
+    for (const [hx, hy] of pts) {
+      surface.rect(hx - 5, hy - 5, 10, 10, {
+        fill: PALETTE.selection,
+        stroke: '#fff',
+        strokeWidth: 1.5,
+      })
     }
   }
 }

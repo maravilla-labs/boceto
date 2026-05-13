@@ -149,6 +149,26 @@ function* iterateRenderables(items, offsetX = 0, offsetY = 0) {
     }
   }
 }
+function pageContentBox(items) {
+  let x0 = Infinity;
+  let y0 = Infinity;
+  let x1 = -Infinity;
+  let y1 = -Infinity;
+  let any = false;
+  for (const el of iterateRenderables(items)) {
+    const ex0 = el.x;
+    const ey0 = el.y;
+    const ex1 = el.x + el.w;
+    const ey1 = el.y + el.h;
+    if (ex0 < x0) x0 = ex0;
+    if (ey0 < y0) y0 = ey0;
+    if (ex1 > x1) x1 = ex1;
+    if (ey1 > y1) y1 = ey1;
+    any = true;
+  }
+  if (!any) return null;
+  return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+}
 function findItemById(items, id) {
   for (const item of items) {
     if (item.id === id) return item;
@@ -2193,6 +2213,16 @@ function readQuoted(line, start) {
         j += 2;
         continue;
       }
+      if (next === "n") {
+        buf += "\n";
+        j += 2;
+        continue;
+      }
+      if (next === "t") {
+        buf += "	";
+        j += 2;
+        continue;
+      }
     }
     if (c === '"') break;
     buf += c;
@@ -3534,12 +3564,12 @@ function appendFlexChildAttrsSkippingDefaults(parts, ci, defaults) {
   if (ci.maxH != null && ci.maxH !== defs.maxH) parts.push(`max-h=${ci.maxH}`);
 }
 function quote(s) {
-  return '"' + s.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"';
+  return '"' + s.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n").replace(/\t/g, "\\t") + '"';
 }
 function formatAttr(v) {
   if (typeof v === "number") return String(v);
-  if (/[\s"\\]/.test(v)) {
-    return '"' + v.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"';
+  if (/[\s"\\\n\t]/.test(v)) {
+    return '"' + v.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n").replace(/\t/g, "\\t") + '"';
   }
   return v;
 }
@@ -3603,24 +3633,215 @@ function sketchText(s, text, x, y, {
     font
   });
 }
-function wrapText(s, text, x, y, maxW, lineH, maxLines = 99, textOpts = {}) {
-  const opts = { size: textOpts.size ?? 13, ...textOpts };
-  const words = (text || "").split(" ");
-  let line = "";
-  let lineCount = 0;
-  for (const word of words) {
-    const test = line ? line + " " + word : word;
-    if (s.measureText(test, opts).width > maxW && line) {
-      s.text(line, x, y + lineCount * lineH, { ...opts, baseline: "top", maxWidth: maxW });
-      line = word;
-      lineCount++;
-      if (lineCount >= maxLines) {
-        s.text(line + "\u2026", x, y + lineCount * lineH, { ...opts, baseline: "top", maxWidth: maxW });
-        return;
-      }
-    } else line = test;
+function fitText(s, text, x, y, maxW, opts = {}) {
+  const t = text ?? "";
+  const measure = {
+    size: opts.size ?? 14,
+    bold: opts.bold,
+    italic: opts.italic,
+    font: opts.font
+  };
+  const renderOpts = {
+    size: measure.size,
+    color: opts.color ?? "#222",
+    align: opts.align ?? "left",
+    baseline: opts.base ?? "top",
+    bold: opts.bold ?? false,
+    italic: opts.italic ?? false,
+    font: opts.font,
+    maxWidth: maxW
+  };
+  if (s.measureText(t, measure).width <= maxW) {
+    s.text(t, x, y, renderOpts);
+    return;
   }
-  if (line) s.text(line, x, y + lineCount * lineH, { ...opts, baseline: "top", maxWidth: maxW });
+  const ELL = "\u2026";
+  const ellW = s.measureText(ELL, measure).width;
+  if (ellW > maxW) {
+    return;
+  }
+  let lo = 0;
+  let hi = t.length;
+  while (lo < hi) {
+    const mid = lo + hi + 1 >> 1;
+    const candidate = t.slice(0, mid);
+    const w = s.measureText(candidate, measure).width + ellW;
+    if (w <= maxW) lo = mid;
+    else hi = mid - 1;
+  }
+  const prefix = t.slice(0, lo).replace(/\s+$/, "");
+  s.text(prefix + ELL, x, y, renderOpts);
+}
+function shrinkFitText(s, text, x, y, maxW, opts = {}) {
+  const t = text ?? "";
+  const maxSize = opts.size ?? 14;
+  const minSize = Math.max(6, opts.minFontSize ?? 9);
+  let chosen = maxSize;
+  if (s.measureText(t, { size: maxSize, bold: opts.bold, italic: opts.italic, font: opts.font }).width > maxW) {
+    let lo = minSize;
+    let hi = maxSize;
+    for (let i = 0; i < 8 && lo + 0.5 < hi; i++) {
+      const mid = (lo + hi) / 2;
+      const w = s.measureText(t, {
+        size: mid,
+        bold: opts.bold,
+        italic: opts.italic,
+        font: opts.font
+      }).width;
+      if (w <= maxW) lo = mid;
+      else hi = mid;
+    }
+    chosen = Math.max(minSize, Math.floor(lo));
+  }
+  s.text(t, x, y, {
+    size: chosen,
+    color: opts.color ?? "#222",
+    align: opts.align ?? "left",
+    baseline: opts.base ?? "top",
+    bold: opts.bold ?? false,
+    italic: opts.italic ?? false,
+    font: opts.font,
+    maxWidth: maxW
+  });
+}
+function wrapText(s, text, x, y, maxW, lineH, maxLines = 99, textOpts = {}) {
+  const baseOpts = {
+    size: textOpts.size ?? 13,
+    bold: textOpts.bold,
+    italic: textOpts.italic,
+    font: textOpts.font
+  };
+  const renderBase = {
+    size: baseOpts.size,
+    color: textOpts.color ?? "#222",
+    bold: textOpts.bold ?? false,
+    italic: textOpts.italic ?? false,
+    font: textOpts.font
+  };
+  const align = textOpts.align ?? "left";
+  const anchorX = align === "left" ? x : align === "right" ? x + maxW : x + maxW / 2;
+  const hardCap = textOpts.maxH != null && lineH > 0 ? Math.max(1, Math.min(maxLines, Math.floor(textOpts.maxH / lineH))) : maxLines;
+  const ELL = "\u2026";
+  const ellW = s.measureText(ELL, baseOpts).width;
+  const out = [];
+  const segments = (text ?? "").split("\n");
+  outer: for (let segIdx = 0; segIdx < segments.length; segIdx++) {
+    const seg = segments[segIdx];
+    if (seg === "") {
+      out.push("");
+      if (out.length >= hardCap) break outer;
+      continue;
+    }
+    const words = seg.split(/\s+/);
+    let line = "";
+    for (const word of words) {
+      const test = line ? line + " " + word : word;
+      if (s.measureText(test, baseOpts).width > maxW && line) {
+        out.push(line);
+        if (out.length >= hardCap) {
+          attachEllipsis(out, ellW, maxW, baseOpts, s);
+          break outer;
+        }
+        line = word;
+      } else {
+        line = test;
+      }
+    }
+    if (line) {
+      out.push(line);
+      if (out.length >= hardCap) {
+        if (segIdx < segments.length - 1) {
+          attachEllipsis(out, ellW, maxW, baseOpts, s);
+        }
+        break outer;
+      }
+    }
+  }
+  for (let i = 0; i < out.length; i++) {
+    s.text(out[i], anchorX, y + i * lineH, {
+      ...renderBase,
+      align,
+      baseline: "top",
+      maxWidth: maxW
+    });
+  }
+}
+function attachEllipsis(out, ellW, maxW, measure, s) {
+  if (out.length === 0) return;
+  let last = out[out.length - 1];
+  while (last.length > 0 && s.measureText(last + "\u2026", measure).width > maxW) {
+    last = last.slice(0, -1);
+  }
+  out[out.length - 1] = last.replace(/\s+$/, "") + "\u2026";
+}
+function clipText(s, text, x, y, w, h, opts = {}) {
+  s.group({ clip: { x, y, w, h } }, () => {
+    s.text(text, opts.align === "right" ? x + w : opts.align === "center" ? x + w / 2 : x, y, {
+      size: opts.size ?? 14,
+      color: opts.color ?? "#222",
+      align: opts.align ?? "left",
+      baseline: opts.base ?? "top",
+      bold: opts.bold ?? false,
+      italic: opts.italic ?? false,
+      font: opts.font,
+      maxWidth: w
+    });
+  });
+}
+function paintLabel(s, el, text, opts) {
+  const policy = el.attrs.overflow ?? opts.policy;
+  const align = el.attrs.textAlign ?? opts.align;
+  const inset = opts.inset ?? 0;
+  const bb = opts.bbox ?? { x: el.x, y: el.y, w: el.w, h: el.h };
+  const ix = bb.x + inset;
+  const iy = bb.y + inset;
+  const iw = Math.max(0, bb.w - 2 * inset);
+  const ih = Math.max(0, bb.h - 2 * inset);
+  const lineH = opts.lineH ?? Math.round(opts.size * 1.25);
+  const anchorX = align === "left" ? ix : align === "right" ? ix + iw : ix + iw / 2;
+  const baseline = opts.baseline ?? "top";
+  const anchorY = baseline === "top" ? iy : baseline === "bottom" ? iy + ih : iy + ih / 2;
+  const baselineProp = baseline === "top" ? "top" : baseline === "bottom" ? "bottom" : "middle";
+  const common = {
+    size: opts.size,
+    color: opts.color,
+    bold: opts.bold,
+    italic: opts.italic,
+    font: opts.font,
+    align,
+    base: baselineProp
+  };
+  if (policy === "wrap") {
+    const lines = Math.max(1, Math.floor(ih / lineH));
+    wrapText(s, text ?? "", ix, iy, iw, lineH, opts.maxLines ?? lines, {
+      size: opts.size,
+      color: opts.color,
+      bold: opts.bold,
+      italic: opts.italic,
+      font: opts.font,
+      align,
+      maxH: ih
+    });
+    return;
+  }
+  if (policy === "clip") {
+    clipText(s, text ?? "", ix, iy, iw, ih, { ...common });
+    return;
+  }
+  if (policy === "shrink") {
+    const minFontSize = numericAttr(el.attrs.minFontSize, 9);
+    shrinkFitText(s, text ?? "", anchorX, anchorY, iw, { ...common, minFontSize });
+    return;
+  }
+  fitText(s, text ?? "", anchorX, anchorY, iw, common);
+}
+function numericAttr(v, fallback) {
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (typeof v === "string") {
+    const n = Number(v);
+    if (Number.isFinite(n)) return n;
+  }
+  return fallback;
 }
 function arrow(s, x1, y1, x2, y2, { stroke = "#444", lw = 2, label = "" } = {}) {
   const dx = x2 - x1;
@@ -3698,12 +3919,14 @@ r("card", (s, el, st) => {
 r("button", (s, el, st) => {
   const bg = st.selected ? "#d0e8fa" : st.hovered ? "#e0eefc" : "#e8e8e8";
   sketchRect(s, el.x, el.y, el.w, el.h, { fill: bg, stroke: strokeColor(st), lw: 2.2 });
-  sketchText(s, el.label || "Button", el.x + el.w / 2, el.y + el.h / 2, {
+  paintLabel(s, el, el.label || "Button", {
+    policy: "ellipsis",
     align: "center",
-    base: "middle",
-    bold: true,
+    baseline: "middle",
     size: 13,
-    color: "#111"
+    bold: true,
+    color: "#111",
+    inset: 8
   });
 });
 r("primary-button", (s, el, st) => {
@@ -3712,12 +3935,14 @@ r("primary-button", (s, el, st) => {
     stroke: st.selected ? PALETTE.selection : "#1a5590",
     lw: 2
   });
-  sketchText(s, el.label || "Submit", el.x + el.w / 2, el.y + el.h / 2, {
+  paintLabel(s, el, el.label || "Submit", {
+    policy: "ellipsis",
     align: "center",
-    base: "middle",
-    bold: true,
+    baseline: "middle",
     size: 13,
-    color: "#fff"
+    bold: true,
+    color: "#fff",
+    inset: 8
   });
 });
 r("input", (s, el, st) => {
@@ -3726,11 +3951,14 @@ r("input", (s, el, st) => {
     stroke: strokeColor(st),
     lw: 1.5
   });
-  sketchText(s, el.label || "placeholder\u2026", el.x + 8, el.y + el.h / 2, {
-    base: "middle",
+  paintLabel(s, el, el.label || "placeholder\u2026", {
+    policy: "ellipsis",
+    align: "left",
+    baseline: "middle",
     italic: true,
     size: 13,
-    color: "#aaa"
+    color: "#aaa",
+    inset: 8
   });
   sketchLine(s, el.x + 8, el.y + 6, el.x + 8, el.y + el.h - 6, { stroke: "#999", lw: 1 });
 });
@@ -3740,10 +3968,16 @@ r("textarea", (s, el, st) => {
     stroke: strokeColor(st),
     lw: 1.5
   });
-  sketchText(s, el.label || "Enter text\u2026", el.x + 8, el.y + 10, {
-    italic: true,
+  paintLabel(s, el, el.label || "Enter text\u2026", {
+    policy: "wrap",
+    align: "left",
+    baseline: "top",
+    italic: !el.label,
+    // only italic-grey when showing the placeholder
     size: 13,
-    color: "#aaa"
+    color: el.label ? "#222" : "#aaa",
+    inset: 8,
+    lineH: 16
   });
   for (let i = 0; i < 3; i++) {
     s.line(el.x + el.w - 10 + i * 3, el.y + el.h - 4, el.x + el.w - 4, el.y + el.h - 10 + i * 3, {
@@ -3779,10 +4013,14 @@ r("select", (s, el, st) => {
     stroke: strokeColor(st),
     lw: 1.5
   });
-  sketchText(s, el.label || "Choose\u2026", el.x + 8, el.y + el.h / 2, {
-    base: "middle",
+  paintLabel(s, el, el.label || "Choose\u2026", {
+    policy: "ellipsis",
+    align: "left",
+    baseline: "middle",
     size: 13,
-    color: "#555"
+    color: "#555",
+    inset: 8,
+    bbox: { x: el.x, y: el.y, w: el.w - 20, h: el.h }
   });
   s.path(
     `M ${el.x + el.w - 18} ${el.y + el.h / 2 - 3} L ${el.x + el.w - 10} ${el.y + el.h / 2 + 4} L ${el.x + el.w - 2} ${el.y + el.h / 2 - 3}`,
@@ -3842,22 +4080,26 @@ r("navbar", (s, el, st) => {
 });
 r("label", (s, el, st) => {
   const fontSize = numAttr(el, "fontSize", 15);
-  s.text(el.label || "Text label", el.x, el.y, {
-    size: fontSize,
-    color: st.selected ? PALETTE.selection : "#222",
+  paintLabel(s, el, el.label || "Text label", {
+    policy: "wrap",
     align: "left",
     baseline: "top",
-    maxWidth: el.w
+    size: fontSize,
+    color: st.selected ? PALETTE.selection : "#222",
+    lineH: Math.round(fontSize * 1.25)
   });
   if (st.selected || st.hovered) selDash(s, el, st);
 });
 r("heading", (s, el, st) => {
   const fontSize = numAttr(el, "fontSize", 22);
-  sketchText(s, el.label || "Heading", el.x, el.y + el.h / 2, {
+  paintLabel(s, el, el.label || "Heading", {
+    policy: "wrap",
+    align: "left",
+    baseline: "middle",
     size: fontSize,
     bold: true,
-    base: "middle",
-    color: "#111"
+    color: "#111",
+    lineH: Math.round(fontSize * 1.2)
   });
   if (st.selected || st.hovered) selDash(s, el, st);
 });
@@ -3979,12 +4221,14 @@ r("tabs", (s, el, st) => {
 r("badge", (s, el) => {
   const bg = strAttr(el, "badgeColor", "#e94560");
   sketchRect(s, el.x, el.y, el.w, el.h, { fill: bg, stroke: "transparent", r: 0.5 });
-  sketchText(s, el.label || "Badge", el.x + el.w / 2, el.y + el.h / 2, {
+  paintLabel(s, el, el.label || "Badge", {
+    policy: "ellipsis",
     align: "center",
-    base: "middle",
+    baseline: "middle",
     size: 11,
     bold: true,
-    color: "#fff"
+    color: "#fff",
+    inset: 4
   });
 });
 r("progress", (s, el, st) => {
@@ -4018,17 +4262,31 @@ r("alert", (s, el) => {
   const ac = strAttr(el, "alertColor", "#4a90d9");
   sketchRect(s, el.x, el.y, el.w, el.h, { fill: ac + "22", stroke: ac, lw: 2 });
   sketchText(s, "\u2139", el.x + 12, el.y + el.h / 2, { base: "middle", size: 16, color: ac });
-  sketchText(s, el.label || "Alert message here", el.x + 30, el.y + el.h / 2, {
-    base: "middle",
+  paintLabel(s, el, el.label || "Alert message here", {
+    policy: "wrap",
+    align: "left",
+    baseline: el.h <= 32 ? "middle" : "top",
     size: 13,
-    color: "#333"
+    color: "#333",
+    inset: 0,
+    bbox: { x: el.x + 30, y: el.y + (el.h <= 32 ? 0 : 8), w: el.w - 38, h: el.h - 16 },
+    lineH: 16
   });
 });
 r("modal", (s, el, st) => {
   s.rect(el.x + 6, el.y + 6, el.w, el.h, { fill: "rgba(0,0,0,0.25)" });
   sketchRect(s, el.x, el.y, el.w, el.h, { fill: "#fff", stroke: strokeColor(st), lw: 2.5 });
   sketchRect(s, el.x, el.y, el.w, 36, { fill: "#f5f5f5", stroke: "transparent" });
-  sketchText(s, el.label || "Modal Title", el.x + 12, el.y + 18, { base: "middle", bold: true, size: 14 });
+  paintLabel(s, el, el.label || "Modal Title", {
+    policy: "ellipsis",
+    align: "left",
+    baseline: "middle",
+    bold: true,
+    size: 14,
+    color: "#222",
+    inset: 12,
+    bbox: { x: el.x, y: el.y, w: el.w - 36, h: 36 }
+  });
   sketchText(s, "\u2715", el.x + el.w - 18, el.y + 18, {
     base: "middle",
     align: "right",
@@ -4121,11 +4379,14 @@ r("search", (s, el, st) => {
   const cy = el.y + el.h / 2;
   s.arc(cx, cy, 5, { stroke: "#888", strokeWidth: 1.5 });
   s.line(cx + 4, cy + 4, cx + 8, cy + 8, { stroke: "#888", strokeWidth: 1.5 });
-  sketchText(s, el.label || "Search\u2026", el.x + 28, cy, {
-    base: "middle",
+  paintLabel(s, el, el.label || "Search\u2026", {
+    policy: "ellipsis",
+    align: "left",
+    baseline: "middle",
     italic: !el.attrs.value,
     size: 13,
-    color: el.attrs.value ? "#222" : "#aaa"
+    color: el.attrs.value ? "#222" : "#aaa",
+    bbox: { x: el.x + 28, y: el.y, w: el.w - 36, h: el.h }
   });
 });
 r("chip", (s, el, st) => {
@@ -4133,11 +4394,13 @@ r("chip", (s, el, st) => {
   const closable = boolAttr(el, "closable", false);
   sketchRect(s, el.x, el.y, el.w, el.h, { fill: bg, stroke: "#a1a1aa", lw: 1, r: 0.6 });
   const textRight = closable ? el.w - 16 : el.w - 8;
-  sketchText(s, el.label || "Chip", el.x + 8, el.y + el.h / 2, {
-    base: "middle",
+  paintLabel(s, el, el.label || "Chip", {
+    policy: "ellipsis",
+    align: "left",
+    baseline: "middle",
     size: 12,
     color: "#3f3f46",
-    maxW: textRight - 8
+    bbox: { x: el.x + 8, y: el.y, w: textRight - 8, h: el.h }
   });
   if (closable) {
     const xCx = el.x + el.w - 10;
@@ -4216,11 +4479,13 @@ r("dropdown-menu", (s, el, st) => {
 r("tooltip", (s, el) => {
   const arrow2 = strAttr(el, "arrow", "top");
   sketchRect(s, el.x, el.y, el.w, el.h, { fill: "#1f2937", stroke: "#0f172a", lw: 1, r: 0.4 });
-  sketchText(s, el.label || "Tooltip", el.x + el.w / 2, el.y + el.h / 2, {
+  paintLabel(s, el, el.label || "Tooltip", {
+    policy: "ellipsis",
     align: "center",
-    base: "middle",
+    baseline: "middle",
     size: 12,
-    color: "#fff"
+    color: "#fff",
+    inset: 6
   });
   const sz = 6;
   const cx = el.x + el.w / 2;
@@ -4243,10 +4508,13 @@ r("toast", (s, el) => {
   const c = colors[variant] ?? colors.info;
   sketchRect(s, el.x, el.y, el.w, el.h, { fill: c.bg, stroke: "#0f172a", lw: 1, r: 0.5 });
   s.arc(el.x + 16, el.y + el.h / 2, 6, { fill: c.ic });
-  sketchText(s, el.label || "Toast notification", el.x + 32, el.y + el.h / 2, {
-    base: "middle",
+  paintLabel(s, el, el.label || "Toast notification", {
+    policy: "ellipsis",
+    align: "left",
+    baseline: "middle",
     size: 13,
-    color: "#fff"
+    color: "#fff",
+    bbox: { x: el.x + 32, y: el.y, w: el.w - 40, h: el.h }
   });
 });
 r("spinner", (s, el) => {
@@ -4297,11 +4565,15 @@ r("accordion", (s, el, st) => {
   const expanded = boolAttr(el, "expanded", false);
   const headerH = Math.min(40, el.h);
   sketchRect(s, el.x, el.y, el.w, headerH, { fill: "#f4f4f5", stroke: strokeColor(st), lw: 1 });
-  sketchText(s, el.label || "Section title", el.x + 12, el.y + headerH / 2, {
-    base: "middle",
+  paintLabel(s, el, el.label || "Section title", {
+    policy: "ellipsis",
+    align: "left",
+    baseline: "middle",
     bold: true,
     size: 13,
-    color: "#222"
+    color: "#222",
+    inset: 12,
+    bbox: { x: el.x, y: el.y, w: el.w - 28, h: headerH }
   });
   const chx = el.x + el.w - 16;
   const chy = el.y + headerH / 2;
@@ -5726,6 +5998,13 @@ var CanvasRenderer = class {
     const page = selectPage(doc, options.page);
     if (!page) return;
     const surface = new CanvasSurface(ctx);
+    const selected = options.selectedIds;
+    const hovered = options.hoveredId;
+    const zoom = options.zoom && options.zoom > 0 ? options.zoom : 1;
+    if (zoom !== 1) {
+      ctx.save();
+      ctx.scale(zoom, zoom);
+    }
     for (const ar of page.arrows) {
       const from = findItemById(page.elements, ar.from);
       const to = findItemById(page.elements, ar.to);
@@ -5737,10 +6016,46 @@ var CanvasRenderer = class {
       });
     }
     for (const el of iterateRenderables(page.elements)) {
-      drawElement(surface, el);
+      drawElement(surface, el, {
+        selected: selected?.has(el.id) ?? false,
+        hovered: hovered === el.id,
+        inGroup: false
+      });
     }
+    if (selected && selected.size > 0) {
+      drawContainerChrome(surface, page.elements, selected);
+    }
+    if (zoom !== 1) ctx.restore();
   }
 };
+function drawContainerChrome(surface, items, selected) {
+  for (const item of items) {
+    if (!selected.has(item.id)) continue;
+    if (!isFlexContainer(item) && !isComponentInstance(item)) continue;
+    const { x, y, w, h } = layoutBox(item);
+    surface.rect(x - 1, y - 1, w + 2, h + 2, {
+      stroke: PALETTE.selection,
+      strokeWidth: 1.5
+    });
+    const pts = [
+      [x, y],
+      [x + w / 2, y],
+      [x + w, y],
+      [x + w, y + h / 2],
+      [x + w, y + h],
+      [x + w / 2, y + h],
+      [x, y + h],
+      [x, y + h / 2]
+    ];
+    for (const [hx, hy] of pts) {
+      surface.rect(hx - 5, hy - 5, 10, 10, {
+        fill: PALETTE.selection,
+        stroke: "#fff",
+        strokeWidth: 1.5
+      });
+    }
+  }
+}
 
 // src/random.ts
 function mulberry32(seed) {
@@ -5940,8 +6255,14 @@ var SvgRenderer = class {
         label: ar.label
       });
     }
+    const selected = options.selectedIds;
+    const hovered = options.hoveredId;
     for (const el of iterateRenderables(page.elements)) {
-      drawElement(surface, el);
+      drawElement(surface, el, {
+        selected: selected?.has(el.id) ?? false,
+        hovered: hovered === el.id,
+        inGroup: false
+      });
     }
     return surface.flush(w, h, {
       background: options.background,
@@ -5950,6 +6271,6 @@ var SvgRenderer = class {
   }
 };
 
-export { BocetoParseError, CanvasRenderer, CanvasSurface, DEFAULT_FONT, DEFAULT_SLOT, ELEMENT_TYPES, PALETTE, SvgRenderer, SvgSurface, applyFlexLayout, arrow, drawElement, fillColor2 as fillColor, fontString, getRenderer, hashString, initYoga, isComponentInstance, isFlexContainer, isSlot, isYogaReady, layoutBox, mulberry32, parse, registerElement, selectPage, serialize, sketchLine, sketchRect, sketchText, strokeColor2 as strokeColor, tokenize, wrapText };
+export { BocetoParseError, CanvasRenderer, CanvasSurface, DEFAULT_FONT, DEFAULT_SLOT, ELEMENT_TYPES, PALETTE, SvgRenderer, SvgSurface, applyFlexLayout, arrow, drawElement, fillColor2 as fillColor, fontString, getRenderer, hashString, initYoga, isComponentInstance, isFlexContainer, isSlot, isYogaReady, layoutBox, mulberry32, pageContentBox, parse, registerElement, selectPage, serialize, sketchLine, sketchRect, sketchText, strokeColor2 as strokeColor, tokenize, wrapText };
 //# sourceMappingURL=browser.js.map
 //# sourceMappingURL=browser.js.map

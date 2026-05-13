@@ -2,7 +2,9 @@ import {
   CanvasRenderer,
   applyFlexLayout,
   initYoga,
+  pageContentBox,
   parse,
+  selectPage,
   type BocetoDoc,
 } from '@boceto/core'
 
@@ -21,11 +23,19 @@ const DEFAULT_H = 600
  * `<boceto-view>` — read-only renderer for Boceto wireframes.
  *
  * Attributes:
- *   - `code`   inline DSL source (overrides slot content)
- *   - `src`    URL to fetch DSL source from
- *   - `width`  canvas pixel width (default 860)
- *   - `height` canvas pixel height (default 600)
- *   - `page`   page id, name, or numeric index
+ *   - `code`    inline DSL source (overrides slot content)
+ *   - `src`     URL to fetch DSL source from
+ *   - `width`   canvas pixel width (default 860). When `fit="content"`, this
+ *               value acts as a *minimum* — the canvas grows if the mockup
+ *               extends past it.
+ *   - `height`  canvas pixel height (default 600). Same minimum behavior under
+ *               `fit="content"`.
+ *   - `page`    page id, name, or numeric index
+ *   - `fit`     `fixed` (default) — render at the declared `width × height`,
+ *               clipping content that extends past it. `content` — grow the
+ *               canvas to encompass every element (plus an optional
+ *               `padding`).
+ *   - `padding` pixels of breathing room when `fit="content"`. Default 16.
  *
  * If neither `code` nor `src` is set, the element parses its slot text content.
  *
@@ -34,7 +44,7 @@ const DEFAULT_H = 600
  */
 export class BocetoViewElement extends HTMLElement {
   static get observedAttributes(): string[] {
-    return ['code', 'src', 'width', 'height', 'page']
+    return ['code', 'src', 'width', 'height', 'page', 'fit', 'padding']
   }
 
   #canvas: HTMLCanvasElement
@@ -76,10 +86,8 @@ export class BocetoViewElement extends HTMLElement {
   }
 
   async #refresh(): Promise<void> {
-    const w = numAttr(this, 'width', DEFAULT_W)
-    const h = numAttr(this, 'height', DEFAULT_H)
-    if (this.#canvas.width !== w) this.#canvas.width = w
-    if (this.#canvas.height !== h) this.#canvas.height = h
+    let w = numAttr(this, 'width', DEFAULT_W)
+    let h = numAttr(this, 'height', DEFAULT_H)
 
     let source = this.getAttribute('code')
     if (source == null) {
@@ -107,9 +115,36 @@ export class BocetoViewElement extends HTMLElement {
     await yogaReady
     applyFlexLayout(doc)
 
-    this.#lastDoc = doc
     const pageAttr = this.getAttribute('page')
     const pageOpt = pageAttr == null ? undefined : isNumeric(pageAttr) ? Number(pageAttr) : pageAttr
+
+    // `fit="content"` grows the canvas to encompass every element on the
+    // active page. `width`/`height` become *minimums* in that mode, so
+    // `<boceto-view width="900" height="200" fit="content">` keeps the
+    // minimum 900×200 footprint and only grows when the content needs more
+    // room. Default behavior (`fit="fixed"`) is unchanged.
+    if (this.getAttribute('fit') === 'content') {
+      const page = selectPage(doc, pageOpt)
+      if (page) {
+        const bb = pageContentBox(page.elements)
+        if (bb) {
+          const pad = Math.max(0, numAttr(this, 'padding', 16))
+          // bb.x / bb.y may be negative, but Boceto coords are non-negative
+          // (parser enforces that). Use the right/bottom edge directly.
+          const need = {
+            w: Math.ceil(bb.x + bb.w + pad),
+            h: Math.ceil(bb.y + bb.h + pad),
+          }
+          w = Math.max(w, need.w)
+          h = Math.max(h, need.h)
+        }
+      }
+    }
+
+    if (this.#canvas.width !== w) this.#canvas.width = w
+    if (this.#canvas.height !== h) this.#canvas.height = h
+
+    this.#lastDoc = doc
     this.#renderer.render(doc, { width: w, height: h, page: pageOpt })
 
     this.dispatchEvent(

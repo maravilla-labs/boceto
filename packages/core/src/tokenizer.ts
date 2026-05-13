@@ -85,6 +85,16 @@ function readQuoted(line: string, start: number): { value: string; end: number }
         j += 2
         continue
       }
+      if (next === 'n') {
+        buf += '\n'
+        j += 2
+        continue
+      }
+      if (next === 't') {
+        buf += '\t'
+        j += 2
+        continue
+      }
     }
     if (c === '"') break
     buf += c

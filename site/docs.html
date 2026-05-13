@@ -9,7 +9,8 @@
       content="Boceto DSL documentation: file embedding, elements, layout containers, responsive components, attributes, and full reference."
     />
     <link rel="stylesheet" href="./assets/style.css" />
-    <script type="module" src="./assets/boceto-view.js"></script>
+    <script type="module" src="./assets/boceto-view.js?v=11"></script>
+    <script type="module" src="./assets/boceto-edit.js?v=11"></script>
     <style>
       .doc-subnav {
         background: var(--paper);
@@ -172,8 +173,10 @@
       <div class="doc-subnav-inner">
         <a href="#sec-getting-started" data-section="sec-getting-started">Getting started</a>
         <a href="#sec-dsl" data-section="sec-dsl">DSL</a>
+        <a href="#sec-text" data-section="sec-text">Text</a>
         <a href="#sec-layout" data-section="sec-layout">Layout</a>
         <a href="#sec-components" data-section="sec-components">Components</a>
+        <a href="#sec-web-components" data-section="sec-web-components">Web Components</a>
         <a href="#sec-reference" data-section="sec-reference">Reference</a>
       </div>
     </nav>
@@ -343,6 +346,85 @@ element button 0 0 100 30 "Save" id=save</code></pre>
           IDs must match <code>[A-Za-z][A-Za-z0-9_-]*</code>. Without an id, the parser
           auto-generates an opaque one.
         </p>
+        </section>
+
+        <section id="sec-text" data-section="sec-text">
+        <!-- ─────────────────────────────────────────────────────────── -->
+        <h2 id="text-rendering">Text rendering</h2>
+        <p>
+          Every text-bearing element honors four generic attributes that control how
+          its label fits inside the bounding box: <code>overflow</code>,
+          <code>align</code>, <code>fontSize</code>, and <code>minFontSize</code>.
+          Quoted labels also accept <code>\n</code> for hard line breaks. Defaults
+          are sensible per element (a <code>button</code> ellipsizes; a
+          <code>heading</code> wraps) — these attributes only matter when you want
+          to override the default.
+        </p>
+
+        <h3 id="text-multiline">Multi-line labels (<code>\n</code>)</h3>
+        <p>
+          Inside a quoted token, <code>\n</code> is interpreted as a newline.
+          Renderers like <code>textarea</code>, <code>alert</code>, and
+          <code>chat-bubble</code> respect those line breaks before word-wrapping
+          each segment. <code>\t</code> is also recognised for tabs; <code>\"</code>
+          and <code>\\</code> remain literal quote and backslash.
+        </p>
+        <boceto-view width="900" height="200" code='```boceto
+element textarea 40 30 400 140 "Drafting an email…\nHi team,\n\nShipping notes for v0.2 attached.\n\n— S"
+element alert    480 30 380 60  "Heads up: the v0.2 build needs a\nfull cache-bust on staging." alertColor=#f59e0b
+```'></boceto-view>
+
+        <h3 id="text-overflow"><code>overflow</code></h3>
+        <p>
+          Four modes. <code>ellipsis</code> trims to a single line with a trailing
+          <code>…</code>. <code>wrap</code> word-wraps onto multiple lines, capped
+          by the box height. <code>clip</code> hard-clips at the box edge.
+          <code>shrink</code> binary-searches a smaller font size between
+          <code>minFontSize</code> (default 9) and <code>fontSize</code> until the
+          label fits.
+        </p>
+        <boceto-view width="900" height="280" code='```boceto
+element label    40  20  120 20 "ellipsis (default for buttons / chips):"
+element button   40  44  140 36 "Save changes today now"
+element button  200  44  140 36 "Save changes today now" overflow=wrap
+element button  360  44  140 36 "Save changes today now" overflow=shrink minFontSize=9
+element button  520  44  140 36 "Save changes today now" overflow=clip
+
+element label    40 110  120 20 "wrap (default for headings / labels):"
+element heading  40 134  500 32 "Drag me, resize me, double-click to rename"
+element heading  40 180  500 32 "Drag me, resize me, double-click to rename" overflow=ellipsis
+```'></boceto-view>
+
+        <h3 id="text-align"><code>textAlign</code></h3>
+        <p>
+          <code>textAlign=left | center | right</code> overrides the per-element default
+          horizontal alignment. In <code>wrap</code> mode, every line uses the same
+          anchor. (The attribute is named <code>textAlign</code> rather than
+          <code>align</code> to avoid collision with the flex container's cross-axis
+          <code>align</code> attribute, which uses a different value set.)
+        </p>
+        <boceto-view width="900" height="200" code='```boceto
+element heading 40  20 820 32 "Default (heading defaults to left)"
+element heading 40  60 820 32 "Center-aligned heading" textAlign=center
+element heading 40 100 820 32 "Right-aligned heading"  textAlign=right
+element label   40 144 820 32 "Right-aligned wrapped label that flows across two lines" overflow=wrap textAlign=right
+```'></boceto-view>
+
+        <h3 id="text-shrink"><code>fontSize</code> + <code>minFontSize</code></h3>
+        <p>
+          <code>fontSize</code> sets the requested point size (it is the upper bound
+          when <code>overflow=shrink</code>). <code>minFontSize</code> caps how small
+          shrink is allowed to go; the default is 9. Both attributes are ignored on
+          modes that aren't <code>shrink</code> (except <code>fontSize</code>, which
+          always sets the requested size).
+        </p>
+        <boceto-view width="900" height="160" code='```boceto
+element button  40 20 180 40 "Plain"                  fontSize=18
+element button 240 20 180 40 "Very long label inside" fontSize=18 overflow=shrink
+element button 440 20 180 40 "Same but with floor"    fontSize=18 overflow=shrink minFontSize=14
+element button 640 20 220 40 "Two-line wrap option"   fontSize=14 overflow=wrap
+```'></boceto-view>
+
         </section>
 
         <section id="sec-layout" data-section="sec-layout">
@@ -956,6 +1038,209 @@ end
 element box 0 0 900 280 "" id=backdrop
 element Modal 250 40 400 0 "" title="Confirm action"</pre>
         </details>
+        </section>
+
+        <section id="sec-web-components" data-section="sec-web-components">
+        <!-- ─────────────────────────────────────────────────────────── -->
+        <h2 id="web-components">Web components</h2>
+        <p>
+          Boceto ships two framework-agnostic custom elements you can drop into any HTML
+          page. <code>&lt;boceto-view&gt;</code> is a read-only renderer; <code>&lt;boceto-edit&gt;</code>
+          is an interactive editor. Both share the same <code>code</code> attribute as the
+          source of truth — set it once, hand-edit it later, or wire it up to the editor
+          and watch the markup update on every commit.
+        </p>
+
+        <h3 id="wc-install">Install</h3>
+        <p>Two equivalent forms — pick whichever fits your build:</p>
+        <pre>// ESM — bundler or modern browser with an importmap.
+import '@boceto/view/auto'
+import '@boceto/edit/auto'
+
+// Or via plain &lt;script&gt; tags pointing at the pre-built bundles
+// (each bundle inlines its own copy of @boceto/core + yoga-layout):
+&lt;script type="module" src="./assets/boceto-view.js"&gt;&lt;/script&gt;
+&lt;script type="module" src="./assets/boceto-edit.js"&gt;&lt;/script&gt;</pre>
+        <p>
+          The <code>/auto</code> entry point is tree-shake-safe; it only registers the
+          custom element with <code>customElements.define</code>. If you want manual
+          control over the tag name, import the constructor and call <code>defineBocetoView()</code>
+          / <code>defineBocetoEdit()</code> yourself (each accepts an optional tag override).
+        </p>
+
+        <!-- ─────────────────────────────── boceto-view -->
+        <h3 id="boceto-view"><code>&lt;boceto-view&gt;</code> — read-only renderer</h3>
+        <p>
+          Paints a Boceto document onto a <code>&lt;canvas&gt;</code> inside a shadow root.
+          Re-renders whenever any observed attribute changes; emits
+          <code>boceto-render</code> when a paint completes.
+        </p>
+        <pre>&lt;boceto-view width="600" height="200" code='```boceto
+element navbar 0 0 600 44 "MyApp"
+element heading 100 80 400 28 "Hello, Boceto"
+```'&gt;&lt;/boceto-view&gt;</pre>
+        <boceto-view width="600" height="200" code='```boceto
+element navbar 0 0 600 44 "MyApp"
+element heading 100 80 400 28 "Hello, Boceto"
+```'></boceto-view>
+
+        <h4>Attributes</h4>
+        <table>
+          <thead><tr><th>Attribute</th><th>Type</th><th>Meaning</th></tr></thead>
+          <tbody>
+            <tr><td><code>code</code></td><td>string</td><td>Inline DSL source. Overrides slot text content.</td></tr>
+            <tr><td><code>src</code></td><td>URL</td><td>Fetched on connect/attribute change if <code>code</code> is absent.</td></tr>
+            <tr><td><code>width</code></td><td>integer</td><td>Canvas pixel width. Default <code>860</code>.</td></tr>
+            <tr><td><code>height</code></td><td>integer</td><td>Canvas pixel height. Default <code>600</code>.</td></tr>
+            <tr><td><code>page</code></td><td>id / name / index</td><td>Which page to render in a multi-page doc.</td></tr>
+            <tr><td><code>fit</code></td><td><code>fixed</code> | <code>content</code></td><td><code>content</code> grows the canvas to encompass every element; <code>width</code> / <code>height</code> become minimums. Default <code>fixed</code>.</td></tr>
+            <tr><td><code>padding</code></td><td>integer</td><td>Breathing room around content when <code>fit="content"</code>. Default <code>16</code>.</td></tr>
+          </tbody>
+        </table>
+
+        <h4>Events</h4>
+        <table>
+          <thead><tr><th>Event</th><th>Detail</th><th>Fires on</th></tr></thead>
+          <tbody>
+            <tr><td><code>boceto-render</code></td><td><code>{ doc, page }</code></td><td>Every successful paint.</td></tr>
+          </tbody>
+        </table>
+
+        <h4>Auto-fit example</h4>
+        <p>
+          Set <code>fit="content"</code> when the doc's size is data-driven or you don't
+          know the bounding box in advance. The canvas grows automatically:
+        </p>
+        <pre>&lt;boceto-view width="200" height="100" fit="content" padding="20" code='...'&gt;&lt;/boceto-view&gt;</pre>
+        <boceto-view width="200" height="100" fit="content" padding="20" code='```boceto
+element card 20 20 480 220 "Auto-sized"
+element heading 40 50 440 28 "Canvas grew to fit"
+element label   40 90 440 22 "Even though width=200, height=100 are tiny."
+element label   40 130 440 22 "fit=content uses them as minimums and expands."
+```'></boceto-view>
+
+        <h4>Loading from a URL</h4>
+        <pre>&lt;boceto-view src="./scenes/login.boceto" width="600" height="320"&gt;&lt;/boceto-view&gt;</pre>
+
+        <!-- ─────────────────────────────── boceto-edit -->
+        <h3 id="boceto-edit"><code>&lt;boceto-edit&gt;</code> — interactive editor</h3>
+        <p>
+          A thin DOM adapter around a framework-agnostic <code>BocetoEditor</code> controller.
+          Click / drag / resize on the canvas, multi-select, undo / redo, right-click for a
+          context menu, double-click to rename. Selection state, geometry mutations, and
+          history are all routed through the controller, which is exposed as
+          <code>el.editor</code> for programmatic use.
+        </p>
+        <pre>&lt;boceto-edit width="600" height="280" code='...'&gt;&lt;/boceto-edit&gt;</pre>
+        <boceto-edit width="600" height="280" code='```boceto
+element navbar 0 0 600 44 "Live editor"
+element heading 40 80 520 32 "Drag me, resize the handles, undo with ⌘-Z"
+element label   40 120 520 22 "Right-click for Z-order operations."
+element primary-button 40 170 200 36 "Save"
+element button         260 170 200 36 "Cancel"
+```'></boceto-edit>
+
+        <h4>Attributes</h4>
+        <table>
+          <thead><tr><th>Attribute</th><th>Type</th><th>Meaning</th></tr></thead>
+          <tbody>
+            <tr><td><code>code</code></td><td>string</td><td>Source of truth. External writes call <code>editor.setCode()</code>; commits emit <code>change</code>.</td></tr>
+            <tr><td><code>src</code></td><td>URL</td><td>Fetched on connect if <code>code</code> is absent.</td></tr>
+            <tr><td><code>width</code> / <code>height</code></td><td>integer</td><td>Initial canvas size. Once the host gets a non-zero CSS size, it tracks that instead (drag a parent with <code>resize: both</code> to grow the canvas live).</td></tr>
+            <tr><td><code>page</code></td><td>id / name / index</td><td>Active page.</td></tr>
+            <tr><td><code>readonly</code></td><td>boolean</td><td>Suppresses every mutation (pointer / keyboard / programmatic).</td></tr>
+            <tr><td><code>mode</code></td><td><code>select</code></td><td>Reserved for forward compatibility. Only <code>select</code> in v0.2.</td></tr>
+          </tbody>
+        </table>
+
+        <h4>Events</h4>
+        <table>
+          <thead><tr><th>Event</th><th>Detail</th><th>Fires on</th></tr></thead>
+          <tbody>
+            <tr><td><code>change</code></td><td><code>{ code }</code></td><td>User commit (drag release, resize, delete, undo, redo, programmatic mutation).</td></tr>
+            <tr><td><code>select</code></td><td><code>{ ids: string[] }</code></td><td>Selection set changes.</td></tr>
+            <tr><td><code>page</code></td><td><code>{ pageId }</code></td><td>Active page changes.</td></tr>
+          </tbody>
+        </table>
+        <p>
+          External <code>setAttribute('code', ...)</code> does <em>not</em> emit
+          <code>change</code> — it's a source-of-truth reset, not a user action.
+        </p>
+
+        <h4>Pointer + keyboard reference</h4>
+        <table>
+          <thead><tr><th>Gesture</th><th>Action</th></tr></thead>
+          <tbody>
+            <tr><td>Click an item</td><td>Select (replace).</td></tr>
+            <tr><td>Shift / ⌘-click</td><td>Add to or toggle selection.</td></tr>
+            <tr><td>Drag selected</td><td>Move (one history entry per drag).</td></tr>
+            <tr><td>Drag a handle</td><td>Resize.</td></tr>
+            <tr><td>Drag empty canvas</td><td>Rubber-band select.</td></tr>
+            <tr><td>Double-click</td><td>Inline label edit.</td></tr>
+            <tr><td>Right-click</td><td>Context menu: Bring to Front / Forward / Send Backward / to Back / Duplicate / Delete.</td></tr>
+            <tr><td><code>⌘K</code></td><td>Open the element palette (<code>&lt;boceto-palette&gt;</code>) when bound to the editor.</td></tr>
+            <tr><td><code>⌘]</code> / <code>⌘⇧]</code></td><td>Bring forward / to front.</td></tr>
+            <tr><td><code>⌘[</code> / <code>⌘⇧[</code></td><td>Send backward / to back.</td></tr>
+            <tr><td><code>Backspace</code> / <code>Delete</code></td><td>Remove selection.</td></tr>
+            <tr><td><code>⌘D</code></td><td>Duplicate.</td></tr>
+            <tr><td><code>Arrow</code> keys (Shift = ×10)</td><td>Nudge selection.</td></tr>
+            <tr><td><code>⌘Z</code> / <code>⌘⇧Z</code></td><td>Undo / redo.</td></tr>
+          </tbody>
+        </table>
+
+        <h4>Programmatic API: <code>el.editor</code></h4>
+        <p>
+          The custom element exposes its <code>BocetoEditor</code> controller as
+          <code>el.editor</code>. Drive the doc from JavaScript — useful for toolbars,
+          AI-generated edits, or any UI sitting alongside the canvas:
+        </p>
+        <pre>const el = document.querySelector('boceto-edit')
+
+el.addEventListener('change', e =&gt; save(e.detail.code))
+
+// Selection + mutation
+el.editor.addElement('button', 200, 100, { label: 'Save' })
+el.editor.move(['p0e0'], 10, 0)
+el.editor.bringToFront(['p0e0'])
+
+// History
+el.editor.undo()
+el.editor.redo()
+
+// Pages
+el.editor.addPage('Settings')
+el.editor.setPage('Settings')</pre>
+
+        <h4>Headless: <code>BocetoEditor</code> without DOM</h4>
+        <p>
+          The controller is exported separately for use in React hooks, Svelte actions,
+          tests, or anywhere a canvas isn't around. Same API as <code>el.editor</code>:
+        </p>
+        <pre>import { BocetoEditor } from '@boceto/edit'
+
+const ed = new BocetoEditor({
+  code: '```boceto\\nelement box 0 0 100 50 "Hi"\\n```',
+})
+ed.on('change', ({ code }) =&gt; persist(code))
+ed.move(['p0e0'], 10, 0)
+const updated = ed.code   // serialised on demand</pre>
+
+        <!-- ─────────────────────────────── React -->
+        <h3 id="boceto-react"><code>@boceto/react</code> — React wrappers</h3>
+        <p>
+          Thin wrappers around the two custom elements. Props pass through as attributes;
+          events fan back out via <code>onChange</code> / <code>onSelect</code>.
+        </p>
+        <pre>import { BocetoView, BocetoEdit } from '@boceto/react'
+
+&lt;BocetoView code={code} width={600} height={320} fit="content" /&gt;
+
+&lt;BocetoEdit
+  code={code}
+  onChange={setCode}
+  onSelect={(ids) =&gt; setSelectedIds(ids)}
+  readOnly={isLocked}
+/&gt;</pre>
         </section>
 
         <section id="sec-reference" data-section="sec-reference">

@@ -28,6 +28,7 @@ export {
   isFlexContainer,
   isSlot,
   layoutBox,
+  pageContentBox,
 } from './types'
 export { initYoga, isYogaReady, applyFlexLayout } from './layout/yoga'
 export { parse, BocetoParseError } from './parser'

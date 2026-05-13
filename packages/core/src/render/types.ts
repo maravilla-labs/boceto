@@ -11,6 +11,27 @@ export interface RenderOptions {
   height?: number
   /** Show paper background + dotted grid. Default true. */
   grid?: boolean
+  /**
+   * IDs of currently-selected `PageItem`s. Top-level `Element` selections are
+   * threaded into `DrawState.selected` so the element renderer paints its own
+   * outline + handles. For top-level `FlexContainer` / `ComponentInstance`
+   * selections (which don't appear in the renderable stream), the renderer
+   * draws a chrome overlay on top.
+   */
+  selectedIds?: ReadonlySet<string>
+  /**
+   * ID of the currently-hovered `PageItem`. Threaded into `DrawState.hovered`
+   * for top-level elements only; containers don't paint a hover state in v0.2.
+   */
+  hoveredId?: string
+  /**
+   * Uniform zoom factor applied to page items (and selection chrome) but
+   * NOT to the paper / grid background — so the grid always covers the
+   * full canvas. Defaults to `1` (no zoom). Values less than 1 shrink
+   * content to fit a smaller canvas; values greater than 1 enlarge.
+   * Pointer hit-testing must divide by this value to recover doc coords.
+   */
+  zoom?: number
 }
 
 export interface Renderer {

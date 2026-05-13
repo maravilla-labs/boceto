@@ -10,7 +10,15 @@ import {
   type DrawState,
   type ElementRenderer,
 } from './registry'
-import { PALETTE, sketchLine, sketchRect, sketchText, wrapText } from './primitives'
+import {
+  PALETTE,
+  fitText,
+  paintLabel,
+  sketchLine,
+  sketchRect,
+  sketchText,
+  wrapText,
+} from './primitives'
 
 function strokeColor(state: DrawState): string {
   return state.selected ? PALETTE.selection : state.hovered ? PALETTE.hover : PALETTE.default
@@ -48,12 +56,14 @@ r('card', (s, el, st) => {
 r('button', (s, el, st) => {
   const bg = st.selected ? '#d0e8fa' : st.hovered ? '#e0eefc' : '#e8e8e8'
   sketchRect(s, el.x, el.y, el.w, el.h, { fill: bg, stroke: strokeColor(st), lw: 2.2 })
-  sketchText(s, el.label || 'Button', el.x + el.w / 2, el.y + el.h / 2, {
+  paintLabel(s, el, el.label || 'Button', {
+    policy: 'ellipsis',
     align: 'center',
-    base: 'middle',
-    bold: true,
+    baseline: 'middle',
     size: 13,
+    bold: true,
     color: '#111',
+    inset: 8,
   })
 })
 
@@ -63,12 +73,14 @@ r('primary-button', (s, el, st) => {
     stroke: st.selected ? PALETTE.selection : '#1a5590',
     lw: 2,
   })
-  sketchText(s, el.label || 'Submit', el.x + el.w / 2, el.y + el.h / 2, {
+  paintLabel(s, el, el.label || 'Submit', {
+    policy: 'ellipsis',
     align: 'center',
-    base: 'middle',
-    bold: true,
+    baseline: 'middle',
     size: 13,
+    bold: true,
     color: '#fff',
+    inset: 8,
   })
 })
 
@@ -78,11 +90,14 @@ r('input', (s, el, st) => {
     stroke: strokeColor(st),
     lw: 1.5,
   })
-  sketchText(s, el.label || 'placeholder…', el.x + 8, el.y + el.h / 2, {
-    base: 'middle',
+  paintLabel(s, el, el.label || 'placeholder…', {
+    policy: 'ellipsis',
+    align: 'left',
+    baseline: 'middle',
     italic: true,
     size: 13,
     color: '#aaa',
+    inset: 8,
   })
   sketchLine(s, el.x + 8, el.y + 6, el.x + 8, el.y + el.h - 6, { stroke: '#999', lw: 1 })
 })
@@ -93,10 +108,16 @@ r('textarea', (s, el, st) => {
     stroke: strokeColor(st),
     lw: 1.5,
   })
-  sketchText(s, el.label || 'Enter text…', el.x + 8, el.y + 10, {
-    italic: true,
+  // Multi-line by default — respects `\n` in the label and word-wraps.
+  paintLabel(s, el, el.label || 'Enter text…', {
+    policy: 'wrap',
+    align: 'left',
+    baseline: 'top',
+    italic: !el.label, // only italic-grey when showing the placeholder
     size: 13,
-    color: '#aaa',
+    color: el.label ? '#222' : '#aaa',
+    inset: 8,
+    lineH: 16,
   })
   // Resize-grip diagonal lines in the bottom-right corner.
   for (let i = 0; i < 3; i++) {
@@ -137,10 +158,14 @@ r('select', (s, el, st) => {
     stroke: strokeColor(st),
     lw: 1.5,
   })
-  sketchText(s, el.label || 'Choose…', el.x + 8, el.y + el.h / 2, {
-    base: 'middle',
+  paintLabel(s, el, el.label || 'Choose…', {
+    policy: 'ellipsis',
+    align: 'left',
+    baseline: 'middle',
     size: 13,
     color: '#555',
+    inset: 8,
+    bbox: { x: el.x, y: el.y, w: el.w - 20, h: el.h },
   })
   // Chevron.
   s.path(
@@ -206,23 +231,27 @@ r('navbar', (s, el, st) => {
 
 r('label', (s, el, st) => {
   const fontSize = numAttr(el, 'fontSize', 15)
-  s.text(el.label || 'Text label', el.x, el.y, {
-    size: fontSize,
-    color: st.selected ? PALETTE.selection : '#222',
+  paintLabel(s, el, el.label || 'Text label', {
+    policy: 'wrap',
     align: 'left',
     baseline: 'top',
-    maxWidth: el.w,
+    size: fontSize,
+    color: st.selected ? PALETTE.selection : '#222',
+    lineH: Math.round(fontSize * 1.25),
   })
   if (st.selected || st.hovered) selDash(s, el, st)
 })
 
 r('heading', (s, el, st) => {
   const fontSize = numAttr(el, 'fontSize', 22)
-  sketchText(s, el.label || 'Heading', el.x, el.y + el.h / 2, {
+  paintLabel(s, el, el.label || 'Heading', {
+    policy: 'wrap',
+    align: 'left',
+    baseline: 'middle',
     size: fontSize,
     bold: true,
-    base: 'middle',
     color: '#111',
+    lineH: Math.round(fontSize * 1.2),
   })
   if (st.selected || st.hovered) selDash(s, el, st)
 })
@@ -369,12 +398,14 @@ r('tabs', (s, el, st) => {
 r('badge', (s, el) => {
   const bg = strAttr(el, 'badgeColor', '#e94560')
   sketchRect(s, el.x, el.y, el.w, el.h, { fill: bg, stroke: 'transparent', r: 0.5 })
-  sketchText(s, el.label || 'Badge', el.x + el.w / 2, el.y + el.h / 2, {
+  paintLabel(s, el, el.label || 'Badge', {
+    policy: 'ellipsis',
     align: 'center',
-    base: 'middle',
+    baseline: 'middle',
     size: 11,
     bold: true,
     color: '#fff',
+    inset: 4,
   })
 })
 
@@ -411,10 +442,15 @@ r('alert', (s, el) => {
   const ac = strAttr(el, 'alertColor', '#4a90d9')
   sketchRect(s, el.x, el.y, el.w, el.h, { fill: ac + '22', stroke: ac, lw: 2 })
   sketchText(s, 'ℹ', el.x + 12, el.y + el.h / 2, { base: 'middle', size: 16, color: ac })
-  sketchText(s, el.label || 'Alert message here', el.x + 30, el.y + el.h / 2, {
-    base: 'middle',
+  paintLabel(s, el, el.label || 'Alert message here', {
+    policy: 'wrap',
+    align: 'left',
+    baseline: el.h <= 32 ? 'middle' : 'top',
     size: 13,
     color: '#333',
+    inset: 0,
+    bbox: { x: el.x + 30, y: el.y + (el.h <= 32 ? 0 : 8), w: el.w - 38, h: el.h - 16 },
+    lineH: 16,
   })
 })
 
@@ -423,7 +459,16 @@ r('modal', (s, el, st) => {
   s.rect(el.x + 6, el.y + 6, el.w, el.h, { fill: 'rgba(0,0,0,0.25)' })
   sketchRect(s, el.x, el.y, el.w, el.h, { fill: '#fff', stroke: strokeColor(st), lw: 2.5 })
   sketchRect(s, el.x, el.y, el.w, 36, { fill: '#f5f5f5', stroke: 'transparent' })
-  sketchText(s, el.label || 'Modal Title', el.x + 12, el.y + 18, { base: 'middle', bold: true, size: 14 })
+  paintLabel(s, el, el.label || 'Modal Title', {
+    policy: 'ellipsis',
+    align: 'left',
+    baseline: 'middle',
+    bold: true,
+    size: 14,
+    color: '#222',
+    inset: 12,
+    bbox: { x: el.x, y: el.y, w: el.w - 36, h: 36 },
+  })
   sketchText(s, '✕', el.x + el.w - 18, el.y + 18, {
     base: 'middle',
     align: 'right',
@@ -535,11 +580,14 @@ r('search', (s, el, st) => {
   const cy = el.y + el.h / 2
   s.arc(cx, cy, 5, { stroke: '#888', strokeWidth: 1.5 })
   s.line(cx + 4, cy + 4, cx + 8, cy + 8, { stroke: '#888', strokeWidth: 1.5 })
-  sketchText(s, el.label || 'Search…', el.x + 28, cy, {
-    base: 'middle',
+  paintLabel(s, el, el.label || 'Search…', {
+    policy: 'ellipsis',
+    align: 'left',
+    baseline: 'middle',
     italic: !el.attrs.value,
     size: 13,
     color: el.attrs.value ? '#222' : '#aaa',
+    bbox: { x: el.x + 28, y: el.y, w: el.w - 36, h: el.h },
   })
 })
 
@@ -548,11 +596,13 @@ r('chip', (s, el, st) => {
   const closable = boolAttr(el, 'closable', false)
   sketchRect(s, el.x, el.y, el.w, el.h, { fill: bg, stroke: '#a1a1aa', lw: 1, r: 0.6 })
   const textRight = closable ? el.w - 16 : el.w - 8
-  sketchText(s, el.label || 'Chip', el.x + 8, el.y + el.h / 2, {
-    base: 'middle',
+  paintLabel(s, el, el.label || 'Chip', {
+    policy: 'ellipsis',
+    align: 'left',
+    baseline: 'middle',
     size: 12,
     color: '#3f3f46',
-    maxW: textRight - 8,
+    bbox: { x: el.x + 8, y: el.y, w: textRight - 8, h: el.h },
   })
   if (closable) {
     const xCx = el.x + el.w - 10
@@ -643,11 +693,13 @@ r('tooltip', (s, el) => {
   const arrow = strAttr(el, 'arrow', 'top')
   // Body.
   sketchRect(s, el.x, el.y, el.w, el.h, { fill: '#1f2937', stroke: '#0f172a', lw: 1, r: 0.4 })
-  sketchText(s, el.label || 'Tooltip', el.x + el.w / 2, el.y + el.h / 2, {
+  paintLabel(s, el, el.label || 'Tooltip', {
+    policy: 'ellipsis',
     align: 'center',
-    base: 'middle',
+    baseline: 'middle',
     size: 12,
     color: '#fff',
+    inset: 6,
   })
   // Arrow triangle pointing the indicated direction.
   const sz = 6
@@ -672,10 +724,13 @@ r('toast', (s, el) => {
   const c = colors[variant] ?? colors.info!
   sketchRect(s, el.x, el.y, el.w, el.h, { fill: c.bg, stroke: '#0f172a', lw: 1, r: 0.5 })
   s.arc(el.x + 16, el.y + el.h / 2, 6, { fill: c.ic })
-  sketchText(s, el.label || 'Toast notification', el.x + 32, el.y + el.h / 2, {
-    base: 'middle',
+  paintLabel(s, el, el.label || 'Toast notification', {
+    policy: 'ellipsis',
+    align: 'left',
+    baseline: 'middle',
     size: 13,
     color: '#fff',
+    bbox: { x: el.x + 32, y: el.y, w: el.w - 40, h: el.h },
   })
 })
 
@@ -737,11 +792,15 @@ r('accordion', (s, el, st) => {
   const headerH = Math.min(40, el.h)
   // Header.
   sketchRect(s, el.x, el.y, el.w, headerH, { fill: '#f4f4f5', stroke: strokeColor(st), lw: 1 })
-  sketchText(s, el.label || 'Section title', el.x + 12, el.y + headerH / 2, {
-    base: 'middle',
+  paintLabel(s, el, el.label || 'Section title', {
+    policy: 'ellipsis',
+    align: 'left',
+    baseline: 'middle',
     bold: true,
     size: 13,
     color: '#222',
+    inset: 12,
+    bbox: { x: el.x, y: el.y, w: el.w - 28, h: headerH },
   })
   // Chevron — points down when expanded, right when collapsed.
   const chx = el.x + el.w - 16

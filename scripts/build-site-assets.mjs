@@ -12,6 +12,9 @@
  *  - `@boceto/view`'s `auto` entry → `site/assets/boceto-view.js`
  *    (defines the `<boceto-view>` custom element used by all site pages)
  *
+ *  - `@boceto/edit`'s `auto` entry → `site/assets/boceto-edit.js`
+ *    (defines the `<boceto-edit>` custom element used on the editor page)
+ *
  * Source maps come along for the ride so devtools links survive.
  *
  * Run with `pnpm site:assets`. Idempotent: safe to run on every commit.
@@ -33,14 +36,15 @@ const siteAssets = resolve(repoRoot, 'site/assets')
 const COPIES = [
   ['packages/core', 'dist/browser.js', 'boceto-core.js'],
   ['packages/view', 'dist/auto.js', 'boceto-view.js'],
+  ['packages/edit', 'dist/auto.js', 'boceto-edit.js'],
 ]
 
 function step(msg) {
   process.stdout.write(`\n▸ ${msg}\n`)
 }
 
-step('Building @boceto/core and @boceto/view')
-execSync('pnpm --filter @boceto/core --filter @boceto/view build', {
+step('Building @boceto/core, @boceto/view and @boceto/edit')
+execSync('pnpm --filter @boceto/core --filter @boceto/view --filter @boceto/edit build', {
   cwd: repoRoot,
   stdio: 'inherit',
 })
