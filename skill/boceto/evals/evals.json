@@ -1,0 +1,26 @@
+{
+  "skill_name": "boceto",
+  "evals": [
+    {
+      "id": 1,
+      "name": "login-screen-from-scratch",
+      "prompt": "I'm using @boceto/* in my docs site. Sketch a wireframe for a login screen — desktop, ~600px wide, with a top navbar reading 'MyApp', a 'Welcome back' heading, email + password inputs, a primary 'Sign In' button, and a small 'Forgot password?' link underneath. Output a single ```boceto block I can paste into a markdown file.",
+      "expected_output": "A fenced ```boceto block (with or without :PageName) containing element navbar, heading, two inputs, a primary-button, and at least one button or label for the forgot-password link. Must parse cleanly via @boceto/core's parse().",
+      "files": []
+    },
+    {
+      "id": 2,
+      "name": "edit-existing-mockup",
+      "prompt": "Here's my existing Boceto mockup:\n\n```boceto:Dashboard\nelement navbar 0 0 900 44 \"Analytics\"\nelement sidebar 0 44 200 460 \"\" items=\"Overview|Sales|Users\"\nelement heading 232 70 600 32 \"Overview\"\nelement chart-bar 232 110 600 260\nelement table 232 380 600 120 headers=\"When|User|Action\"\n```\n\nAdd a row of three metric cards (revenue, active users, conversion rate) between the heading and the chart. Each card should show a label and a big number. Return the full updated ```boceto block.",
+      "expected_output": "The full original block plus 3 new card / box elements between the heading and chart-bar, with the chart and table coordinates shifted down to make room. Must parse cleanly. The new elements should be visually a row at y around 110.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "name": "mobile-screen-with-phone-frame",
+      "prompt": "Sketch a mobile chat app screen for an iPhone-style mockup. 360px wide. I want: a phone-frame around everything, a status bar, a navbar reading 'Conversations', three conversation cards (one per contact: 'Sarah', 'Slack', 'GitHub') with a name and a preview line each, a floating action button at the bottom-right, and a home indicator. Output one ```boceto block.",
+      "expected_output": "A ```boceto block with a phone-frame as the outer container, status-bar at top, navbar below, three card elements stacked vertically, a fab in the bottom-right, and a home-indicator at the very bottom. Must parse cleanly.",
+      "files": []
+    }
+  ]
+}

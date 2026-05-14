@@ -23,3 +23,6 @@ yarn-debug.log*
 .env
 .env.*
 !.env.example
+
+# Skill-creator eval workspace (transient run outputs, not source)
+skill-workspace/

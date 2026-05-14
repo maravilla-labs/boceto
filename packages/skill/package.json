@@ -1,0 +1,35 @@
+{
+  "name": "@boceto/skill",
+  "version": "0.2.0",
+  "description": "AI-assistant skill for authoring Boceto wireframes. Installs into Claude Code, Cursor, Cline, Windsurf, Aider, or any tool that reads markdown rules files.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "boceto-skill": "./bin/install.js"
+  },
+  "files": [
+    "bin",
+    "skill",
+    "README.md"
+  ],
+  "scripts": {
+    "prepack": "node ./bin/sync-skill.js"
+  },
+  "keywords": [
+    "boceto",
+    "wireframe",
+    "ai",
+    "claude",
+    "cursor",
+    "skill",
+    "agent-instructions"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/maravilla-labs/boceto.git",
+    "directory": "packages/skill"
+  }
+}
