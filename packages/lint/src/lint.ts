@@ -52,12 +52,21 @@ export function lint(source: string, options: LintOptions = {}): LintReport {
     current = applyFixes(current, fixableThisPass)
   }
 
-  // Cross-check the final state with the real parser.
-  // Parser-reported line numbers are RELATIVE TO THE BLOCK (not the
-  // file), so for markdown sources with ```boceto fences we have to map
-  // them back to absolute file lines. We do that by walking each fence
-  // and parsing its body separately — that way we know exactly which
-  // fence threw and what its body's offset is.
+  // Cross-check the final state with the real parser. Two cases:
+  //
+  //  - No fences → raw DSL, one block starting at file line 1. The parser
+  //    runs in raw mode, which skips component extraction (raw mode does
+  //    not support multi-page docs or component definitions).
+  //
+  //  - One or more fences → markdown source. We parse the WHOLE source so
+  //    `extractBlocks` walks every fence and `collectComponentDefinitions`
+  //    pulls component definitions from all of them. That way a literate
+  //    doc that puts the component definition in one fence and its call
+  //    sites in another doesn't false-positive with "Unknown statement
+  //    keyword component" or "Unknown element type" on the call site.
+  //    The trade-off: the parser stops at the first failing block, so when
+  //    multiple fences each carry an error, only one surfaces per pass —
+  //    the autofix loop will re-lint after rewriting, surfacing the next.
   if (!options.skipParseCheck) {
     const fences = findBocetoFences(current)
     if (fences.length === 0) {
@@ -70,18 +79,25 @@ export function lint(source: string, options: LintOptions = {}): LintReport {
         allIssues.push(parseErrorIssue(pe, 0))
       }
     } else {
-      for (const fence of fences) {
-        try {
-          // Parse each fence as a raw single block — the body's first line
-          // sits at `fence.bodyStartLine` in the original source.
-          parse(fence.body, { raw: true })
-        } catch (err) {
-          const pe = err as BocetoParseError
-          // Parser's line is 1-based within the body. Absolute file line
-          // is bodyStartLine + (pe.line - 1).
-          const offset = fence.bodyStartLine - 1
-          allIssues.push(parseErrorIssue(pe, offset))
+      try {
+        parse(current)
+      } catch (err) {
+        const pe = err as BocetoParseError
+        // The parser reports `pe.line` relative to the body of whichever
+        // fence threw, but doesn't tell us which one. Best-effort: walk
+        // fences in order and attribute the error to the first one whose
+        // body length plausibly contains the reported line. That matches
+        // the parser's left-to-right pass order.
+        let offset = fences[0]!.bodyStartLine - 1
+        const peLine = pe.line ?? 1
+        for (const fence of fences) {
+          const blockLines = fence.body.split('\n').length
+          if (peLine <= blockLines) {
+            offset = fence.bodyStartLine - 1
+            break
+          }
         }
+        allIssues.push(parseErrorIssue(pe, offset))
       }
     }
   }

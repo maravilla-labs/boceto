@@ -1,0 +1,63 @@
+{
+  "name": "@boceto/mcp",
+  "version": "0.1.0",
+  "description": "MCP server for Boceto. Exposes parse, lint, fix, render-svg, and catalog tools — plus the full skill + spec as MCP resources — so any AI client (Claude Desktop, Cursor, Cline, etc.) gains a runtime feedback loop for authoring Boceto wireframes.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "bin": {
+    "boceto-mcp": "./bin/boceto-mcp.js"
+  },
+  "files": [
+    "bin",
+    "dist",
+    "skill",
+    "spec",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "prepack": "node ./bin/sync-skill.js && pnpm build"
+  },
+  "keywords": [
+    "boceto",
+    "wireframe",
+    "mcp",
+    "model-context-protocol",
+    "ai-tools",
+    "claude",
+    "cursor"
+  ],
+  "engines": {
+    "node": ">=18.17"
+  },
+  "dependencies": {
+    "@boceto/core": "workspace:*",
+    "@boceto/edit": "workspace:*",
+    "@boceto/lint": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.16.0",
+    "tsup": "^8.3.0",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.4"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/maravilla-labs/boceto.git",
+    "directory": "packages/mcp"
+  }
+}

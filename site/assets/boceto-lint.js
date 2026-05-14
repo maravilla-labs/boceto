@@ -3663,12 +3663,23 @@ var elementArity = (lines) => {
   }
   return out;
 };
+function collectUserDefinedComponents(lines) {
+  const names = /* @__PURE__ */ new Set();
+  for (const ln of lines) {
+    if (ln.kind !== "component") continue;
+    const m = ln.trimmed.match(/^component\s+([A-Za-z][A-Za-z0-9_-]*)/);
+    if (m && m[1]) names.add(m[1]);
+  }
+  return names;
+}
 var inventedType = (lines) => {
   const out = [];
+  const userDefined = collectUserDefinedComponents(lines);
   for (const ln of lines) {
     if (ln.kind !== "element" || !ln.typeToken) continue;
     const { type: t, token: tok, id } = ln.typeToken;
     if (isKnownElementType(t)) continue;
+    if (userDefined.has(t)) continue;
     const real = INVENTED_TYPE_MAP.get(t) ?? INVENTED_TYPE_MAP.get(t.toLowerCase());
     if (!real) continue;
     out.push({
@@ -3686,10 +3697,12 @@ var inventedType = (lines) => {
 };
 var unknownType = (lines) => {
   const out = [];
+  const userDefined = collectUserDefinedComponents(lines);
   for (const ln of lines) {
     if (ln.kind !== "element" || !ln.typeToken) continue;
     const { type: t, token: tok } = ln.typeToken;
     if (isKnownElementType(t)) continue;
+    if (userDefined.has(t)) continue;
     if (INVENTED_TYPE_MAP.has(t) || INVENTED_TYPE_MAP.has(t.toLowerCase())) continue;
     const suggestion = closestKnownType(t);
     out.push({
@@ -3923,14 +3936,20 @@ function lint(source, options = {}) {
         allIssues.push(parseErrorIssue(pe, 0));
       }
     } else {
-      for (const fence of fences) {
-        try {
-          parse(fence.body, { raw: true });
-        } catch (err) {
-          const pe = err;
-          const offset = fence.bodyStartLine - 1;
-          allIssues.push(parseErrorIssue(pe, offset));
+      try {
+        parse(current);
+      } catch (err) {
+        const pe = err;
+        let offset = fences[0].bodyStartLine - 1;
+        const peLine = pe.line ?? 1;
+        for (const fence of fences) {
+          const blockLines = fence.body.split("\n").length;
+          if (peLine <= blockLines) {
+            offset = fence.bodyStartLine - 1;
+            break;
+          }
         }
+        allIssues.push(parseErrorIssue(pe, offset));
       }
     }
   }

@@ -1,0 +1,45 @@
+{
+  "name": "@boceto/vue",
+  "version": "0.1.0",
+  "description": "Vue 3 wrappers for <boceto-view> and <boceto-edit>.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": ["dist", "README.md"],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run"
+  },
+  "peerDependencies": {
+    "vue": "^3.3.0"
+  },
+  "dependencies": {
+    "@boceto/core": "workspace:*",
+    "@boceto/edit": "workspace:*",
+    "@boceto/view": "workspace:*"
+  },
+  "devDependencies": {
+    "@vue/test-utils": "^2.4.0",
+    "jsdom": "^25.0.1",
+    "tsup": "^8.3.0",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.4",
+    "vue": "^3.5.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/maravilla-labs/boceto.git",
+    "directory": "packages/vue"
+  }
+}

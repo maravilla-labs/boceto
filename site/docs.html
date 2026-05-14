@@ -177,7 +177,7 @@
         <a href="#sec-layout" data-section="sec-layout">Layout</a>
         <a href="#sec-components" data-section="sec-components">Components</a>
         <a href="#sec-web-components" data-section="sec-web-components">Web Components</a>
-        <a href="#sec-skill" data-section="sec-skill">AI Skill</a>
+        <a href="#sec-ai" data-section="sec-ai">AI assistance</a>
         <a href="#sec-lint" data-section="sec-lint">Lint</a>
         <a href="#sec-reference" data-section="sec-reference">Reference</a>
       </div>
@@ -224,13 +224,15 @@
         <a href="#boceto-view"><code>&lt;boceto-view&gt;</code></a>
         <a href="#boceto-edit"><code>&lt;boceto-edit&gt;</code></a>
         <a href="#boceto-react"><code>@boceto/react</code></a>
+        <a href="#boceto-vue"><code>@boceto/vue</code></a>
+        <a href="#boceto-svelte"><code>@boceto/svelte</code></a>
 
-        <h4>AI skill</h4>
-        <a href="#ai-skill">Overview</a>
-        <a href="#skill-install">Install</a>
-        <a href="#skill-update">Update</a>
-        <a href="#skill-what">What's in the skill</a>
-        <a href="#skill-philosophy">What it teaches</a>
+        <h4>AI assistance</h4>
+        <a href="#ai">Overview</a>
+        <a href="#cli">Install</a>
+        <a href="#mcp">MCP server</a>
+        <a href="#mcp-tools">Tools</a>
+        <a href="#ai-skill">AI Skill</a>
         <a href="#skill-try">Try it</a>
 
         <h4>Lint</h4>
@@ -1255,127 +1257,163 @@ ed.on('change', ({ code }) =&gt; persist(code))
 ed.move(['p0e0'], 10, 0)
 const updated = ed.code   // serialised on demand</pre>
 
-        <!-- ─────────────────────────────── React -->
+        <!-- ─────────────────────────────── Framework wrappers -->
         <h3 id="boceto-react"><code>@boceto/react</code> — React wrappers</h3>
         <p>
           Thin wrappers around the two custom elements. Props pass through as attributes;
-          events fan back out via <code>onChange</code> / <code>onSelect</code>.
+          events fan back out via <code>onRender</code> / <code>onChange</code>.
         </p>
         <pre>import { BocetoView, BocetoEdit } from '@boceto/react'
 
-&lt;BocetoView code={code} width={600} height={320} fit="content" /&gt;
+&lt;BocetoView code={code} width={600} height={320} /&gt;
+&lt;BocetoEdit code={code} onChange={setCode} readOnly={isLocked} /&gt;</pre>
 
-&lt;BocetoEdit
-  code={code}
-  onChange={setCode}
-  onSelect={(ids) =&gt; setSelectedIds(ids)}
-  readOnly={isLocked}
-/&gt;</pre>
+        <h3 id="boceto-vue"><code>@boceto/vue</code> — Vue 3 wrappers</h3>
+        <p>
+          <code>defineComponent</code>-based wrappers that ship as plain
+          runtime components (no SFC build step). Use
+          <code>v-model:code</code> on <code>&lt;BocetoEdit&gt;</code> for
+          two-way binding. The <code>boceto-render</code> CustomEvent surfaces
+          as Vue's <code>render</code> event.
+        </p>
+        <pre>import { BocetoView, BocetoEdit } from '@boceto/vue'
+
+&lt;BocetoView :code="code" :width="600" :height="320" @render="onRender" /&gt;
+&lt;BocetoEdit v-model:code="code" :readOnly="isLocked" /&gt;</pre>
+
+        <h3 id="boceto-svelte"><code>@boceto/svelte</code> — Svelte wrappers</h3>
+        <p>
+          Source-only <code>.svelte</code> components — your Svelte tooling
+          compiles them. Compatible with Svelte 4 and Svelte 5. Use
+          <code>bind:code</code> for two-way binding; <code>on:render</code>
+          and <code>on:change</code> surface the custom-element events.
+        </p>
+        <pre>&lt;script&gt;
+  import { BocetoView, BocetoEdit } from '@boceto/svelte'
+  let code = 'element navbar 0 0 600 44 "MyApp"'
+&lt;/script&gt;
+
+&lt;BocetoView {code} width={600} height={320} on:render={(e) =&gt; console.log(e.detail.doc)} /&gt;
+&lt;BocetoEdit bind:code readOnly={isLocked} /&gt;</pre>
         </section>
 
-        <section id="sec-skill" data-section="sec-skill">
+        <section id="sec-ai" data-section="sec-ai">
         <!-- ─────────────────────────────────────────────────────────── -->
-        <h2 id="ai-skill">AI assistant skill — <code>@boceto/skill</code></h2>
+        <h2 id="ai">AI assistance</h2>
         <p>
-          A drop-in skill that teaches Claude, Cursor, Cline, Aider, GitHub Copilot,
-          OpenAI Codex, Gemini CLI, Windsurf, and any other AI coding assistant
-          how to author valid Boceto wireframes. After installing, ask your
-          assistant for a mockup — <em>"sketch a settings page"</em>, <em>"add a
-          search bar at the top of this <code>​```boceto</code> block"</em>, <em>"mock
-          up a Spotify-like player on mobile"</em> — and it produces a fenced
-          <code>​```boceto</code> block that parses cleanly via <code>@boceto/core</code>
-          and renders via <code>&lt;boceto-view&gt;</code> first try.
+          Boceto ships two complementary pieces for AI coding assistants:
+          the <strong>skill</strong> (markdown rules that trigger the agent
+          and teach the non-negotiables) and the <strong>MCP server</strong>
+          (runtime tools the agent calls — lint, fix, render-svg, recipe +
+          element catalog). Install both together with one command.
         </p>
 
-        <p style="margin-top: 12px;">
-          In benchmarks the skill produces <strong>63 / 63 valid mockups across
-          10 categories</strong> (login, edit-existing, mobile chat, composite
-          components, flex containers, charts, multi-page docs, fictional-element
-          componentization, shell-driven multi-page admin tools, named-slot kanban
-          boards) — vs. ~40% for the same prompts without the skill, where the
-          assistant invents element types like <code>Frame</code> / <code>Stack</code> /
-          <code>icon-button</code> that don't exist.
-        </p>
-
-        <h3 id="skill-install">Install</h3>
+        <h3 id="cli">Install — <code>npx boceto add mcp</code></h3>
+        <pre>npx boceto add mcp                       # auto-detect AI client; install MCP + matching skill
+npx boceto add mcp claude-code           # explicit (claude-code | cursor | claude-desktop)
+npx boceto add skill &lt;target&gt;            # skill only — for assistants without MCP support
+npx boceto check                         # what's installed where</pre>
         <p>
-          Pick your assistant. The same skill content gets reshaped into the file
-          layout each tool expects:
-        </p>
-        <pre># Interactive picker — recommended on first run
-npx @boceto/skill install
-
-# Or be explicit
-npx @boceto/skill install claude        # .claude/skills/boceto/  (per-project)
-npx @boceto/skill install claude-user   # ~/.claude/skills/boceto/  (all projects)
-npx @boceto/skill install cursor        # .cursor/rules/boceto.mdc
-npx @boceto/skill install cline         # .clinerules/
-npx @boceto/skill install windsurf      # .windsurfrules
-npx @boceto/skill install aider         # BOCETO.md (+ how-to for .aider.conf.yml)
-npx @boceto/skill install copilot       # .github/copilot-instructions.md
-npx @boceto/skill install codex         # AGENTS.md  (cross-agent — Codex, Cody, agentsmd.dev)
-npx @boceto/skill install gemini        # GEMINI.md  (Gemini CLI / Code Assist)
-npx @boceto/skill install raw           # ./boceto-skill/  (self-route)</pre>
-
-        <h3 id="skill-update">Update</h3>
-        <p>
-          <code>npx</code> fetches the latest published <code>@boceto/skill</code>
-          on each invocation, so updates are pull-based — re-run the installer
-          (or use <code>update</code> for one-shot detection):
-        </p>
-        <pre># Refresh whichever target is already installed in this project
-npx @boceto/skill update
-
-# Pull straight from the GitHub main branch (unreleased changes)
-npx @boceto/skill update --from-git
-
-# Just compare versions, don't change anything
-npx @boceto/skill update --check</pre>
-
-        <h3 id="skill-what">What's in the skill</h3>
-        <p>
-          The skill is organised by progressive disclosure — <code>SKILL.md</code>
-          stays under 500 lines so the assistant keeps it in context, and the
-          deep references load on demand:
+          <code>add mcp</code> writes the <code>mcpServers.boceto</code>
+          entry into your AI client's config <em>and</em> co-installs the
+          matching skill (the skill is what triggers the agent to call the
+          MCP tools — MCP alone leaves it with tools it doesn't know about).
+          Auto-detects when exactly one MCP-client config exists; otherwise
+          prompts. Atomic JSON merge — never clobbers other entries.
+          <code>--skip-skill</code> to install MCP only.
         </p>
         <table>
-          <thead><tr><th>File</th><th>Topic</th></tr></thead>
+          <thead><tr><th>MCP client (<code>add mcp</code>)</th><th>Skill goes to</th></tr></thead>
           <tbody>
-            <tr><td><code>SKILL.md</code></td><td>Quick-start, output contract, generic attributes, rendering aesthetic, common pitfalls, authoring philosophy (components-first), hallucination-to-real-type mapping table, parser strictness rules.</td></tr>
-            <tr><td><code>references/grammar.md</code></td><td>Tokens, escape sequences (<code>\"</code>, <code>\\</code>, <code>\n</code>, <code>\t</code>), IDs, attributes, comments, element-as-container, multi-page docs.</td></tr>
-            <tr><td><code>references/elements.md</code></td><td>All <strong>83 element types</strong> grouped by category, with default sizes, type-specific attrs (from the spec), and ASCII sketches so the AI has a visual mental model.</td></tr>
-            <tr><td><code>references/layout.md</code></td><td><code>row</code>/<code>col</code> flex semantics, child flex attrs, <code>auto</code> sizing, element-as-container.</td></tr>
-            <tr><td><code>references/components.md</code></td><td>Composite definitions, slots (default + named), responsive shells, defaults, parser limitations (slots can't nest inside <code>row</code>/<code>col</code>, element-as-container can't be used inside component bodies).</td></tr>
-            <tr><td><code>references/recipes.md</code></td><td>Clone-and-edit templates: login, signup, dashboard, mobile, modal, settings, marketing, chat, onboarding, pricing — <em>plus</em> reusable shells (<code>appshell</code>, <code>phoneshell</code>, <code>auth-shell</code>, <code>dialog</code>, <code>panel</code>, <code>kanban-column</code>, <code>metric-card</code>, <code>feature-card</code>).</td></tr>
+            <tr><td><code>claude-code</code></td><td><code>.claude/skills/boceto/</code> (project)</td></tr>
+            <tr><td><code>cursor</code></td><td><code>.cursor/rules/boceto.mdc</code> (project)</td></tr>
+            <tr><td><code>claude-desktop</code></td><td><code>~/.claude/skills/boceto/</code> (user)</td></tr>
           </tbody>
         </table>
-
-        <h3 id="skill-philosophy">What the skill teaches the AI</h3>
-        <ul>
-          <li><strong>Six positional slots on every <code>element</code> line</strong> — even chrome elements like <code>chart-bar</code>, <code>status-bar</code>, <code>home-indicator</code>, <code>divider</code>, <code>fab</code>, <code>spinner</code>, <code>table</code> need the <code>""</code> label slot. Dropping it is the #1 reason AI-generated Boceto fails to parse; the skill hammers this rule up front.</li>
-          <li><strong>Components-first authoring</strong> — when the user asks for something that isn't a built-in element type, define a composite <code>component</code> for it rather than inventing a type or pasting raw boxes. Same when 3+ shapes repeat or when the user is sketching a "category of screen" (a dashboard, a settings page) — wrap the chrome in an <code>appshell</code>-style component and place concrete widgets inside via slots.</li>
-          <li><strong>Default + named slots for shells</strong> — use named slots (<code>slot actions</code>, <code>slot footer</code>) when a template needs more than one fill point. The skill ships <code>dialog</code>, <code>panel</code>, <code>kanban-column</code>, and <code>appshell-with-actions</code> as ready-made examples.</li>
-          <li><strong>Canonical types only</strong> — the skill contains a mapping from 16+ common AI hallucinations (<code>Frame</code>, <code>Stack</code>, <code>NavBar</code>, <code>Heading2</code>, <code>icon-button</code>, <code>PhoneFrame</code>, …) to their real Boceto element types. The assistant consults this before emitting.</li>
-          <li><strong>Three parser limitations</strong> documented with the right workaround: element-as-container can't live inside a <code>component</code> body, <code>slot</code> markers must be top-level in a component body, component param names use JS identifier rules (no hyphens).</li>
-        </ul>
-
-        <h3 id="skill-try">Try it</h3>
-        <p>Once installed, open your assistant inside the project and ask:</p>
-        <pre>"Sketch a wireframe for a settings page with three sections."
-
-"Add a search bar at the top of this `​```boceto` block."
-
-"Mock up a Spotify-like mobile player wrapped in a phone-frame."
-
-"Define a reusable pricing-tier composite and place three tiers in a row."</pre>
-
         <p>
-          The assistant should return a single <code>​```boceto</code> fenced block
-          you can paste straight into a markdown file or feed to
-          <code>&lt;boceto-view&gt;</code>. If you see invented element types or
-          missing <code>""</code> label slots, re-run
-          <code>npx @boceto/skill update</code> — you may be running an older copy
-          of the skill.
+          <strong>For assistants without a standardised MCP config</strong>
+          (Aider, GitHub Copilot, OpenAI Codex / <code>AGENTS.md</code>,
+          Gemini CLI, Cline, Windsurf, …): use <code>boceto add skill &lt;target&gt;</code>
+          for the same set of targets the old <code>@boceto/skill install</code>
+          command supported. Run <code>boceto list skill</code> for the
+          full set.
+        </p>
+        <details>
+          <summary>Manual MCP install (edit JSON yourself)</summary>
+          <pre>{
+  "mcpServers": {
+    "boceto": {
+      "command": "npx",
+      "args": ["-y", "@boceto/mcp"]
+    }
+  }
+}</pre>
+          <p>Drop into <code>~/.claude.json</code>, <code>~/.cursor/mcp.json</code>, or the OS-specific Claude Desktop config and restart your client.</p>
+        </details>
+
+        <h3 id="mcp">MCP server — <code>@boceto/mcp</code></h3>
+        <p>
+          Closes the runtime loop:
+          generate DSL → <code>boceto_lint</code> → fix → <code>boceto_render_svg</code> → iterate.
+          Element catalog and recipes surface as on-demand tools so the
+          agent doesn't carry the whole canon in its context.
+        </p>
+
+        <h4 id="mcp-tools">Tools</h4>
+        <table>
+          <thead><tr><th>Tool</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td><code>boceto_parse</code></td><td>Parse DSL → <code>{ ok, doc }</code> or <code>{ ok: false, error: { line, message } }</code>.</td></tr>
+            <tr><td><code>boceto_lint</code></td><td>Issues with <code>line</code> / <code>column</code> / <code>endColumn</code> / <code>severity</code> / <code>fix</code>, plus a parse-clean <code>fixed</code> source.</td></tr>
+            <tr><td><code>boceto_fix</code></td><td>Returns the autofixed source directly.</td></tr>
+            <tr><td><code>boceto_render_svg</code></td><td>Render a page to a self-contained SVG (Yoga flex applied; deterministic).</td></tr>
+            <tr><td><code>boceto_list_elements</code></td><td>Every element type, grouped by category, with default sizes.</td></tr>
+            <tr><td><code>boceto_describe_element</code></td><td>One element's attribute schema and defaults.</td></tr>
+            <tr><td><code>boceto_list_recipes</code></td><td>All recipes (mockups + shells) with slug + summary.</td></tr>
+            <tr><td><code>boceto_read_recipe</code></td><td>The full markdown body of one recipe by slug.</td></tr>
+          </tbody>
+        </table>
+        <p>
+          The MCP server also exposes the skill canon + formal spec as
+          resources under <code>boceto://skill/*</code>,
+          <code>boceto://references/*</code>,
+          <code>boceto://recipes/index.md</code>, and
+          <code>boceto://spec/boceto-spec.md</code> — readable by any
+          resource-aware client.
+        </p>
+
+        <h3 id="ai-skill">AI Skill — <code>@boceto/skill</code></h3>
+        <p>
+          Trimmed teaching layer: <code>SKILL.md</code> (always loaded) +
+          three reference files (<code>grammar.md</code>, <code>layout.md</code>,
+          <code>component-doc-pattern.md</code>). The element catalog and
+          recipes live behind the MCP tools above — the skill is small on
+          purpose, so the agent keeps it in context. When asked for a
+          composite component, the agent returns <em>literate</em>
+          markdown: <code>##</code> heading + description + fenced
+          definition + example usage + <em>Used in</em> cross-reference.
+        </p>
+        <p>
+          Non-negotiables the skill teaches: six positional slots on every
+          <code>element</code> line, four positional slots on every
+          <code>row</code> / <code>col</code> line, canonical types only
+          (hallucination map for the common substitutes), components-first
+          authoring, definition-once per page, the literate output pattern,
+          and the three documented parser limitations.
+        </p>
+
+        <h4 id="skill-try">Try it</h4>
+        <pre>"Sketch a wireframe for a settings page with three sections."
+"Add a search bar at the top of this `​```boceto` block."
+"Mock up a Spotify-like mobile player wrapped in a phone-frame."
+"Define a reusable pricing-card composite and place three tiers in a row."</pre>
+        <p id="skill-update" class="anchor-target">
+          <strong>Updating</strong> — re-run <code>npx boceto add mcp --force</code>
+          (or <code>npx boceto add skill &lt;target&gt; --force</code>) to refresh.
+          <code>npx</code> always fetches the latest published CLI on each
+          invocation. <code>--from-git</code> pulls unreleased changes from
+          the <code>main</code> branch. <code>boceto check</code> compares
+          installed vs npm-latest.
         </p>
         </section>
 
@@ -1525,16 +1563,13 @@ const partial = applyFixes(source, report.issues.filter(i =&gt; i.rule === 'inve
           autofix in a single dispatch (one undo entry).
         </p>
 
-        <h3 id="lint-mcp">MCP server (planned)</h3>
+        <h3 id="lint-mcp">MCP server</h3>
         <p>
-          The linter is the foundation for an upcoming <code>@boceto/mcp</code>
-          MCP server, which will expose <code>parse</code>,
-          <code>renderSvg</code>, and <code>lint</code> as tools an AI agent
-          can call directly. That gives autonomous agents a closed-loop:
-          generate DSL → lint → apply autofixes → render → iterate. The
-          linter's character-precise diagnostics + autofix payloads are
-          exactly the shape MCP tool calls want, so the same package
-          will be reused unchanged.
+          The linter is the foundation of <code>@boceto/mcp</code>, the MCP
+          server that lets any AI client call <code>boceto_lint</code>,
+          <code>boceto_fix</code>, <code>boceto_render_svg</code>, and friends
+          directly. See <a href="#mcp">AI assistance → MCP server</a> above for
+          the install snippet and the full tool / resource list.
         </p>
         </section>
 

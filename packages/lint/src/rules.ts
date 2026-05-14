@@ -164,12 +164,32 @@ const elementArity: Rule = (lines) => {
   return out
 }
 
+/**
+ * Collect the names of every `component NAME(...)` definition in the
+ * source. Used by the type-checking rules so a call site like
+ * `element pricing-card 0 0 ...` isn't flagged when `pricing-card` is
+ * declared as a composite earlier in the doc. The check is purely
+ * lexical — it doesn't validate the definition itself; the parser
+ * cross-check handles that.
+ */
+function collectUserDefinedComponents(lines: readonly ParsedLine[]): Set<string> {
+  const names = new Set<string>()
+  for (const ln of lines) {
+    if (ln.kind !== 'component') continue
+    const m = ln.trimmed.match(/^component\s+([A-Za-z][A-Za-z0-9_-]*)/)
+    if (m && m[1]) names.add(m[1])
+  }
+  return names
+}
+
 const inventedType: Rule = (lines) => {
   const out: LintIssue[] = []
+  const userDefined = collectUserDefinedComponents(lines)
   for (const ln of lines) {
     if (ln.kind !== 'element' || !ln.typeToken) continue
     const { type: t, token: tok, id } = ln.typeToken
     if (isKnownElementType(t)) continue
+    if (userDefined.has(t)) continue // composite the user defined
     const real = INVENTED_TYPE_MAP.get(t) ?? INVENTED_TYPE_MAP.get(t.toLowerCase())
     if (!real) continue
     out.push({
@@ -188,10 +208,12 @@ const inventedType: Rule = (lines) => {
 
 const unknownType: Rule = (lines) => {
   const out: LintIssue[] = []
+  const userDefined = collectUserDefinedComponents(lines)
   for (const ln of lines) {
     if (ln.kind !== 'element' || !ln.typeToken) continue
     const { type: t, token: tok } = ln.typeToken
     if (isKnownElementType(t)) continue
+    if (userDefined.has(t)) continue // composite the user defined in this doc
     if (INVENTED_TYPE_MAP.has(t) || INVENTED_TYPE_MAP.has(t.toLowerCase())) continue
     const suggestion = closestKnownType(t)
     out.push({

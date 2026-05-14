@@ -3,7 +3,7 @@ import { defineConfig } from 'tsup'
 // See packages/view/tsup.config.ts for the two-entry rationale.
 export default defineConfig([
   {
-    entry: ['src/index.ts'],
+    entry: ['src/index.ts', 'src/catalog.ts'],
     format: ['esm', 'cjs'],
     dts: true,
     sourcemap: true,

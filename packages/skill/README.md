@@ -1,53 +1,40 @@
 # @boceto/skill
 
-AI-assistant authoring instructions for the [Boceto wireframe DSL](https://github.com/maravilla-labs/boceto). Teaches Claude (and other coding assistants) the full grammar, all 83 element types with ASCII renders, layout primitives, composite components, and battle-tested recipes — so the AI can sketch wireframes that render correctly first try.
+AI-assistant authoring instructions for the [Boceto wireframe DSL](https://github.com/maravilla-labs/boceto). Teaches Claude (and other coding assistants) the DSL grammar, layout rules, components-first authoring, and the literate component-documentation pattern — so the AI can sketch wireframes that render correctly first try.
 
-The skill bundles the spec + element catalog as markdown, so any AI agent that reads "rules files" can use it.
+This package ships **content only** — `SKILL.md` plus a handful of reference files. The CLI that installs them into your AI tool of choice is the separate [`boceto`](https://www.npmjs.com/package/boceto) package.
 
 ## Install
 
-```sh
-# Interactive — picks the right format for your AI tool
-npx @boceto/skill install
-
-# Or be explicit:
-npx @boceto/skill install claude        # .claude/skills/boceto/
-npx @boceto/skill install cursor        # .cursor/rules/boceto.mdc
-npx @boceto/skill install cline         # .clinerules/
-npx @boceto/skill install windsurf      # .windsurfrules
-npx @boceto/skill install aider         # BOCETO.md + .aider.conf.yml hint
-npx @boceto/skill install copilot       # .github/copilot-instructions.md
-npx @boceto/skill install codex         # AGENTS.md  (also: `agents` — picked up by OpenAI Codex, Sourcegraph Cody, agentsmd.dev tools)
-npx @boceto/skill install gemini        # GEMINI.md  (Gemini CLI / Code Assist)
-npx @boceto/skill install raw           # ./boceto-skill/ (point your tool at it)
-```
-
-The skill content is identical across targets — only file layout and frontmatter differ.
-
-## Updating
+Use the unified Boceto CLI:
 
 ```sh
-# Refresh whatever's already installed in this project (auto-detected)
-npx @boceto/skill update
-
-# Fetch the very latest from github.com/maravilla-labs/boceto main branch,
-# bypassing npm — useful for unreleased changes
-npx @boceto/skill update --from-git
-
-# Just check whether you're behind
-npx @boceto/skill update --check
+npx boceto add skill                    # interactive picker
+npx boceto add skill claude             # .claude/skills/boceto/
+npx boceto add skill cursor             # .cursor/rules/boceto.mdc
+npx boceto add skill cline              # .clinerules/
+npx boceto add skill windsurf           # .windsurfrules
+npx boceto add skill aider              # BOCETO.md
+npx boceto add skill copilot            # .github/copilot-instructions.md
+npx boceto add skill codex              # AGENTS.md (cross-agent — OpenAI Codex, Sourcegraph Cody, agentsmd.dev)
+npx boceto add skill gemini             # GEMINI.md (Gemini CLI / Code Assist)
+npx boceto add skill raw                # ./boceto-skill/ (you handle it)
 ```
 
-The vanilla `update` uses the version of `@boceto/skill` that `npx` fetched on this invocation — `npx` defaults to the latest version on each run, so you stay current without doing anything special. Use `--from-git` only when you want unreleased changes from `main`.
+Or — recommended for MCP-aware assistants — run **`npx boceto add mcp`** to install the MCP server *and* the matching skill for your AI client in one shot. The skill is what triggers the agent to use the MCP tools; installing MCP without the skill gives the agent tools it doesn't know to call.
 
-## What's in the skill
+### Migrating from `@boceto/skill@0.2.x`
 
-- **`SKILL.md`** — entry point. DSL summary, output contract, generic attributes, common pitfalls. Stays under 500 lines so the AI can keep it in context.
-- **`references/grammar.md`** — file embedding forms, tokens, escape sequences, IDs, attributes, comments, element-as-container, multi-page docs.
-- **`references/elements.md`** — all 83 element types grouped by category (Layout / Typography / Form / Media / Content / Navigation / Feedback / Data viz / Mobile / System / AR). Each with default size, type-specific attrs, and an ASCII sketch of how it renders.
-- **`references/layout.md`** — `row` / `col` flex semantics, per-child flex attrs, `auto` sizing, element-as-container.
-- **`references/components.md`** — composite definitions, parameter substitution, named slots, responsive shells, defaults.
-- **`references/recipes.md`** — 10 self-contained mockup recipes (login, signup, dashboard, mobile, modal, settings, marketing site, chat, onboarding, pricing).
+The published bin (`npx @boceto/skill install …`) is gone as of 0.3.0. Use `npx boceto add skill …` instead — same 12 targets, same on-disk layouts, plus a few new features (smart-routing, `--from-git`, `--name`).
+
+## What's bundled
+
+- `skill/SKILL.md` — entry point. Always-loaded teaching: trigger phrases, the non-negotiables (six-slot rule, canonical types, integers + quoted labels, components-first), the hallucination map, MCP-aware authoring flow.
+- `skill/references/grammar.md` — tokens, escapes, IDs, attributes, multi-page docs.
+- `skill/references/layout.md` — full flex semantics for power users.
+- `skill/references/component-doc-pattern.md` — the literate output pattern for composite components.
+
+The element catalog and recipes live behind the [`@boceto/mcp`](https://www.npmjs.com/package/@boceto/mcp) server's `boceto_list_elements`, `boceto_describe_element`, `boceto_list_recipes`, and `boceto_read_recipe` tools — fetched on demand instead of carried in every chat.
 
 ## Try it
 
@@ -57,16 +44,16 @@ Once installed, ask your AI:
 
 > "Add a search bar at the top of this `​```boceto` block."
 
-> "Mock up a Spotify-like mobile player."
+> "Define a reusable pricing-card composite and place three tiers in a row."
 
-The AI should respond with a fenced `​```boceto` block that parses cleanly via `@boceto/core` and renders via `<boceto-view>` or `@boceto/remark`.
+The AI should respond with one or more fenced `​```boceto` blocks that parse cleanly via `@boceto/core` and render via `<boceto-view>` or `@boceto/remark`.
 
 ## Want to know more about Boceto?
 
 - Website: https://maravilla-labs.github.io/boceto/
 - DSL spec: [spec/boceto-spec.md](https://github.com/maravilla-labs/boceto/blob/main/spec/boceto-spec.md)
 - Web components: `<boceto-view>` (read-only renderer), `<boceto-edit>` (interactive editor)
-- npm: `@boceto/core` · `@boceto/view` · `@boceto/edit` · `@boceto/remark` · `@boceto/markdown-it` · `@boceto/react`
+- npm: `boceto` (CLI) · `@boceto/mcp` (MCP server) · `@boceto/lint` (linter) · `@boceto/core` · `@boceto/view` · `@boceto/edit` · `@boceto/remark` · `@boceto/markdown-it` · `@boceto/react` · `@boceto/vue` · `@boceto/svelte`
 
 ## License
 

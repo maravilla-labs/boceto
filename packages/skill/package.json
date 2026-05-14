@@ -1,14 +1,10 @@
 {
   "name": "@boceto/skill",
-  "version": "0.2.0",
-  "description": "AI-assistant skill for authoring Boceto wireframes. Installs into Claude Code, Cursor, Cline, Windsurf, Aider, or any tool that reads markdown rules files.",
+  "version": "0.3.0",
+  "description": "Boceto authoring skill content (SKILL.md + references) for AI coding assistants. Installed via `npx boceto add skill <target>` — Claude Code, Cursor, Cline, Aider, Copilot, Codex, Gemini, and more.",
   "license": "MIT",
   "type": "module",
-  "bin": {
-    "boceto-skill": "./bin/install.js"
-  },
   "files": [
-    "bin",
     "skill",
     "README.md"
   ],

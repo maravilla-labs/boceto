@@ -286,6 +286,40 @@ describe('lint integration', () => {
     expect(pe!.line).toBe(4) // not 3 (parser-relative)
   })
 
+  it('does NOT false-positive on a literate doc — component definition in one fence, calls in another', () => {
+    // Regression: the per-fence loop used to call `parse(body, { raw: true })`,
+    // which skips Pass-1 component extraction. Every `component foo(...)`
+    // definition tripped "Unknown statement keyword component", and the
+    // matching `element foo ...` call sites in the next fence tripped
+    // "Unknown element type". The literate component-doc pattern relies on
+    // this multi-fence layout, so the fix is to parse the whole source at
+    // once so cross-fence component references resolve.
+    const src = [
+      '## pricing-card',
+      '',
+      'A reusable pricing card.',
+      '',
+      '```boceto',
+      'component pricing-card(title, price)',
+      '  element heading 0  0 200 28 "$title"',
+      '  element heading 0 36 200 36 "$price"',
+      '  slot',
+      'end',
+      '```',
+      '',
+      '**Example usage:**',
+      '',
+      '```boceto',
+      'element pricing-card 0 0 240 320 "" title="Pro" price="$29/mo" :',
+      '  element list 0 0 200 80 "" items="A|B|C"',
+      'end',
+      '```',
+    ].join('\n')
+    const r = lint(src)
+    expect(r.errorCount).toBe(0)
+    expect(r.issues.find((x) => x.rule === 'parse-error')).toBeUndefined()
+  })
+
   it('surfaces parse-error as a final issue when rules left something broken', () => {
     // An unsupported element-as-container inside a `component` body
     const src = [

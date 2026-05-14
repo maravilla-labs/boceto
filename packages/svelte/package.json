@@ -1,0 +1,53 @@
+{
+  "name": "@boceto/svelte",
+  "version": "0.1.0",
+  "description": "Svelte components wrapping <boceto-view> and <boceto-edit>. Works with Svelte 4 and Svelte 5.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "main": "./src/index.js",
+  "svelte": "./src/index.js",
+  "types": "./src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "svelte": "./src/index.js",
+      "import": "./src/index.js"
+    },
+    "./BocetoView.svelte": {
+      "types": "./src/BocetoView.svelte.d.ts",
+      "svelte": "./src/BocetoView.svelte",
+      "default": "./src/BocetoView.svelte"
+    },
+    "./BocetoEdit.svelte": {
+      "types": "./src/BocetoEdit.svelte.d.ts",
+      "svelte": "./src/BocetoEdit.svelte",
+      "default": "./src/BocetoEdit.svelte"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "echo 'svelte source-only — no build step (consumers compile via their own Svelte tooling)'",
+    "test": "echo 'svelte typecheck is run by consumers; no programmatic tests'"
+  },
+  "peerDependencies": {
+    "svelte": "^4.0.0 || ^5.0.0"
+  },
+  "dependencies": {
+    "@boceto/core": "workspace:*",
+    "@boceto/edit": "workspace:*",
+    "@boceto/view": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/maravilla-labs/boceto.git",
+    "directory": "packages/svelte"
+  }
+}
