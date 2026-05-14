@@ -32,6 +32,62 @@ element button     304 312 196 30 "Register"
 
 This snippet renders to a hand-drawn login screen via `<boceto-view>` or any of the Boceto renderers. Do not wrap the block in extra prose unless the user asked for narration.
 
+## Authoring philosophy — components first, ad-hoc boxes second
+
+Boceto is a tiny DSL but it's expressive enough to reward a **modular** authoring style. Before you start placing individual boxes, ask three questions:
+
+1. **Is what they're asking for already an element type?** If yes (`navbar`, `chart-donut`, `phone-frame`, `chat-bubble`, …), use it directly. Check `references/elements.md`.
+2. **Is what they're asking for an obvious composition?** A "feature card" is a `card` plus a `heading` plus a `label`. A "metric tile" is a `card` plus a small `label` plus a large `heading`. Define these as **`component`s** — see `references/components.md` — so the page-level DSL stays short and readable, and tweaks happen in one place. **Never invent an element type**; if there's no built-in match, the answer is a `component`, not a made-up name.
+3. **Is what they're asking for a page shell or layout template?** A dashboard is almost always `navbar` + `sidebar` + content; a mobile screen is `phone-frame` + `status-bar` + content + `home-indicator`; an auth screen is a centered `card` on a blank canvas. **Define a shell `component` once**, then place concrete widgets inside it via a slot or by listing them at the call site. See "Templates and shells" in `references/recipes.md`.
+
+The rule of thumb: **if the same shape appears 3+ times, or if the user is sketching a category of screen rather than a one-off page, reach for a `component`**. The result is dramatically cleaner DSL, easier diffs when the user iterates, and a mental model the user can extend ("add another metric card" instead of "add another set of 6 attributes").
+
+When you're unsure, default to composing. A 60-line page made of 4 component calls is easier to read and edit than a 60-line page of raw `element` lines.
+
+### What to do when the user asks for an element that doesn't exist
+
+Two valid paths — pick the one that fits the user's intent:
+
+- **Most of the time: build it as a composite component.** If they ask for a "stat tile", define `component stat-tile(label, value) … end` with the 2–3 primitives it actually needs (a `card` + a small `label` + a big `heading`). Then call it. Composable, named, reusable.
+- **For one-off chrome they'll never re-use, fall back to the closest primitive.** A "page header" is just a `box` at the top with a `heading` inside. Don't define a component for something you'll never call twice.
+
+The exception is **chrome** — `navbar`, `sidebar`, `phone-frame`, `status-bar`, `home-indicator`, `browser-frame`, `window-frame`, `terminal`. Those are real element types; don't componentize them. But you can put one *inside* a shell component (e.g. an `appshell` component that includes a `navbar` + a `sidebar` slot).
+
+### Params vs slots — pick the right tool
+
+Composite components have two ways to vary content per call site, and the difference matters for readability and reuse:
+
+- **Params** (`component foo(title, value)` + `$title` / `${value}`) — for **scalar inputs**: titles, values, colors, item counts, item lists (via pipe-separated strings). Short, attribute-like. Each call site sets them as `key=value` attrs: `element foo 0 0 200 60 "" title="X" value="42"`.
+- **Slots** (`slot` or `slot NAME` in the body) — for **DSL-shaped inputs**: a header, a body, a row of actions, anything that's multiple `element` lines. Each call site supplies the fill via a children block at its trailing `:`. The default `slot` (unnamed) receives bare children; `slot NAME` receives the children inside a matching `slot NAME … end` sub-block at the call site.
+
+A reusable shell typically uses **both**: params for chrome strings (page title, brand name, nav items) and slots for the body content the user fills in. The two combine well:
+
+```boceto
+component dialog(title)
+  element box     0   0 400 220 ""
+  element heading 20  16 360  28 "$title"
+  element divider 20  50 360   1 ""
+  slot                                    # default slot — dialog body
+  element divider 20 168 360   1 ""
+  slot actions                            # named slot — footer button row
+end
+
+# Call site fills BOTH slots
+element dialog 100 80 400 220 "" title="Confirm delete" :
+  element label 20 64 360 90 "This will permanently delete the project. Are you sure?"
+  slot actions
+    element button         200 180 80 28 "Cancel"
+    element primary-button 290 180 80 28 "Delete"
+  end
+end
+```
+
+Without named slots you'd have to expose the actions via params (a brittle pipe-list of button labels) or hardcode them. With slots the call site supplies real DSL — different elements, different counts, different styling per call.
+
+**When a shell has more than one "fill region"** — body + footer, header actions + content, sidebar items + main — use **named slots**. The user is asking for a template, and templates that only support a single fill point feel cramped fast.
+
+See `references/components.md` for the full slot grammar, including how to define a default slot alongside named ones, and which call-site shape goes with which body slot.
+
 ## The one rule the parser is strictest about
 
 **Every `element` line has six positional slots before any `key=value` attrs:**
@@ -179,7 +235,29 @@ Mentally run through these — they're the high-frequency failure modes.
 2. Every line starts with `element`, `text`, `arrow`, `row`, `col`, `end`, `component`, or `slot`.
 3. Coordinates are integers ≥ 0.
 4. Labels are quoted; multi-line labels use `\n` inside the quotes.
-5. Element types come from the 83 in `references/elements.md` — **not invented**. Common invented types: `Frame`, `Stack`, `Link`, `Heading2`, `header`, `footer`, `menu-bar`, `nav` — none of these exist. Map them: a generic frame is `box` or `card`; navigation is `navbar` or `breadcrumb`; a link is `button` with a `kbd`-like style; "header" is just a `box` at the top.
+5. Element types come from the 83 in `references/elements.md` — **not invented**. Below is the canonical map of common AI hallucinations to real types. If a name you want to use is NOT in `references/elements.md`, find its closest real type here first; do not emit unknown types — the parser will reject them.
+
+   | If you'd write… | Use this Boceto type instead |
+   |---|---|
+   | `Frame`, `frame`, `Container`, `Section` | `box` (generic) or `card` (with header divider) |
+   | `Stack`, `VStack`, `HStack`, `Group` | `row` or `col` (flex container) |
+   | `Link`, `link`, `TextLink` | `button` with a small size, or `label` with a colored fontSize |
+   | `Heading2`, `Heading3`, `H1`, `H2`, `Subheading` | `heading` (use `fontSize=22` for h1, `fontSize=18` for h2, `fontSize=16` for h3) |
+   | `header`, `Header`, `PageHeader` | `box` (or `card`) at the top of the page; or `navbar` if it's the global nav |
+   | `footer`, `Footer` | `box` at the bottom |
+   | `menu-bar`, `MenuBar`, `nav` | `navbar` |
+   | `NavBar`, `TopBar`, `AppBar` | `navbar` |
+   | `Tab`, `tab-bar`, `TabBar` | `tabs` |
+   | `Icon`, `icon`, `IconButton`, `icon-button` | `button` (just smaller, e.g. 32×32), or `avatar` for round-ish icons |
+   | `Pill`, `Tag` | `chip` or `badge` |
+   | `Card`, `Panel` (capitalised) | `card` (lower-case is the real one) |
+   | `StatusBar` (capitalised) | `status-bar` (kebab-case is the real one) |
+   | `PhoneFrame`, `HomeIndicator` | `phone-frame`, `home-indicator` (kebab-case) |
+   | `Fab`, `FAB`, `FloatingButton` | `fab` |
+   | `Spacer`, `Divider` (capitalised) | `divider` |
+   | `Avatar` (capitalised) | `avatar` |
+
+   Element types are **always lowercase, kebab-cased** (`primary-button` not `primaryButton`). Component-instance call sites use the component name verbatim (case-sensitive).
 6. Open `row` / `col` / `component` blocks are closed with `end`.
 7. The block opens with `​```boceto` or `​```boceto:PageName`.
 

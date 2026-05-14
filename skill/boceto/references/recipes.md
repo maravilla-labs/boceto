@@ -261,6 +261,269 @@ element button 660 480 240 36 "Contact sales"
 
 ---
 
+## Templates and shells (composite components)
+
+These are the **modular building blocks** — define them at the top of your block and call them like primitives. They keep page-level DSL short, give the user a vocabulary to extend ("add another metric card"), and concentrate styling tweaks in one place.
+
+Define what you need, call it, fill in the gaps. Don't define a component you'll only call once — see "Quick decision guide" at the bottom of this file.
+
+### `appshell` — desktop chrome (navbar + sidebar + content)
+
+```boceto
+component appshell(title, navItems)
+  element navbar  0  0 900 44 "$title"
+  element sidebar 0 44 200 556 "" items="$navItems"
+  slot
+end
+```
+
+Call site fills the default slot with the page-specific content:
+
+```boceto
+element appshell 0 0 900 600 "" title="My App" navItems="Pricing|Docs|Logout" :
+  element heading 232 70 600 32 "Overview"
+  element card 232 110 600 400 ""
+end
+```
+
+The content elements use coordinates that account for the 200px sidebar + 44px navbar (so content starts at x=232 and y≥70).
+
+### `phoneshell` — mobile chrome (phone-frame + status bar + nav + home indicator)
+
+```boceto
+component phoneshell(title)
+  element phone-frame 0 0 360 720 "" model=iphone
+  element status-bar 20 12 320 24 ""
+  element navbar 20 44 320 44 "$title"
+  slot
+  element home-indicator 20 700 320 8 ""
+end
+```
+
+Call site:
+
+```boceto
+element phoneshell 0 0 360 720 "" title="Inbox" :
+  element search 20 100 320 36 "Search"
+  element card   20 148 320 80 "Sarah"
+  element card   20 240 320 80 "Slack"
+  element card   20 332 320 80 "GitHub"
+  element fab   288 632  56  56 "+"
+end
+```
+
+### `auth-shell` — centered card on a blank page
+
+```boceto
+component auth-shell(brand)
+  element navbar 0 0 600 44 "$brand"
+  element card 100 90 400 340 ""
+  slot
+end
+```
+
+Call site only worries about the form fields, not the page chrome:
+
+```boceto
+element auth-shell 0 0 600 480 "" brand="MyApp" :
+  element heading 120 110 360 32 "Welcome back"
+  element input 120 160 360 36 "Email"
+  element input 120 206 360 36 "Password"
+  element primary-button 120 254 360 36 "Sign In"
+  element button 120 302 360 30 "Forgot password?"
+end
+```
+
+### `metric-card` — small label + big number
+
+```boceto
+component metric-card(label, value)
+  element card 0 0 220 90 ""
+  element label    16 14 188 18 "$label"
+  element heading  16 36 188 36 "$value" fontSize=26
+end
+```
+
+Now three metric tiles on a dashboard become three short lines:
+
+```boceto
+element metric-card 232 110 220 90 "" label="Revenue"        value="$48.2k"
+element metric-card 470 110 220 90 "" label="Active users"   value="12,408"
+element metric-card 708 110 220 90 "" label="Conversion"    value="3.2%"
+```
+
+### `dialog` — header + body slot + actions slot
+
+Two slots: the default for the dialog message, named `actions` for the bottom-right buttons.
+
+```boceto
+component dialog(title)
+  element box     0   0 400 220 ""
+  element heading 20  16 360  28 "$title"
+  element divider 20  50 360   1 ""
+  slot
+  element divider 20 168 360   1 ""
+  slot actions
+end
+```
+
+Call site fills both — body via bare children, actions inside a `slot actions … end`:
+
+```boceto
+element dialog 100 80 400 220 "" title="Confirm delete" :
+  element label 20 64 360 90 "This will permanently delete the project. Are you sure?"
+  slot actions
+    element button         200 180  80 28 "Cancel"
+    element primary-button 290 180  80 28 "Delete"
+  end
+end
+```
+
+The same `dialog` works for an info dialog (different label, different actions), a multi-step confirmation (a `stepper` in the body slot), a form modal (inputs in the body, "Save" / "Cancel" in actions). One component, many shapes.
+
+### `panel` — header bar + body + footer slot
+
+For sidebar-like panels that need header chrome, a content area, and a footer row:
+
+```boceto
+component panel(title)
+  element box      0   0 300 400 ""
+  element heading 16  14 268  24 "$title"
+  element divider 16  46 268   1 ""
+  slot
+  element divider 16 360 268   1 ""
+  slot footer
+end
+```
+
+```boceto
+element panel 0 0 300 400 "" title="Filters" :
+  element label    16  56 268 20 "Status"
+  element checkbox 16  84 268 24 "Active"
+  element checkbox 16 112 268 24 "Archived"
+  element label    16 156 268 20 "Owner"
+  element input    16 184 268 32 "Search…"
+  slot footer
+    element button         16 372 100 28 "Reset"
+    element primary-button 184 372 100 28 "Apply"
+  end
+end
+```
+
+### `appshell-with-actions` — navbar (with right-side actions) + sidebar + content
+
+Adds a named slot to the desktop shell for navbar action items (like a search bar and avatar) the call site can supply:
+
+```boceto
+component appshell-with-actions(title, navItems)
+  element navbar  0  0 1000 44 "$title" items="$navItems"
+  slot actions                                  # navbar right side, overlayed
+  element sidebar 0 44 220 556 "" items="$navItems"
+  slot                                          # main content
+end
+```
+
+```boceto
+element appshell-with-actions 0 0 1000 600 "" title="Acme" navItems="Users|Settings|Billing" :
+  slot actions
+    element search       620 6 240 32 "Search…"
+    element avatar       870 6  32 32 "JD"
+    element notification-bell 920 6 32 32 ""
+  end
+  element heading 252 70 720 32 "Dashboard"
+  element chart-bar 252 110 720 400 "" data="3,5,2,7,4,6,5"
+end
+```
+
+### `kanban-column` — header with actions slot + cards-stack slot
+
+The natural impulse is to wrap the column header in a `row` containing the title + an actions slot. **That doesn't parse** — `slot` markers must be direct top-level statements in the component body, never nested inside `row` / `col`. The pattern that works: place the title and the actions slot side-by-side using absolute coords at the top of the body, then list slots at the top level for the rest:
+
+```boceto
+component task-card(title, meta)
+  element card    0  0 256 64 ""
+  element heading 10  8 236 22 "$title" fontSize=16
+  element label   10 34 236 22 "$meta"  fontSize=12
+end
+
+component kanban-column(title)
+  element box     0   0 280 460 ""
+  element heading 12 12 200 24 "$title" fontSize=18
+  slot actions                              # actions slot at top-level
+  element divider  0 44 280  1 ""
+  slot                                      # default slot for the cards stack
+end
+
+# Three columns side by side
+element kanban-column 20  20 280 460 "" title="Todo" :
+  slot actions
+    element button 236 12 32 24 "+"
+  end
+  element task-card 12  60 256 64 "" title="Draft spec"      meta="Owner: Ana"
+  element task-card 12 132 256 64 "" title="Wireframe board" meta="Owner: Leo"
+  element task-card 12 204 256 64 "" title="Pick palette"    meta="Owner: Mia"
+end
+```
+
+(Two more `kanban-column` calls at x=310 and x=600 give you a 3-column board.) The actions slot lives at the top-level of the body. The call site positions its `+` button at `x=236` (the right edge of the column header). The default slot's task cards are positioned with absolute coords from the call site.
+
+### `feature-card` — title + body, for marketing pages
+
+```boceto
+component feature-card(title, body)
+  element card 0 0 280 200 ""
+  element heading 16 16 248 32 "$title"
+  element label   16 60 248 124 "$body"
+end
+```
+
+### `nav-item` — sidebar row with icon dot + label
+
+If you need a sidebar with custom rows (the built-in `sidebar` uses `items=` but doesn't let you add badges or sub-rows), build it:
+
+```boceto
+component nav-item(label)
+  element status-dot 12 8 8 8 ""
+  element label      28 4 160 18 "$label"
+end
+```
+
+### Composing shells: full dashboard from the building blocks
+
+```boceto
+component appshell(title, navItems)
+  element navbar  0  0 900 44 "$title"
+  element sidebar 0 44 200 556 "" items="$navItems"
+  slot
+end
+
+component metric-card(label, value)
+  element card 0 0 220 90 ""
+  element label    16 14 188 18 "$label"
+  element heading  16 36 188 36 "$value" fontSize=26
+end
+
+element appshell 0 0 900 600 "" title="Analytics" navItems="Overview|Sales|Users|Settings" :
+  element heading 232 70 660 28 "Overview"
+  element metric-card 232 110 220 90 "" label="Revenue"      value="$48.2k"
+  element metric-card 470 110 220 90 "" label="Active users" value="12,408"
+  element metric-card 708 110 220 90 "" label="Conversion"   value="3.2%"
+  element chart-bar  232 220 660 280 "" data="34,45,28,52,41,38,49"
+  element table      232 520 660 60  "" headers="When|User|Action"
+end
+```
+
+Compare this to the flat dashboard recipe earlier — same screen, half the lines, and "add another metric" or "add a sales section" is a one-line edit.
+
+## Quick decision guide
+
+Use this when you start a new mockup:
+
+- **The user asked for a one-off screen with unique content** → flat DSL, no components.
+- **The user asked for a category of screen** ("a settings page", "a chat app", "a dashboard") → define a `*shell` component for the chrome, place concrete content inside.
+- **The same shape appears 3+ times on this page or any page** → componentize it (`metric-card`, `feature-card`, `nav-item`, `pricing-tier`, …).
+- **The user asks for an element type that doesn't exist** in `references/elements.md` → define a composite component named after what they asked for. Don't invent the type. Don't use the closest primitive without naming it — naming it is what makes the next edit one line.
+
 ## Patterns for adapting these
 
 - **Resize**: stretch the whole page by adjusting the navbar/sidebar widths and recalculating the content x-origin (usually navbar/sidebar width + 32px gutter).

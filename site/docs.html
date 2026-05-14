@@ -177,6 +177,7 @@
         <a href="#sec-layout" data-section="sec-layout">Layout</a>
         <a href="#sec-components" data-section="sec-components">Components</a>
         <a href="#sec-web-components" data-section="sec-web-components">Web Components</a>
+        <a href="#sec-skill" data-section="sec-skill">AI Skill</a>
         <a href="#sec-reference" data-section="sec-reference">Reference</a>
       </div>
     </nav>
@@ -1241,6 +1242,112 @@ const updated = ed.code   // serialised on demand</pre>
   onSelect={(ids) =&gt; setSelectedIds(ids)}
   readOnly={isLocked}
 /&gt;</pre>
+        </section>
+
+        <section id="sec-skill" data-section="sec-skill">
+        <!-- ─────────────────────────────────────────────────────────── -->
+        <h2 id="ai-skill">AI assistant skill — <code>@boceto/skill</code></h2>
+        <p>
+          A drop-in skill that teaches Claude, Cursor, Cline, Aider, GitHub Copilot,
+          OpenAI Codex, Gemini CLI, Windsurf, and any other AI coding assistant
+          how to author valid Boceto wireframes. After installing, ask your
+          assistant for a mockup — <em>"sketch a settings page"</em>, <em>"add a
+          search bar at the top of this <code>​```boceto</code> block"</em>, <em>"mock
+          up a Spotify-like player on mobile"</em> — and it produces a fenced
+          <code>​```boceto</code> block that parses cleanly via <code>@boceto/core</code>
+          and renders via <code>&lt;boceto-view&gt;</code> first try.
+        </p>
+
+        <p style="margin-top: 12px;">
+          In benchmarks the skill produces <strong>63 / 63 valid mockups across
+          10 categories</strong> (login, edit-existing, mobile chat, composite
+          components, flex containers, charts, multi-page docs, fictional-element
+          componentization, shell-driven multi-page admin tools, named-slot kanban
+          boards) — vs. ~40% for the same prompts without the skill, where the
+          assistant invents element types like <code>Frame</code> / <code>Stack</code> /
+          <code>icon-button</code> that don't exist.
+        </p>
+
+        <h3 id="skill-install">Install</h3>
+        <p>
+          Pick your assistant. The same skill content gets reshaped into the file
+          layout each tool expects:
+        </p>
+        <pre># Interactive picker — recommended on first run
+npx @boceto/skill install
+
+# Or be explicit
+npx @boceto/skill install claude        # .claude/skills/boceto/  (per-project)
+npx @boceto/skill install claude-user   # ~/.claude/skills/boceto/  (all projects)
+npx @boceto/skill install cursor        # .cursor/rules/boceto.mdc
+npx @boceto/skill install cline         # .clinerules/
+npx @boceto/skill install windsurf      # .windsurfrules
+npx @boceto/skill install aider         # BOCETO.md (+ how-to for .aider.conf.yml)
+npx @boceto/skill install copilot       # .github/copilot-instructions.md
+npx @boceto/skill install codex         # AGENTS.md  (cross-agent — Codex, Cody, agentsmd.dev)
+npx @boceto/skill install gemini        # GEMINI.md  (Gemini CLI / Code Assist)
+npx @boceto/skill install raw           # ./boceto-skill/  (self-route)</pre>
+
+        <h3 id="skill-update">Update</h3>
+        <p>
+          <code>npx</code> fetches the latest published <code>@boceto/skill</code>
+          on each invocation, so updates are pull-based — re-run the installer
+          (or use <code>update</code> for one-shot detection):
+        </p>
+        <pre># Refresh whichever target is already installed in this project
+npx @boceto/skill update
+
+# Pull straight from the GitHub main branch (unreleased changes)
+npx @boceto/skill update --from-git
+
+# Just compare versions, don't change anything
+npx @boceto/skill update --check</pre>
+
+        <h3 id="skill-what">What's in the skill</h3>
+        <p>
+          The skill is organised by progressive disclosure — <code>SKILL.md</code>
+          stays under 500 lines so the assistant keeps it in context, and the
+          deep references load on demand:
+        </p>
+        <table>
+          <thead><tr><th>File</th><th>Topic</th></tr></thead>
+          <tbody>
+            <tr><td><code>SKILL.md</code></td><td>Quick-start, output contract, generic attributes, rendering aesthetic, common pitfalls, authoring philosophy (components-first), hallucination-to-real-type mapping table, parser strictness rules.</td></tr>
+            <tr><td><code>references/grammar.md</code></td><td>Tokens, escape sequences (<code>\"</code>, <code>\\</code>, <code>\n</code>, <code>\t</code>), IDs, attributes, comments, element-as-container, multi-page docs.</td></tr>
+            <tr><td><code>references/elements.md</code></td><td>All <strong>83 element types</strong> grouped by category, with default sizes, type-specific attrs (from the spec), and ASCII sketches so the AI has a visual mental model.</td></tr>
+            <tr><td><code>references/layout.md</code></td><td><code>row</code>/<code>col</code> flex semantics, child flex attrs, <code>auto</code> sizing, element-as-container.</td></tr>
+            <tr><td><code>references/components.md</code></td><td>Composite definitions, slots (default + named), responsive shells, defaults, parser limitations (slots can't nest inside <code>row</code>/<code>col</code>, element-as-container can't be used inside component bodies).</td></tr>
+            <tr><td><code>references/recipes.md</code></td><td>Clone-and-edit templates: login, signup, dashboard, mobile, modal, settings, marketing, chat, onboarding, pricing — <em>plus</em> reusable shells (<code>appshell</code>, <code>phoneshell</code>, <code>auth-shell</code>, <code>dialog</code>, <code>panel</code>, <code>kanban-column</code>, <code>metric-card</code>, <code>feature-card</code>).</td></tr>
+          </tbody>
+        </table>
+
+        <h3 id="skill-philosophy">What the skill teaches the AI</h3>
+        <ul>
+          <li><strong>Six positional slots on every <code>element</code> line</strong> — even chrome elements like <code>chart-bar</code>, <code>status-bar</code>, <code>home-indicator</code>, <code>divider</code>, <code>fab</code>, <code>spinner</code>, <code>table</code> need the <code>""</code> label slot. Dropping it is the #1 reason AI-generated Boceto fails to parse; the skill hammers this rule up front.</li>
+          <li><strong>Components-first authoring</strong> — when the user asks for something that isn't a built-in element type, define a composite <code>component</code> for it rather than inventing a type or pasting raw boxes. Same when 3+ shapes repeat or when the user is sketching a "category of screen" (a dashboard, a settings page) — wrap the chrome in an <code>appshell</code>-style component and place concrete widgets inside via slots.</li>
+          <li><strong>Default + named slots for shells</strong> — use named slots (<code>slot actions</code>, <code>slot footer</code>) when a template needs more than one fill point. The skill ships <code>dialog</code>, <code>panel</code>, <code>kanban-column</code>, and <code>appshell-with-actions</code> as ready-made examples.</li>
+          <li><strong>Canonical types only</strong> — the skill contains a mapping from 16+ common AI hallucinations (<code>Frame</code>, <code>Stack</code>, <code>NavBar</code>, <code>Heading2</code>, <code>icon-button</code>, <code>PhoneFrame</code>, …) to their real Boceto element types. The assistant consults this before emitting.</li>
+          <li><strong>Three parser limitations</strong> documented with the right workaround: element-as-container can't live inside a <code>component</code> body, <code>slot</code> markers must be top-level in a component body, component param names use JS identifier rules (no hyphens).</li>
+        </ul>
+
+        <h3 id="skill-try">Try it</h3>
+        <p>Once installed, open your assistant inside the project and ask:</p>
+        <pre>"Sketch a wireframe for a settings page with three sections."
+
+"Add a search bar at the top of this `​```boceto` block."
+
+"Mock up a Spotify-like mobile player wrapped in a phone-frame."
+
+"Define a reusable pricing-tier composite and place three tiers in a row."</pre>
+
+        <p>
+          The assistant should return a single <code>​```boceto</code> fenced block
+          you can paste straight into a markdown file or feed to
+          <code>&lt;boceto-view&gt;</code>. If you see invented element types or
+          missing <code>""</code> label slots, re-run
+          <code>npx @boceto/skill update</code> — you may be running an older copy
+          of the skill.
+        </p>
         </section>
 
         <section id="sec-reference" data-section="sec-reference">

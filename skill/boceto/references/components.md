@@ -11,7 +11,7 @@ end
 ```
 
 - **Name** must match `[A-Za-z][A-Za-z0-9_-]*` and cannot collide with any built-in element type (so `button` and `card` are reserved; use `my-card` or `feature-card`).
-- **Params** are named slots for substitution inside the body. Inside the body, `$name` or `${name}` are replaced with the param value at the call site.
+- **Params** are named slots for substitution inside the body. Inside the body, `$name` or `${name}` are replaced with the param value at the call site. Param names follow JS identifier rules (`[A-Za-z_][A-Za-z0-9_]*`) — **no hyphens**. Use camelCase (`navItems`) or snake_case (`nav_items`); the parser rejects `nav-items`.
 - **Shell attrs** make the component behave like a flex container (see "Responsive shells" below). When set, the body lays out as flex children of the instance's outer box.
 - **Defaults** declare default `w` / `h` (or `auto`) and per-instance flex props (`grow`, `shrink`, etc.) that the call site can override.
 
@@ -19,10 +19,9 @@ end
 
 ```boceto
 component feature-card(title, body)
-  element card 0 0 240 140 "" :
-    element heading 12 12 216 28 "$title"
-    element label   12 50 216 60 "$body"
-  end
+  element card    0  0 240 140 ""
+  element heading 12 12 216 28 "$title"
+  element label   12 50 216 60 "$body"
 end
 
 # Call sites
@@ -31,6 +30,21 @@ element feature-card 320 40 240 140 "" title="Tiny" body="Under 50kB gzipped."
 ```
 
 The instance line uses the component name in the `type` slot, an empty label `""`, and the params as attributes.
+
+**Important parser limitation:** *element-as-container* (`element TYPE … : / … / end`) works at the page level but is **NOT supported inside a `component` body** today. Use **absolute coordinates** for body items, like the `feature-card` example above — the children sit at (12, 12), (12, 50), etc. inside the card's 240×140 frame. If you write `element card 0 0 240 140 "" :` inside a component the parser will fail with `Unclosed 'element card' block`.
+
+If you need flex layout *inside* a component, use a `row` / `col` keyword (those *are* supported in component bodies):
+
+```boceto
+component toolbar(title)
+  row 0 0 0 0 gap=12 align=middle padding=12
+    element heading 0 0 0 28 "$title" grow=1
+    element primary-button 0 0 100 36 "Save"
+  end
+end
+```
+
+This is the responsive-shell pattern (see "Responsive shells" below).
 
 ## Param substitution
 
@@ -91,6 +105,34 @@ Now `element panel 0 0 auto auto "" title="Sidebar"` automatically picks up min/
 | `w`, `h` | Default size (number or `auto`). |
 | `min-w`, `min-h`, `max-w`, `max-h` | Constraints on the resolved instance box. |
 | `grow`, `shrink`, `basis`, `align-self` | Per-child flex defaults — used when the instance is a flex-child of a `row` / `col`. |
+
+## Two parser limitations that bite
+
+Both of these are real constraints of the v0.1 parser, not stylistic preferences. Authors hit them often:
+
+1. **`element ... :` (element-as-container) is NOT supported inside a `component` body.** Use absolute coordinates for body items, or use `row` / `col` instead (those *are* supported). At the page level, element-as-container works fine.
+
+2. **`slot` markers must be direct top-level statements in the component body.** They cannot be nested inside a `row`, a `col`, or an element-as-container. The parser rejects with `'slot' markers belong in component bodies, not inside a 'row' or 'col'`.
+
+   ```boceto
+   # WRONG — slot inside a row
+   component panel(title)
+     row 0 0 0 32 gap=8 align=middle
+       element heading 0 0 0 24 "$title" grow=1
+       slot actions                       # ✗ parser error
+     end
+   end
+
+   # RIGHT — slot at the top level, positioned with absolute coords
+   component panel(title)
+     element heading 12 12 200 24 "$title"
+     slot actions                          # ✓ at top level
+     element divider 0 44 0 1 ""
+     slot                                  # default slot
+   end
+   ```
+
+   If you want a horizontal header layout, place the heading and the slot at the same `y` with absolute coords — the slot's children are then positioned at absolute coords by the call site to land where you expect (e.g. `element button 240 12 32 28 "+"`).
 
 ## Slots — call-site children
 
