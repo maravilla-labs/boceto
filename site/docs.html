@@ -178,6 +178,7 @@
         <a href="#sec-components" data-section="sec-components">Components</a>
         <a href="#sec-web-components" data-section="sec-web-components">Web Components</a>
         <a href="#sec-skill" data-section="sec-skill">AI Skill</a>
+        <a href="#sec-lint" data-section="sec-lint">Lint</a>
         <a href="#sec-reference" data-section="sec-reference">Reference</a>
       </div>
     </nav>
@@ -196,6 +197,13 @@
         <a href="#attributes">Attributes</a>
         <a href="#ids">Named IDs</a>
 
+        <h4>Text</h4>
+        <a href="#text-rendering">Text rendering</a>
+        <a href="#text-multiline">Multi-line labels</a>
+        <a href="#text-overflow">overflow</a>
+        <a href="#text-align">textAlign</a>
+        <a href="#text-shrink">fontSize + shrink</a>
+
         <h4>Layout</h4>
         <a href="#rowcol">row / col</a>
         <a href="#sizing">Sizing &amp; grow</a>
@@ -209,6 +217,27 @@
         <a href="#absolute-body">Absolute body</a>
         <a href="#slots">Slots</a>
         <a href="#patterns">Common patterns</a>
+
+        <h4>Web components</h4>
+        <a href="#web-components">Overview</a>
+        <a href="#wc-install">Install</a>
+        <a href="#boceto-view"><code>&lt;boceto-view&gt;</code></a>
+        <a href="#boceto-edit"><code>&lt;boceto-edit&gt;</code></a>
+        <a href="#boceto-react"><code>@boceto/react</code></a>
+
+        <h4>AI skill</h4>
+        <a href="#ai-skill">Overview</a>
+        <a href="#skill-install">Install</a>
+        <a href="#skill-update">Update</a>
+        <a href="#skill-what">What's in the skill</a>
+        <a href="#skill-philosophy">What it teaches</a>
+        <a href="#skill-try">Try it</a>
+
+        <h4>Lint</h4>
+        <a href="#lint">Overview</a>
+        <a href="#lint-rules">Rules</a>
+        <a href="#lint-usage">Usage</a>
+        <a href="#lint-playground">In the playground</a>
 
         <h4>Reference</h4>
         <a href="#attr-rowcol"><code>row</code>/<code>col</code> attrs</a>
@@ -1347,6 +1376,165 @@ npx @boceto/skill update --check</pre>
           missing <code>""</code> label slots, re-run
           <code>npx @boceto/skill update</code> — you may be running an older copy
           of the skill.
+        </p>
+        </section>
+
+        <section id="sec-lint" data-section="sec-lint">
+        <!-- ─────────────────────────────────────────────────────────── -->
+        <h2 id="lint">Linter — <code>@boceto/lint</code></h2>
+        <p>
+          A standalone linter + auto-fixer for Boceto source. Designed to
+          catch the failure modes humans and AI assistants hit most often:
+          missing label slots, invented element types, fractional coords,
+          mismatched <code>align</code> vs <code>textAlign</code>, unclosed
+          blocks, unterminated quoted strings, and structural parse errors —
+          with character-precise line + column ranges so editors can
+          underline the exact offending token.
+        </p>
+
+        <p>
+          The linter is line-oriented and stateless: it accepts a source
+          string and returns a typed <code>LintReport</code> with
+          <code>{ issues, fixed }</code>. The <code>fixed</code> output is
+          the source rewritten with every available autofix applied, in one
+          pass. Cross-checks against <code>@boceto/core</code>'s real
+          <code>parse()</code> as a final step, so anything the rules miss
+          still gets surfaced as a <code>parse-error</code> issue with
+          fence-aware line numbers (parser-reported "line 3 in the block"
+          is translated back to the actual file line).
+        </p>
+
+        <h3 id="lint-rules">Rules</h3>
+        <table>
+          <thead>
+            <tr><th>Rule</th><th>Severity</th><th>Autofix</th><th>What it catches</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>missing-label</code></td>
+              <td>error</td>
+              <td>✓</td>
+              <td>5 positional slots, the 5th is unquoted — splices <code>""</code> after H so chrome elements (<code>chart-bar</code>, <code>status-bar</code>, <code>home-indicator</code>, <code>divider</code>, <code>fab</code>, …) become parser-valid.</td>
+            </tr>
+            <tr>
+              <td><code>missing-coord</code></td>
+              <td>error</td>
+              <td>—</td>
+              <td>5 slots, the 5th is a quoted label. One of X/Y/W/H was dropped, NOT the label — no autofix because the linter can't guess which coord was meant. Message tells the author what to do.</td>
+            </tr>
+            <tr>
+              <td><code>wrong-arity</code></td>
+              <td>error</td>
+              <td>—</td>
+              <td>Fewer than 5 positional slots on an <code>element</code> line.</td>
+            </tr>
+            <tr>
+              <td><code>invented-type</code></td>
+              <td>error</td>
+              <td>✓</td>
+              <td>16+ common AI hallucinations mapped to their real types: <code>Frame → box</code>, <code>Stack → col</code>, <code>NavBar → navbar</code>, <code>Heading2 → heading</code>, <code>icon-button → button</code>, <code>PhoneFrame → phone-frame</code>, …</td>
+            </tr>
+            <tr>
+              <td><code>unknown-type</code></td>
+              <td>warning</td>
+              <td>—</td>
+              <td>Element type not in the catalog and not in the canonical hallucination map. Suggests the closest known type by edit distance.</td>
+            </tr>
+            <tr>
+              <td><code>bad-coord</code></td>
+              <td>error</td>
+              <td>✓</td>
+              <td>Fractional or negative coords — rounds to integer, clamps below 0.</td>
+            </tr>
+            <tr>
+              <td><code>align-vs-textAlign</code></td>
+              <td>warning</td>
+              <td>✓</td>
+              <td><code>align=left|center|right</code> on a non-container element — renames to <code>textAlign=</code> (since flex <code>align</code> uses <code>start|middle|end|stretch</code>).</td>
+            </tr>
+            <tr>
+              <td><code>unclosed-block</code></td>
+              <td>error</td>
+              <td>—</td>
+              <td><code>row</code> / <code>col</code> / <code>component</code> / element-as-container block opened but never closed with <code>end</code>.</td>
+            </tr>
+            <tr>
+              <td><code>unterminated-string</code></td>
+              <td>warning</td>
+              <td>✓</td>
+              <td>A label or attr opens with <code>"</code> but never closes before end-of-line. The parser silently accepts this, but it's almost always a typo — appends a closing <code>"</code>.</td>
+            </tr>
+            <tr>
+              <td><code>parse-error</code></td>
+              <td>error</td>
+              <td>—</td>
+              <td>Final cross-check against <code>@boceto/core</code>'s real parser. Reports the original error with the line mapped back to its absolute position in the source (not relative to the inside of a markdown fence).</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3 id="lint-usage">Usage</h3>
+        <p>
+          <code>npm install @boceto/lint</code> (or <code>pnpm add</code>,
+          <code>yarn add</code>, …). Then:
+        </p>
+        <pre>import { lint, applyFixes } from '@boceto/lint'
+
+const source = `\`\`\`boceto
+element Frame 0 0 600 400
+element chart-bar 232 110 600 260
+\`\`\``
+
+const report = lint(source)
+//  report.issues:       LintIssue[] with line + column + endColumn + fix
+//  report.fixed:        source rewritten with every autofix applied
+//  report.errorCount, .warningCount, .infoCount
+
+console.log(report.fixed)
+// =&gt; `\`\`\`boceto
+//     element box 0 0 600 400 ""
+//     element chart-bar 232 110 600 260 ""
+//     \`\`\``
+
+// Or apply autofixes from a custom issue subset:
+const partial = applyFixes(source, report.issues.filter(i =&gt; i.rule === 'invented-type'))</pre>
+
+        <p>Each <code>LintIssue</code> carries:</p>
+        <pre>interface LintIssue {
+  rule: string                  // 'missing-label' | 'invented-type' | …
+  severity: 'error' | 'warning' | 'info'
+  line: number                  // 1-based, absolute in the source
+  column: number                // 1-based, points at the offending token
+  endColumn: number             // 1-based, exclusive end of the span
+  message: string               // human-readable, safe for inline display
+  fix?: {
+    line: number
+    newLine: string             // the replacement line (full text)
+    label: string               // short label for UI buttons
+  }
+}</pre>
+
+        <h3 id="lint-playground">In the playground</h3>
+        <p>
+          The <a href="./playground.html">playground</a> wires the linter into
+          CodeMirror via <code>@codemirror/lint</code> — every issue gets an
+          inline red / yellow underline at the exact offending span, a gutter
+          marker, and a hover tooltip with a one-click <em>Apply fix</em>
+          action. The full issue list also renders in a panel below the editor
+          with a <strong>Fix all</strong> button that applies every available
+          autofix in a single dispatch (one undo entry).
+        </p>
+
+        <h3 id="lint-mcp">MCP server (planned)</h3>
+        <p>
+          The linter is the foundation for an upcoming <code>@boceto/mcp</code>
+          MCP server, which will expose <code>parse</code>,
+          <code>renderSvg</code>, and <code>lint</code> as tools an AI agent
+          can call directly. That gives autonomous agents a closed-loop:
+          generate DSL → lint → apply autofixes → render → iterate. The
+          linter's character-precise diagnostics + autofix payloads are
+          exactly the shape MCP tool calls want, so the same package
+          will be reused unchanged.
         </p>
         </section>
 

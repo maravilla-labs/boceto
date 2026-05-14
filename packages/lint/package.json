@@ -1,0 +1,36 @@
+{
+  "name": "@boceto/lint",
+  "version": "0.2.0",
+  "description": "Linter + auto-fixer for the Boceto DSL. Catches missing label slots, invented element types, fractional coords, slot-nesting traps, and more. Usable from the playground, CI, or an MCP server.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": ["dist", "README.md"],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@boceto/core": "workspace:*"
+  },
+  "devDependencies": {
+    "tsup": "^8.3.0",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.4"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/maravilla-labs/boceto.git",
+    "directory": "packages/lint"
+  }
+}

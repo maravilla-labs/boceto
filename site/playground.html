@@ -72,6 +72,95 @@
       .pg-status.err { color: #b45309; }
       .pg-status.ok { color: #047857; }
 
+      /* Lint panel — sits below the editor / preview split. */
+      .pg-lint {
+        margin-top: 16px;
+        border: 1px solid var(--rule);
+        border-radius: 8px;
+        background: white;
+        overflow: hidden;
+      }
+      .pg-lint > header {
+        padding: 8px 12px;
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--muted);
+        border-bottom: 1px solid var(--rule);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .pg-lint .pg-lint-count {
+        text-transform: none;
+        letter-spacing: 0;
+        color: var(--ink);
+        font-weight: 600;
+      }
+      .pg-lint .pg-lint-fix-all {
+        margin-left: auto;
+        padding: 4px 12px;
+        border: 1px solid var(--rule);
+        background: #fff;
+        font-size: 12px;
+        border-radius: 6px;
+        cursor: pointer;
+      }
+      .pg-lint .pg-lint-fix-all:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+      .pg-lint-list {
+        max-height: 240px;
+        overflow-y: auto;
+      }
+      .pg-lint-row {
+        display: grid;
+        grid-template-columns: 56px 84px 1fr auto;
+        gap: 10px;
+        padding: 8px 12px;
+        border-bottom: 1px solid #f1f1ee;
+        font-size: 13px;
+        align-items: baseline;
+      }
+      .pg-lint-row:last-child { border-bottom: 0; }
+      .pg-lint-row .pg-lint-line {
+        color: var(--muted);
+        font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+        font-size: 12px;
+      }
+      .pg-lint-row .pg-lint-rule {
+        font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+        font-size: 11px;
+        padding: 2px 6px;
+        border-radius: 4px;
+        background: #f4f4f5;
+        color: #52525b;
+        text-align: center;
+        white-space: nowrap;
+      }
+      .pg-lint-row.sev-error .pg-lint-rule { background: #fee2e2; color: #991b1b; }
+      .pg-lint-row.sev-warning .pg-lint-rule { background: #fef3c7; color: #854d0e; }
+      .pg-lint-row.sev-info .pg-lint-rule { background: #dbeafe; color: #1e40af; }
+      .pg-lint-row .pg-lint-msg { color: var(--ink); }
+      .pg-lint-row .pg-lint-fix {
+        padding: 3px 10px;
+        border: 1px solid var(--rule);
+        background: #fff;
+        font-size: 12px;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      .pg-lint-row .pg-lint-fix:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+      .pg-lint-empty {
+        padding: 14px 16px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
       .pg-split {
         display: grid;
         grid-template-columns: 1fr 1fr;
@@ -377,6 +466,15 @@
         </div>
       </div>
 
+      <section class="pg-lint" aria-label="Lint feedback">
+        <header>
+          <span>Lint</span>
+          <span class="pg-lint-count" id="pg-lint-count">0 issues</span>
+          <button class="pg-lint-fix-all" id="pg-lint-fix-all" type="button" disabled>Fix all</button>
+        </header>
+        <div class="pg-lint-list" id="pg-lint-list"></div>
+      </section>
+
       <p class="pg-share">
         Tip: keep <a href="./docs.html">the docs</a> open in another tab while you
         experiment. <strong>Markdown</strong> mode renders <code>```boceto</code>
@@ -406,13 +504,16 @@
           "@codemirror/language": "https://esm.sh/@codemirror/language@6.10.3?external=@codemirror/state,@codemirror/view,@lezer/highlight,@lezer/common,@lezer/lr",
           "@codemirror/commands": "https://esm.sh/@codemirror/commands@6.7.0?external=@codemirror/state,@codemirror/view,@codemirror/language",
           "@codemirror/search": "https://esm.sh/@codemirror/search@6.5.6?external=@codemirror/state,@codemirror/view",
+          "@codemirror/lint": "https://esm.sh/@codemirror/lint@6.8.2?external=@codemirror/state,@codemirror/view,crelt",
+          "crelt": "https://esm.sh/crelt@1.0.6",
           "@codemirror/lang-markdown": "https://esm.sh/@codemirror/lang-markdown@6.3.0?external=@codemirror/state,@codemirror/view,@codemirror/language,@lezer/common,@lezer/highlight,@lezer/markdown",
           "@lezer/common": "https://esm.sh/@lezer/common@1.2.1",
           "@lezer/highlight": "https://esm.sh/@lezer/highlight@1.2.1?external=@lezer/common",
           "@lezer/lr": "https://esm.sh/@lezer/lr@1.4.2?external=@lezer/common",
           "@lezer/markdown": "https://esm.sh/@lezer/markdown@1.3.1?external=@lezer/common,@lezer/highlight",
           "markdown-it": "https://esm.sh/markdown-it@14.1.0",
-          "@boceto/core": "./assets/boceto-core.js"
+          "@boceto/core": "./assets/boceto-core.js",
+          "@boceto/lint": "./assets/boceto-lint.js"
         }
       }
     </script>
@@ -432,6 +533,7 @@
       // `cmHistory` to keep the global accessible.
       import { defaultKeymap, history as cmHistory, historyKeymap, indentWithTab } from '@codemirror/commands'
       import { searchKeymap } from '@codemirror/search'
+      import { linter, lintGutter } from '@codemirror/lint'
       import { markdown as cmMarkdown } from '@codemirror/lang-markdown'
       import { tags as t } from '@lezer/highlight'
       import MarkdownIt from 'markdown-it'
@@ -442,6 +544,7 @@
         parse,
         SvgRenderer,
       } from '@boceto/core'
+      import { lint as lintBoceto } from '@boceto/lint'
 
       // ─────────────────────────────────────────────────────────────
       // Snippets
@@ -1035,7 +1138,167 @@ That's it. Mix prose, lists, code, and diagrams freely.`,
         $status.textContent = 'Rendering…'
         $status.className = 'pg-status'
         clearTimeout(renderTimer)
-        renderTimer = setTimeout(render, 150)
+        renderTimer = setTimeout(() => {
+          render()
+          runLint()
+        }, 150)
+      }
+
+      // ─────────────────────────────────────────────────────────────
+      // Lint panel — runs @boceto/lint on every edit (debounced via
+      // scheduleRender) and renders issues with per-row "Fix" buttons.
+      // ─────────────────────────────────────────────────────────────
+      const $lintList = document.getElementById('pg-lint-list')
+      const $lintCount = document.getElementById('pg-lint-count')
+      const $lintFixAll = document.getElementById('pg-lint-fix-all')
+      let currentLint = null
+
+      function runLint() {
+        const src = editor?.state.doc.toString() ?? ''
+        // Skip lint for empty / pure-markdown sources — the linter only
+        // makes sense for Boceto DSL.
+        const report = lintBoceto(src, { skipParseCheck: false })
+        currentLint = report
+        renderLintPanel(report)
+      }
+
+      function renderLintPanel(report) {
+        $lintList.replaceChildren()
+        const issues = report.issues
+        const fixable = issues.filter((i) => i.fix).length
+        if (issues.length === 0) {
+          $lintCount.textContent = '0 issues — clean'
+          const empty = document.createElement('div')
+          empty.className = 'pg-lint-empty'
+          empty.textContent = 'No issues detected. Boceto parses cleanly.'
+          $lintList.appendChild(empty)
+        } else {
+          $lintCount.textContent =
+            `${report.errorCount} error${report.errorCount === 1 ? '' : 's'}, ` +
+            `${report.warningCount} warning${report.warningCount === 1 ? '' : 's'}` +
+            (fixable > 0 ? ` · ${fixable} auto-fixable` : '')
+          for (const issue of issues) $lintList.appendChild(buildLintRow(issue))
+        }
+        $lintFixAll.disabled = fixable === 0
+        $lintFixAll.textContent = fixable > 0 ? `Fix ${fixable} issue${fixable === 1 ? '' : 's'}` : 'Fix all'
+      }
+
+      function buildLintRow(issue) {
+        const row = document.createElement('div')
+        row.className = `pg-lint-row sev-${issue.severity}`
+        const ln = document.createElement('div')
+        ln.className = 'pg-lint-line'
+        ln.textContent = `L${issue.line}`
+        ln.title = 'Click to jump to this line'
+        ln.style.cursor = 'pointer'
+        ln.addEventListener('click', () => jumpToLine(issue.line))
+        const rule = document.createElement('div')
+        rule.className = 'pg-lint-rule'
+        rule.textContent = issue.rule
+        const msg = document.createElement('div')
+        msg.className = 'pg-lint-msg'
+        msg.textContent = issue.message
+        const fix = document.createElement('button')
+        fix.type = 'button'
+        fix.className = 'pg-lint-fix'
+        if (issue.fix) {
+          fix.textContent = issue.fix.label || 'Fix'
+          fix.title = `Replace line ${issue.line}: ${issue.fix.newLine}`
+          fix.addEventListener('click', () => applyFixToEditor(issue.fix))
+        } else {
+          fix.textContent = '—'
+          fix.disabled = true
+        }
+        row.append(ln, rule, msg, fix)
+        return row
+      }
+
+      function applyFixToEditor(fix) {
+        if (!editor || !fix) return
+        const doc = editor.state.doc
+        if (fix.line < 1 || fix.line > doc.lines) return
+        const lineInfo = doc.line(fix.line)
+        editor.dispatch({
+          changes: { from: lineInfo.from, to: lineInfo.to, insert: fix.newLine },
+        })
+        // scheduleRender (from updateListener) will re-lint and re-render
+      }
+
+      function jumpToLine(line) {
+        if (!editor) return
+        const doc = editor.state.doc
+        if (line < 1 || line > doc.lines) return
+        const pos = doc.line(line).from
+        editor.dispatch({
+          selection: { anchor: pos, head: pos },
+          scrollIntoView: true,
+        })
+        editor.focus()
+      }
+
+      $lintFixAll.addEventListener('click', () => {
+        if (!currentLint || !editor) return
+        // Replace the whole doc with the linter's `fixed` output — one
+        // dispatch, one undo entry, all autofixes applied.
+        editor.dispatch({
+          changes: {
+            from: 0,
+            to: editor.state.doc.length,
+            insert: currentLint.fixed,
+          },
+        })
+      })
+
+      /**
+       * CodeMirror lint source — converts @boceto/lint issues into the
+       * Diagnostic[] shape the @codemirror/lint extension renders inline.
+       * Each LintIssue carries 1-based column + endColumn for the
+       * offending token (not just the line), so we underline the exact
+       * span. Zero-width "insertion point" diagnostics get widened to
+       * one character so the squiggle is visible.
+       */
+      function bocetoCmLintSource(view) {
+        const src = view.state.doc.toString()
+        const report = lintBoceto(src, { skipParseCheck: false })
+        // Refresh the panel below — both views share the same report.
+        currentLint = report
+        renderLintPanel(report)
+        const docLines = view.state.doc.lines
+        const diags = []
+        for (const issue of report.issues) {
+          const lineNo = Math.max(1, Math.min(docLines, issue.line))
+          const lineInfo = view.state.doc.line(lineNo)
+          // 1-based columns → 0-based document offsets within the line.
+          const colStart = Math.max(0, (issue.column ?? 1) - 1)
+          const colEnd = Math.max(colStart, (issue.endColumn ?? issue.column ?? 1) - 1)
+          const from = Math.min(lineInfo.to, lineInfo.from + colStart)
+          let to = Math.min(lineInfo.to, lineInfo.from + colEnd)
+          if (to === from) {
+            // Zero-width insertion point — widen by 1 char so the
+            // diagnostic underline is visible.
+            to = from < lineInfo.to ? from + 1 : Math.max(lineInfo.from, from - 1)
+          }
+          const d = {
+            from,
+            to,
+            severity: issue.severity,
+            message: issue.message,
+            source: `boceto/${issue.rule}`,
+          }
+          if (issue.fix) {
+            d.actions = [
+              {
+                name: issue.fix.label || 'Fix',
+                apply(view2) {
+                  applyFixToEditor(issue.fix)
+                  view2.focus()
+                },
+              },
+            ]
+          }
+          diags.push(d)
+        }
+        return diags
       }
 
       // ─────────────────────────────────────────────────────────────
@@ -1084,6 +1347,13 @@ That's it. Mix prose, lists, code, and diagrams freely.`,
             keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap, indentWithTab]),
             langExt,
             syntaxHighlighting(highlight),
+            // Inline lint: underlines, gutter markers, hover tooltips.
+            // Run only in DSL mode — markdown mode has its own fence
+            // boundaries that the line-oriented linter can't reason about
+            // cleanly without a pre-parse pass.
+            ...(mode === 'dsl'
+              ? [lintGutter(), linter(bocetoCmLintSource, { delay: 250 })]
+              : []),
             EditorView.updateListener.of((u) => {
               if (u.docChanged) scheduleRender()
             }),
@@ -1238,6 +1508,7 @@ That's it. Mix prose, lists, code, and diagrams freely.`,
       }
       buildEditor(initialSrc)
       render()
+      runLint()
     </script>
   </body>
 </html>

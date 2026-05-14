@@ -50,6 +50,9 @@ importers:
       '@boceto/remark':
         specifier: workspace:*
         version: link:../../packages/remark-boceto
+      '@boceto/view':
+        specifier: workspace:*
+        version: link:../../packages/view
       remark:
         specifier: ^15.0.1
         version: 15.0.1
@@ -91,6 +94,22 @@ importers:
       jsdom:
         specifier: ^25.0.1
         version: 25.0.1
+      tsup:
+        specifier: ^8.3.0
+        version: 8.5.1(postcss@8.5.14)(typescript@5.9.3)
+      typescript:
+        specifier: ^5.6.3
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.4
+        version: 2.1.9(jsdom@25.0.1)
+
+  packages/lint:
+    dependencies:
+      '@boceto/core':
+        specifier: workspace:*
+        version: link:../core
+    devDependencies:
       tsup:
         specifier: ^8.3.0
         version: 8.5.1(postcss@8.5.14)(typescript@5.9.3)

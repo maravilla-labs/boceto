@@ -37,17 +37,18 @@ const COPIES = [
   ['packages/core', 'dist/browser.js', 'boceto-core.js'],
   ['packages/view', 'dist/auto.js', 'boceto-view.js'],
   ['packages/edit', 'dist/auto.js', 'boceto-edit.js'],
+  ['packages/lint', 'dist/browser.js', 'boceto-lint.js'],
 ]
 
 function step(msg) {
   process.stdout.write(`\n▸ ${msg}\n`)
 }
 
-step('Building @boceto/core, @boceto/view and @boceto/edit')
-execSync('pnpm --filter @boceto/core --filter @boceto/view --filter @boceto/edit build', {
-  cwd: repoRoot,
-  stdio: 'inherit',
-})
+step('Building @boceto/core, @boceto/view, @boceto/edit and @boceto/lint')
+execSync(
+  'pnpm --filter @boceto/core --filter @boceto/view --filter @boceto/edit --filter @boceto/lint build',
+  { cwd: repoRoot, stdio: 'inherit' },
+)
 
 step('Copying bundles into site/assets/')
 mkdirSync(siteAssets, { recursive: true })
