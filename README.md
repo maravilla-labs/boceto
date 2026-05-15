@@ -2,7 +2,7 @@
 
 > *Boceto is to wireframes what Mermaid is to diagrams.*
 
-**[boceto.dev →](https://maravilla-labs.github.io/boceto/)** · live site with all 83 elements rendered
+**[Live site →](https://maravilla-labs.github.io/boceto/)** · all 83 elements rendered &nbsp;·&nbsp; by **[Maravilla Labs](https://www.maravillalabs.com)** ([github.com/maravilla-labs](https://github.com/maravilla-labs))
 
 A tiny DSL for hand-drawn wireframes that lives inside fenced markdown code blocks, plus
 framework-free web components and markdown plugins to render them anywhere. **83 element types**
@@ -96,4 +96,4 @@ boceto/
 
 ## License
 
-MIT © Maravilla Labs
+MIT © [Maravilla Labs](https://www.maravillalabs.com) — see the rest of our work on GitHub at [github.com/maravilla-labs](https://github.com/maravilla-labs).

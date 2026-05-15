@@ -74,14 +74,24 @@ header.site nav .links a {
   font-weight: 500;
 }
 header.site nav .links a:hover, header.site nav .links a.active { color: var(--ink); }
-header.site nav .links .gh {
-  background: var(--ink);
-  color: white;
-  padding: 6px 12px;
+header.site nav .links .gh-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink);
+  width: 32px;
+  height: 32px;
   border-radius: 6px;
-  font-size: 13px;
+  transition: background 0.15s ease;
 }
-header.site nav .links .gh:hover { background: var(--accent-dark); }
+header.site nav .links .gh-icon:hover { background: rgba(0, 0, 0, 0.06); }
+header.site nav .links .gh-icon svg { display: block; }
+header.site nav .links .gh-star {
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+}
+header.site nav .links .gh-star img { display: block; height: 20px; }
 
 main {
   max-width: var(--max-width);

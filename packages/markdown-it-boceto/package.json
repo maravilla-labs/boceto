@@ -3,6 +3,17 @@
   "version": "0.1.0",
   "description": "markdown-it plugin: render fenced ```boceto blocks as <boceto-view> custom elements.",
   "license": "MIT",
+  "author": "Maravilla Labs",
+  "homepage": "https://maravilla-labs.github.io/boceto/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/maravilla-labs/boceto.git",
+    "directory": "packages/markdown-it-boceto"
+  },
+  "bugs": {
+    "url": "https://github.com/maravilla-labs/boceto/issues"
+  },
+  "keywords": ["boceto", "wireframe", "markdown-it", "markdown", "plugin"],
   "type": "module",
   "sideEffects": false,
   "main": "./dist/index.cjs",
@@ -33,5 +44,8 @@
     "tsup": "^8.3.0",
     "typescript": "^5.6.3",
     "vitest": "^2.1.4"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

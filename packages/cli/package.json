@@ -3,6 +3,28 @@
   "version": "0.1.0",
   "description": "Unified install + configure CLI for Boceto. `npx boceto init` wires up the authoring skill and the MCP server for your AI tools in one go; `npx boceto add skill <target>` and `npx boceto add mcp <client>` are the per-integration commands. Mirrors the Svelte `sv add` pattern.",
   "license": "MIT",
+  "author": "Maravilla Labs",
+  "homepage": "https://maravilla-labs.github.io/boceto/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/maravilla-labs/boceto.git",
+    "directory": "packages/cli"
+  },
+  "bugs": {
+    "url": "https://github.com/maravilla-labs/boceto/issues"
+  },
+  "keywords": [
+    "boceto",
+    "wireframe",
+    "cli",
+    "skill",
+    "mcp",
+    "ai-tools",
+    "claude",
+    "cursor",
+    "cline",
+    "aider"
+  ],
   "type": "module",
   "main": "./dist/cli.js",
   "bin": {
@@ -18,17 +40,6 @@
     "dev": "tsup --watch",
     "test": "vitest run"
   },
-  "keywords": [
-    "boceto",
-    "cli",
-    "skill",
-    "mcp",
-    "ai-tools",
-    "claude",
-    "cursor",
-    "cline",
-    "aider"
-  ],
   "engines": {
     "node": ">=18.17"
   },
@@ -42,10 +53,5 @@
     "tsup": "^8.3.0",
     "typescript": "^5.6.3",
     "vitest": "^2.1.4"
-  },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/maravilla-labs/boceto.git",
-    "directory": "packages/cli"
   }
 }

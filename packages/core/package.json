@@ -3,6 +3,17 @@
   "version": "0.1.0",
   "description": "Boceto DSL — parser, serializer, types, and canvas renderer.",
   "license": "MIT",
+  "author": "Maravilla Labs",
+  "homepage": "https://maravilla-labs.github.io/boceto/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/maravilla-labs/boceto.git",
+    "directory": "packages/core"
+  },
+  "bugs": {
+    "url": "https://github.com/maravilla-labs/boceto/issues"
+  },
+  "keywords": ["boceto", "wireframe", "dsl", "parser", "renderer", "markdown", "remark", "markdown-it"],
   "type": "module",
   "sideEffects": ["**/elements/register.*"],
   "main": "./dist/index.cjs",
@@ -29,5 +40,8 @@
     "tsup": "^8.3.0",
     "typescript": "^5.6.3",
     "vitest": "^2.1.4"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

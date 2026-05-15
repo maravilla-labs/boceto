@@ -26,3 +26,13 @@ yarn-debug.log*
 
 # Skill-creator eval workspace (transient run outputs, not source)
 skill-workspace/
+
+# @boceto/mcp prepack outputs — sync-skill.js copies these from the repo
+# at publish time. They are not source.
+packages/mcp/skill/
+packages/mcp/references/
+packages/mcp/recipes/
+packages/mcp/spec/
+# @boceto/skill prepack output — sync-skill.js copies skill/boceto/ here
+# at publish time.
+packages/skill/skill/

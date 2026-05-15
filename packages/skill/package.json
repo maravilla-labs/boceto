@@ -3,13 +3,15 @@
   "version": "0.3.0",
   "description": "Boceto authoring skill content (SKILL.md + references) for AI coding assistants. Installed via `npx boceto add skill <target>` — Claude Code, Cursor, Cline, Aider, Copilot, Codex, Gemini, and more.",
   "license": "MIT",
-  "type": "module",
-  "files": [
-    "skill",
-    "README.md"
-  ],
-  "scripts": {
-    "prepack": "node ./bin/sync-skill.js"
+  "author": "Maravilla Labs",
+  "homepage": "https://maravilla-labs.github.io/boceto/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/maravilla-labs/boceto.git",
+    "directory": "packages/skill"
+  },
+  "bugs": {
+    "url": "https://github.com/maravilla-labs/boceto/issues"
   },
   "keywords": [
     "boceto",
@@ -20,12 +22,18 @@
     "skill",
     "agent-instructions"
   ],
+  "type": "module",
+  "files": [
+    "skill",
+    "README.md"
+  ],
+  "scripts": {
+    "prepack": "node ./bin/sync-skill.js"
+  },
   "engines": {
     "node": ">=18"
   },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/maravilla-labs/boceto.git",
-    "directory": "packages/skill"
+  "publishConfig": {
+    "access": "public"
   }
 }

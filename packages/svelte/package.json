@@ -3,6 +3,17 @@
   "version": "0.1.0",
   "description": "Svelte components wrapping <boceto-view> and <boceto-edit>. Works with Svelte 4 and Svelte 5.",
   "license": "MIT",
+  "author": "Maravilla Labs",
+  "homepage": "https://maravilla-labs.github.io/boceto/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/maravilla-labs/boceto.git",
+    "directory": "packages/svelte"
+  },
+  "bugs": {
+    "url": "https://github.com/maravilla-labs/boceto/issues"
+  },
+  "keywords": ["boceto", "wireframe", "svelte", "svelte4", "svelte5", "web-components"],
   "type": "module",
   "sideEffects": false,
   "main": "./src/index.js",
@@ -45,9 +56,7 @@
   "devDependencies": {
     "typescript": "^5.6.3"
   },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/maravilla-labs/boceto.git",
-    "directory": "packages/svelte"
+  "publishConfig": {
+    "access": "public"
   }
 }

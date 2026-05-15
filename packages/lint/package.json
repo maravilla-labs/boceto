@@ -3,6 +3,17 @@
   "version": "0.2.0",
   "description": "Linter + auto-fixer for the Boceto DSL. Catches missing label slots, invented element types, fractional coords, slot-nesting traps, and more. Usable from the playground, CI, or an MCP server.",
   "license": "MIT",
+  "author": "Maravilla Labs",
+  "homepage": "https://maravilla-labs.github.io/boceto/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/maravilla-labs/boceto.git",
+    "directory": "packages/lint"
+  },
+  "bugs": {
+    "url": "https://github.com/maravilla-labs/boceto/issues"
+  },
+  "keywords": ["boceto", "wireframe", "lint", "linter", "autofix", "markdown", "remark", "markdown-it"],
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -28,9 +39,7 @@
     "typescript": "^5.6.3",
     "vitest": "^2.1.4"
   },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/maravilla-labs/boceto.git",
-    "directory": "packages/lint"
+  "publishConfig": {
+    "access": "public"
   }
 }
