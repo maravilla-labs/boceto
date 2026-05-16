@@ -60,6 +60,39 @@ When a markdown document contains multiple `boceto` blocks, each block is treate
 the same Boceto document, in source order. Pages without an explicit name are auto-named `Page 1`, `Page 2`, …
 based on their position.
 
+### Per-fence render hints (plugin-level)
+
+The fence info string may also carry **render hints** of the form `key=value`,
+recognized by the `@boceto/remark` and `@boceto/markdown-it` plugins when
+emitting SVG. These hints are *plugin-level metadata*, not part of the core
+DSL — they do not affect the parsed `BocetoDoc`, only how a single fence is
+rasterized to SVG.
+
+````markdown
+```boceto:Mobile width=320 height=640
+…
+```
+
+```boceto:Showcase fit=fixed width=1280 height=800
+…
+```
+````
+
+Recognized keys:
+
+| Key       | Values                          | Effect                                                                                                  |
+| --------- | ------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `fit`     | `content` \| `fixed`            | `content` (default) auto-sizes the canvas to the page; `fixed` uses an exact `width × height` viewport. |
+| `width`   | non-negative number             | Minimum canvas width in `content` mode, exact width in `fixed` mode.                                    |
+| `height`  | non-negative number             | Same as `width` for the vertical axis.                                                                  |
+| `padding` | non-negative number             | Breathing room around content in `content` mode (default `16`).                                         |
+
+Resolution order: per-fence hint > plugin option > built-in default.
+Unrecognized keys and malformed values fall through to the page name —
+plugins do not throw on typos, so it is safe to add hints to existing fences.
+Hints are ignored when the plugin is in `wc` mode (the element-tag output);
+the tokens are stripped from `data-page` so the page name stays clean.
+
 A standalone Boceto file (`.boceto` extension, recommended MIME `text/boceto`) consists of one or more pages
 separated by a line containing only `---` (three hyphens). The optional page name follows on the same line:
 

@@ -339,6 +339,19 @@ export interface ParseOptions {
    * containing fenced blocks or a standalone .boceto file.
    */
   raw?: boolean
+  /**
+   * Additional source(s) whose `component … end` definitions feed the
+   * component registry before `source` is parsed. Use this when `source` is a
+   * single block that references components defined in **sibling** blocks
+   * (e.g. one TipTap node citing a component defined in another). Pages
+   * derived from `imports` are discarded — only the definitions are merged.
+   *
+   * Each entry may be a fenced markdown block (` ```boceto … ``` `) or raw
+   * DSL; both round-trip through `extractBlocks`.
+   *
+   * Ignored when `raw` is set (raw mode skips Pass-1 entirely).
+   */
+  imports?: string | string[]
 }
 
 /** Type guard: returns true if a `PageItem` is a `ComponentInstance`. */

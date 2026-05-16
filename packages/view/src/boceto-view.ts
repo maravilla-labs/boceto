@@ -36,6 +36,10 @@ const DEFAULT_H = 600
  *               canvas to encompass every element (plus an optional
  *               `padding`).
  *   - `padding` pixels of breathing room when `fit="content"`. Default 16.
+ *   - `imports` additional DSL source whose `component … end` definitions
+ *               feed the parser before `code` is parsed. Use when this view
+ *               renders one fence of a multi-fence doc and needs to resolve
+ *               components defined in sibling fences.
  *
  * If neither `code` nor `src` is set, the element parses its slot text content.
  *
@@ -44,13 +48,19 @@ const DEFAULT_H = 600
  */
 export class BocetoViewElement extends HTMLElement {
   static get observedAttributes(): string[] {
-    return ['code', 'src', 'width', 'height', 'page', 'fit', 'padding']
+    return ['code', 'src', 'width', 'height', 'page', 'fit', 'padding', 'imports']
   }
 
   #canvas: HTMLCanvasElement
   #renderer: CanvasRenderer
   #shadow: ShadowRoot
   #lastDoc: BocetoDoc | null = null
+  /**
+   * Imports source set via the DOM property (bypasses the attribute, which
+   * would force serialization of potentially-large strings). Falls back to
+   * the `imports` attribute when this is `null`.
+   */
+  #importsProp: string | null = null
 
   constructor() {
     super()
@@ -80,6 +90,19 @@ export class BocetoViewElement extends HTMLElement {
     this.setAttribute('code', code)
   }
 
+  /**
+   * Imports source — component definitions to merge before parsing `code`.
+   * Setting via property avoids attribute serialization for large strings;
+   * setting via the `imports` attribute also works.
+   */
+  get imports(): string | null {
+    return this.#importsProp ?? this.getAttribute('imports')
+  }
+  set imports(v: string | null) {
+    this.#importsProp = v
+    void this.#refresh()
+  }
+
   /** Latest parsed document, if any. */
   get document(): BocetoDoc | null {
     return this.#lastDoc
@@ -103,9 +126,17 @@ export class BocetoViewElement extends HTMLElement {
     }
     if (source == null) source = this.textContent ?? ''
 
+    const imports = this.#importsProp ?? this.getAttribute('imports') ?? undefined
+    // raw mode skips the component-resolution pass, so disable it whenever
+    // imports are present — the caller is asking us to merge sibling-block
+    // definitions, which requires Pass-1.
+    const looksRaw = !source.includes('```') && !/^---/m.test(source.trim())
     let doc: BocetoDoc
     try {
-      doc = parse(source, { raw: !source.includes('```') && !/^---/m.test(source.trim()) })
+      doc = parse(source, {
+        raw: looksRaw && !imports,
+        ...(imports ? { imports } : {}),
+      })
     } catch {
       return
     }

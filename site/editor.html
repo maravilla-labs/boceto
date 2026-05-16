@@ -6,8 +6,12 @@
     <title>Boceto · Editor</title>
     <meta name="description" content="Live demo of <boceto-edit> — drag elements on the canvas, watch the DSL update in real time, see the same scene rendered with <boceto-view>." />
     <link rel="stylesheet" href="./assets/style.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap" />
     <script type="module" src="./assets/boceto-view.js?v=14"></script>
     <script type="module" src="./assets/boceto-edit.js?v=14"></script>
+    <script type="module" src="./assets/tiptap-island.js?v=2"></script>
     <style>
       .ed-shell {
         max-width: var(--max-width);
@@ -45,11 +49,6 @@
       .ed-pane > .body { padding: 0; }
       .ed-pane > .body.pad { padding: 12px; }
 
-      .ed-code { background: #fafaf8; }
-      .ed-code .cm-editor { font-size: 13px; }
-      .ed-code .cm-editor .cm-scroller { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
-      .ed-code .cm-content { padding: 10px 0; }
-
       .ed-canvas-wrap {
         display: flex;
         align-items: stretch;
@@ -76,6 +75,189 @@
         display: block;
       }
 
+      /* TipTap island */
+      .tt-island { padding: 12px 18px; }
+      .tt-toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 3px;
+        padding: 6px;
+        margin: 0 0 10px;
+        background: var(--paper);
+        border: 1px solid var(--rule);
+        border-radius: 6px;
+      }
+      .tt-toolbar .tt-sep {
+        display: inline-block;
+        width: 1px;
+        height: 20px;
+        margin: 0 4px;
+        background: var(--rule);
+      }
+      .tt-toolbar .tt-spacer { flex: 1; }
+      .tt-toolbar .tt-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        min-width: 28px;
+        height: 28px;
+        padding: 0 8px;
+        font: inherit;
+        font-size: 13px;
+        line-height: 1;
+        color: var(--ink);
+        background: white;
+        border: 1px solid transparent;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      .tt-toolbar .tt-btn:hover:not(:disabled) {
+        background: #fff;
+        border-color: var(--rule);
+      }
+      .tt-toolbar .tt-btn:disabled {
+        opacity: 0.35;
+        cursor: default;
+      }
+      .tt-toolbar .tt-btn--active {
+        background: #eef2ff;
+        border-color: #c7d2fe;
+        color: #3730a3;
+      }
+      .tt-toolbar .tt-btn code {
+        font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+        font-size: 12px;
+      }
+      .tt-toolbar .tt-icon { display: inline-flex; width: 18px; height: 18px; color: var(--ink); }
+      /* Tables inside the editor */
+      .tt-island .ProseMirror table {
+        border-collapse: collapse;
+        margin: 10px 0;
+        width: 100%;
+        table-layout: fixed;
+      }
+      .tt-island .ProseMirror table td,
+      .tt-island .ProseMirror table th {
+        border: 1px solid var(--rule);
+        padding: 6px 10px;
+        vertical-align: top;
+        position: relative;
+      }
+      .tt-island .ProseMirror table th {
+        background: var(--paper);
+        font-weight: 600;
+        text-align: left;
+      }
+      .tt-island .ProseMirror table .selectedCell {
+        background: rgba(99, 130, 234, 0.12);
+      }
+      .tt-island .ProseMirror table .column-resize-handle {
+        position: absolute;
+        right: -2px;
+        top: 0;
+        bottom: 0;
+        width: 4px;
+        background: #6e9bd8;
+        cursor: col-resize;
+        opacity: 0.4;
+      }
+      .tt-island .ProseMirror blockquote {
+        margin: 10px 0;
+        padding: 4px 14px;
+        border-left: 3px solid var(--rule);
+        color: var(--muted);
+      }
+      .tt-island .ProseMirror ul,
+      .tt-island .ProseMirror ol {
+        margin: 8px 0;
+        padding-left: 24px;
+      }
+      .tt-island .ProseMirror hr {
+        margin: 14px 0;
+        border: 0;
+        border-top: 1px solid var(--rule);
+      }
+      .tt-island .ProseMirror a {
+        color: #3730a3;
+        text-decoration: underline;
+      }
+      .tt-island .ProseMirror {
+        min-height: 280px;
+        padding: 14px 16px;
+        border: 1px solid var(--rule);
+        border-radius: 6px;
+        font-size: 14.5px;
+        line-height: 1.55;
+        outline: none;
+      }
+      .tt-island .ProseMirror p { margin: 0 0 8px; }
+      .tt-island .ProseMirror h2 { font-size: 17px; margin: 14px 0 6px; }
+      .tt-island .ProseMirror pre {
+        background: #fafaf8;
+        border: 1px solid var(--rule);
+        border-radius: 6px;
+        padding: 10px 12px;
+        font-size: 12.5px;
+      }
+      .boceto-block { margin: 12px 0; }
+      .boceto-block__shell {
+        position: relative;
+        border: 1px solid var(--rule);
+        border-radius: 6px;
+        padding: 10px;
+        cursor: pointer;
+        background: white;
+      }
+      .boceto-block__shell--selected { border-color: #6e9bd8; }
+      .boceto-block__shell--editing {
+        border-color: #6e9bd8;
+        cursor: default;
+        padding: 0;
+        overflow: hidden;
+      }
+      .boceto-block__bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 6px 12px;
+        background: #eff4fb;
+        border-bottom: 1px solid #cfdcef;
+        color: #2c5494;
+        font-size: 12px;
+      }
+      .boceto-block__done {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 2px 8px;
+        font-size: 12px;
+        color: white;
+        background: #2c5494;
+        border: 0;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      .boceto-block__canvas { position: relative; }
+      .boceto-block__edit-btn {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 2px 8px;
+        font-size: 12px;
+        color: var(--ink);
+        background: var(--paper);
+        border: 1px solid var(--rule);
+        border-radius: 4px;
+        cursor: pointer;
+        opacity: 0;
+        transition: opacity 0.15s;
+      }
+      .boceto-block__shell:hover .boceto-block__edit-btn { opacity: 1; }
+
       .ed-help {
         margin: 18px 0 12px;
         padding: 10px 14px;
@@ -100,20 +282,6 @@
       .ed-help li { margin: 2px 0; }
     </style>
 
-    <!-- Same importmap shape as the playground so CodeMirror's internal
-         instanceof checks stay coherent across modules. -->
-    <script type="importmap">
-      {
-        "imports": {
-          "@codemirror/state": "https://esm.sh/@codemirror/state@6.4.1",
-          "@codemirror/view": "https://esm.sh/@codemirror/view@6.34.1?external=@codemirror/state",
-          "@codemirror/language": "https://esm.sh/@codemirror/language@6.10.3?external=@codemirror/state,@codemirror/view,@lezer/highlight,@lezer/common,@lezer/lr",
-          "@lezer/common": "https://esm.sh/@lezer/common@1.2.1",
-          "@lezer/highlight": "https://esm.sh/@lezer/highlight@1.2.1?external=@lezer/common",
-          "@lezer/lr": "https://esm.sh/@lezer/lr@1.4.2?external=@lezer/common"
-        }
-      }
-    </script>
   </head>
   <body>
     <header class="site">
@@ -136,10 +304,12 @@
 
     <main class="ed-shell">
       <section class="ed-head">
-        <h1>Boceto editor</h1>
+        <h1>Two ways to embed Boceto</h1>
         <p class="tagline" style="text-align: left; margin-left: 0; font-size: 17px;">
-          A canvas editor for hand-drawn wireframes — drag, resize, multi-select, undo. Built
-          directly on top of <code>&lt;boceto-edit&gt;</code>.
+          The <code>&lt;boceto-edit&gt;</code> custom element is a canvas editor for hand-drawn
+          wireframes — drag, resize, multi-select, undo. Use it standalone, or drop it into a
+          rich-text editor via <code>@boceto/tiptap</code> for literate-component docs where one
+          fenced block defines a component and another uses it.
         </p>
       </section>
 
@@ -166,36 +336,42 @@
       <boceto-palette for="ed-editor"></boceto-palette>
       <boceto-inspector for="ed-editor"></boceto-inspector>
 
-      <!-- 1. Live DSL view (read-only CodeMirror, boceto syntax highlight) -->
+      <!-- Standalone interactive editor. The canvas is the source of truth;
+           an earlier revision of this page mirrored the DSL into a read-only
+           CodeMirror pane and a second `<boceto-view>` — that was cosmetic
+           and has been removed in favour of the cleaner two-surface story. -->
       <div class="ed-pane">
         <header>
-          <span>Source (read-only — edits happen on the canvas below)</span>
-          <span class="badge" id="ed-status">ready</span>
-        </header>
-        <div class="body ed-code" id="ed-code"></div>
-      </div>
-
-      <!-- 2. Interactive editor -->
-      <div class="ed-pane">
-        <header>
-          <span>&lt;boceto-edit&gt; — interactive</span>
-          <span class="badge">drag · resize · undo</span>
+          <span>1 · &lt;boceto-edit&gt; — standalone canvas editor</span>
+          <span class="badge" id="ed-status">drag · resize · undo</span>
         </header>
         <div class="body ed-canvas-wrap ed-resizable">
           <boceto-edit id="ed-editor" fit="content" padding="32"></boceto-edit>
         </div>
       </div>
 
-      <!-- 3. Read-only renderer of the same code. `fit="content"` grows the
-           canvas to whatever the mockup actually occupies, so nothing is
-           clipped when the editor's content extends past its default size. -->
+      <!-- Live TipTap editor — pre-bundled island built by
+           `pnpm site:tiptap` into `assets/tiptap-island.js`. The bundle
+           inlines React + TipTap + @boceto/tiptap; the script auto-mounts
+           into `#tt-island`. -->
       <div class="ed-pane">
         <header>
-          <span>&lt;boceto-view&gt; — same scene, read-only renderer</span>
-          <span class="badge" id="ed-view-status">renders: 0</span>
+          <span style="display: inline-flex; align-items: center; gap: 8px;">
+            <span aria-hidden="true" style="display: inline-flex; width: 18px; height: 18px; color: var(--ink);">
+              <svg viewBox="0 0 28 28" width="18" height="18" role="img" aria-label="@boceto/tiptap">
+                <rect x="0" y="0" width="28" height="28" rx="6" ry="6" fill="currentColor"/>
+                <text x="14" y="21.5" fill="#fff" text-anchor="middle"
+                      font-family="'Patrick Hand','Comic Sans MS',cursive"
+                      font-size="20" font-weight="700"
+                      transform="rotate(-5 14 14)">B</text>
+              </svg>
+            </span>
+            2 · @boceto/tiptap — live TipTap editor with cross-block component context
+          </span>
+          <span class="badge">click a block to edit · ⌘K palette</span>
         </header>
-        <div class="body ed-canvas-wrap" style="overflow: auto;">
-          <boceto-view id="ed-view" width="900" height="520" fit="content" padding="24"></boceto-view>
+        <div class="body" style="padding: 8px 0;">
+          <div id="tt-island" class="tt-island"></div>
         </div>
       </div>
 
@@ -223,58 +399,6 @@ ed.undo()</pre>
     </footer>
 
     <script type="module">
-      import { EditorState } from '@codemirror/state'
-      import { EditorView, lineNumbers } from '@codemirror/view'
-      import {
-        HighlightStyle,
-        StreamLanguage,
-        syntaxHighlighting,
-      } from '@codemirror/language'
-      import { tags as t } from '@lezer/highlight'
-
-      // Boceto syntax — same StreamLanguage shape the playground uses.
-      const KEYWORDS = new Set([
-        'element', 'text', 'arrow', 'row', 'col', 'end', 'component', 'slot',
-      ])
-      const bocetoLang = StreamLanguage.define({
-        name: 'boceto',
-        token(stream) {
-          if (stream.eatSpace()) return null
-          if (stream.match(/#.*/)) return 'comment'
-          if (stream.match(/"(?:\\.|[^"\\])*"?/)) return 'string'
-          if (stream.match(/-?\d+(?:\.\d+)?/)) return 'number'
-          const word = stream.match(/[A-Za-z_][\w-]*/)
-          if (word) {
-            if (KEYWORDS.has(word[0])) return 'keyword'
-            if (stream.peek() === '=') return 'propertyName'
-            return 'variableName'
-          }
-          if (stream.match(/[=#]/)) return 'operator'
-          stream.next()
-          return null
-        },
-        languageData: { commentTokens: { line: '#' } },
-      })
-
-      const palette = {
-        keyword: '#1a5590',
-        string: '#047857',
-        number: '#b45309',
-        comment: '#94a3b8',
-        propertyName: '#7c3aed',
-        variableName: '#1e293b',
-        operator: '#475569',
-      }
-      const highlight = HighlightStyle.define([
-        { tag: t.keyword, color: palette.keyword, fontWeight: '600' },
-        { tag: t.string, color: palette.string },
-        { tag: t.number, color: palette.number },
-        { tag: t.comment, color: palette.comment, fontStyle: 'italic' },
-        { tag: t.propertyName, color: palette.propertyName },
-        { tag: t.variableName, color: palette.variableName },
-        { tag: t.operator, color: palette.operator },
-      ])
-
       // ─────────────────────────────────────────────────────────────
       // Demo scene — the editable starting point.
       // ─────────────────────────────────────────────────────────────
@@ -300,58 +424,16 @@ element stepper-input 580 392 90 32 "220"
 \`\`\``
 
       const $editor = document.getElementById('ed-editor')
-      const $view = document.getElementById('ed-view')
-      const $code = document.getElementById('ed-code')
       const $status = document.getElementById('ed-status')
-      const $viewStatus = document.getElementById('ed-view-status')
 
-      // Read-only CodeMirror that mirrors the editor's current DSL.
-      const codeMirror = new EditorView({
-        state: EditorState.create({
-          doc: SCENE,
-          extensions: [
-            lineNumbers(),
-            EditorView.lineWrapping,
-            EditorView.editable.of(false),
-            bocetoLang,
-            syntaxHighlighting(highlight),
-          ],
-        }),
-        parent: $code,
-      })
-
-      // Wait until both custom elements have upgraded before wiring.
-      Promise.all([
-        customElements.whenDefined('boceto-edit'),
-        customElements.whenDefined('boceto-view'),
-      ]).then(() => {
+      customElements.whenDefined('boceto-edit').then(() => {
         $editor.setAttribute('code', SCENE)
-        $view.setAttribute('code', SCENE)
-
-        // The view fires `boceto-render` after every paint — use it to prove
-        // visually that the view is in sync with the editor.
-        let viewRenders = 0
-        $view.addEventListener('boceto-render', () => {
-          viewRenders++
-          $viewStatus.textContent = `renders: ${viewRenders}`
-        })
-
-        $editor.addEventListener('change', (e) => {
-          const code = e.detail.code
-          // Sync the read-only code panel.
-          codeMirror.dispatch({
-            changes: { from: 0, to: codeMirror.state.doc.length, insert: code },
-          })
-          // Sync the view-only render.
-          $view.setAttribute('code', code)
+        $editor.addEventListener('change', () => {
           $status.textContent = 'edited · ' + new Date().toLocaleTimeString()
         })
-
         $editor.addEventListener('select', (e) => {
           const n = e.detail.ids.length
-          $status.textContent = n === 0
-            ? 'no selection'
-            : `${n} selected`
+          $status.textContent = n === 0 ? 'no selection' : `${n} selected`
         })
       })
     </script>

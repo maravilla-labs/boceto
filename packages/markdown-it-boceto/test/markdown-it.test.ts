@@ -69,4 +69,68 @@ describe('markdown-it-boceto', () => {
     const src = '```boceto\nelement card 0 0 200 100 "Hi"\n```\n'
     expect(md.render(src)).toBe(md.render(src))
   })
+
+  it('mode: svg auto-sizes to content (no clipping on oversize pages)', () => {
+    // Issue #1 repro.
+    const md = make({ mode: 'svg' })
+    const src =
+      '```boceto\nelement box 0 0 1200 800 ""\nelement label 900 780 280 16 "I am at the far right edge"\n```\n'
+    const out = md.render(src)
+    const m = /viewBox="0 0 (\d+) (\d+)"/.exec(out)
+    expect(m).not.toBeNull()
+    expect(Number(m![1])).toBeGreaterThanOrEqual(1200)
+    expect(Number(m![2])).toBeGreaterThanOrEqual(800)
+    expect(out).toContain('I am at the far right edge')
+  })
+
+  it('mode: svg fit:"fixed" preserves clipping', () => {
+    const md = make({ mode: 'svg', fit: 'fixed', width: 400, height: 200 })
+    const src =
+      '```boceto\nelement box 0 0 1200 800 ""\nelement label 1100 780 80 16 "clipped"\n```\n'
+    expect(md.render(src)).toContain('viewBox="0 0 400 200"')
+  })
+
+  it('mode: svg width/height act as a min floor in fit:"content"', () => {
+    const md = make({ mode: 'svg', width: 900, height: 700 })
+    const src = '```boceto\nelement box 0 0 50 50 ""\n```\n'
+    expect(md.render(src)).toContain('viewBox="0 0 900 700"')
+  })
+
+  it('mode: svg honors the padding option', () => {
+    const md = make({ mode: 'svg', padding: 4 })
+    const src = '```boceto\nelement box 0 0 100 100 ""\n```\n'
+    expect(md.render(src)).toContain('viewBox="0 0 104 104"')
+  })
+
+  it('mode: svg per-fence fit=fixed overrides plugin fit:"content"', () => {
+    const md = make({ mode: 'svg' })
+    const src =
+      '```boceto fit=fixed width=400 height=200\nelement box 0 0 1200 800 ""\n```\n'
+    expect(md.render(src)).toContain('viewBox="0 0 400 200"')
+  })
+
+  it('mode: svg per-fence width overrides plugin width', () => {
+    const md = make({ mode: 'svg', width: 400 })
+    const src = '```boceto Login width=1280\nelement box 0 0 50 50 ""\n```\n'
+    const out = md.render(src)
+    const m = /viewBox="0 0 (\d+) (\d+)"/.exec(out)
+    expect(m).not.toBeNull()
+    expect(Number(m![1])).toBe(1280)
+  })
+
+  it('mode: svg unrecognized meta key falls through to page name', () => {
+    const md = make({ mode: 'svg' })
+    const src = '```boceto Page fubar=1\nelement box 0 0 50 50 ""\n```\n'
+    const out = md.render(src)
+    expect(out).toContain('<svg ')
+    expect(out).toContain('</svg>')
+  })
+
+  it('mode: wc strips per-fence option tokens from data-page', () => {
+    const md = make()
+    const src = '```boceto Login width=1280 fit=content\nelement box 0 0 10 10 ""\n```\n'
+    const out = md.render(src)
+    expect(out).toContain('data-page="Login"')
+    expect(out).not.toContain('width=1280')
+  })
 })

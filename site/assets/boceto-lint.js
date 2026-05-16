@@ -1262,12 +1262,15 @@ function parse(source, options = {}) {
     };
   }
   const rawBlocks = extractBlocks(source);
-  const { raw: rawComponents, blocks: blocksForPages } = collectComponentDefinitions(rawBlocks);
-  const components = parseComponentBodies(rawComponents);
+  const importSources = options.imports ? Array.isArray(options.imports) ? options.imports : [options.imports] : [];
+  const importBlocks = importSources.flatMap((src) => extractBlocks(src));
+  const { raw: ownRawComponents, blocks: blocksForPages } = collectComponentDefinitions(rawBlocks);
+  const { raw: importRawComponents } = importBlocks.length > 0 ? collectComponentDefinitions(importBlocks) : { raw: [] };
+  const allParsed = parseComponentBodies([...importRawComponents, ...ownRawComponents]);
+  const components = allParsed.slice(importRawComponents.length);
   validateComponents(components);
-  const componentMap = new Map(
-    components.map((c) => [c.name, c])
-  );
+  const componentMap = /* @__PURE__ */ new Map();
+  for (const c of allParsed) componentMap.set(c.name, c);
   const pages = [];
   let pageIndex = 0;
   for (const block of blocksForPages) {

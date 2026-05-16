@@ -25,6 +25,8 @@ element primary-button 100 264 400 36 "Sign In"
 
 Don't wrap the block in extra prose unless the user asked for narration.
 
+**Per-fence viewport hints.** When the mockup targets a non-default canvas size, append `width=N height=N` (and optionally `fit=fixed`) to the fence info — e.g. ` ```boceto:Mobile width=320 height=640 ` for a phone screen or ` ```boceto:Showcase fit=fixed width=1280 height=800 ` for a pinned desktop showcase. These are SVG-only render hints consumed by the remark / markdown-it plugins; they don't change the parsed doc. Default is `fit=content` (auto-size), so most mockups need no hints at all. See `references/grammar.md` for the full list of recognised keys.
+
 **When the output includes a `component` definition**, follow the literate component-doc pattern — heading, description, definition block, example usage block, "Used in" line. See `references/component-doc-pattern.md`. Skipping this is fine for one-off mockups; reach for it whenever you're producing reusable components.
 
 ## The non-negotiables

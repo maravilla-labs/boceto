@@ -3266,12 +3266,15 @@ function parse(source, options = {}) {
     };
   }
   const rawBlocks = extractBlocks(source);
-  const { raw: rawComponents, blocks: blocksForPages } = collectComponentDefinitions(rawBlocks);
-  const components = parseComponentBodies(rawComponents);
+  const importSources = options.imports ? Array.isArray(options.imports) ? options.imports : [options.imports] : [];
+  const importBlocks = importSources.flatMap((src) => extractBlocks(src));
+  const { raw: ownRawComponents, blocks: blocksForPages } = collectComponentDefinitions(rawBlocks);
+  const { raw: importRawComponents } = importBlocks.length > 0 ? collectComponentDefinitions(importBlocks) : { raw: [] };
+  const allParsed = parseComponentBodies([...importRawComponents, ...ownRawComponents]);
+  const components = allParsed.slice(importRawComponents.length);
   validateComponents(components);
-  const componentMap = new Map(
-    components.map((c) => [c.name, c])
-  );
+  const componentMap = /* @__PURE__ */ new Map();
+  for (const c of allParsed) componentMap.set(c.name, c);
   const pages = [];
   let pageIndex = 0;
   for (const block of blocksForPages) {
@@ -4156,9 +4159,9 @@ r("tabs", (s, el, st) => {
   const activeIdx = clamp(numAttr(el, "active", 0), 0, tabs.length - 1);
   const tw = el.w / tabs.length;
   tabs.forEach((t, i) => {
-    const active = i === activeIdx;
+    const active2 = i === activeIdx;
     sketchRect(s, el.x + i * tw, el.y, tw, 32, {
-      fill: active ? "#fff" : "#f0f0f0",
+      fill: active2 ? "#fff" : "#f0f0f0",
       stroke: "#bbb",
       lw: 1.5
     });
@@ -4166,8 +4169,8 @@ r("tabs", (s, el, st) => {
       align: "center",
       base: "middle",
       size: 13,
-      bold: active,
-      color: active ? "#222" : "#888"
+      bold: active2,
+      color: active2 ? "#222" : "#888"
     });
   });
   sketchRect(s, el.x, el.y + 32, el.w, el.h - 32, { fill: "#fff", stroke: "#bbb" });
@@ -4266,17 +4269,17 @@ r("pagination", (s, el) => {
   const pages = paginationLabels(current, total);
   const pw = el.w / pages.length;
   pages.forEach((p, i) => {
-    const active = p === String(current);
+    const active2 = p === String(current);
     sketchRect(s, el.x + i * pw + 1, el.y + 1, pw - 2, el.h - 2, {
-      fill: active ? "#4a90d9" : "#fff",
+      fill: active2 ? "#4a90d9" : "#fff",
       stroke: "#ccc"
     });
     sketchText(s, p, el.x + i * pw + pw / 2, el.y + el.h / 2, {
       align: "center",
       base: "middle",
       size: 13,
-      bold: active,
-      color: active ? "#fff" : "#555"
+      bold: active2,
+      color: active2 ? "#fff" : "#555"
     });
   });
 });
@@ -5148,10 +5151,10 @@ r("stepper", (s, el) => {
     const cx = el.x + 16 + i * (32 + stepGap);
     const cy = el.y + 20;
     const done = i < current;
-    const active = i === current;
+    const active2 = i === current;
     s.arc(cx, cy, 14, {
-      fill: done ? "#22c55e" : active ? "#3b82c4" : "#fff",
-      stroke: done ? "#15803d" : active ? "#1a5590" : "#94a3b8",
+      fill: done ? "#22c55e" : active2 ? "#3b82c4" : "#fff",
+      stroke: done ? "#15803d" : active2 ? "#1a5590" : "#94a3b8",
       strokeWidth: 1.5
     });
     sketchText(s, done ? "\u2713" : String(i + 1), cx, cy, {
@@ -5159,14 +5162,14 @@ r("stepper", (s, el) => {
       base: "middle",
       size: 13,
       bold: true,
-      color: done || active ? "#fff" : "#666"
+      color: done || active2 ? "#fff" : "#666"
     });
     sketchText(s, label, cx, cy + 26, {
       align: "center",
       base: "top",
       size: 11,
-      bold: active,
-      color: active ? "#222" : "#666"
+      bold: active2,
+      color: active2 ? "#222" : "#666"
     });
     if (i < items.length - 1) {
       sketchLine(s, cx + 16, cy, cx + 16 + stepGap, cy, {
@@ -5203,13 +5206,13 @@ r("carousel", (s, el, st) => {
     { stroke: "#fff", strokeWidth: 2, fill: "transparent" }
   );
   const total = clamp(numAttr(el, "total", 5), 1, 12);
-  const active = clamp(numAttr(el, "active", 0), 0, total - 1);
+  const active2 = clamp(numAttr(el, "active", 0), 0, total - 1);
   const dotGap = 12;
   const dotsW = total * 8 + (total - 1) * (dotGap - 8);
   let dx = el.x + (el.w - dotsW) / 2;
   for (let i = 0; i < total; i++) {
-    s.arc(dx + 4, el.y + el.h - dotsH / 2, i === active ? 5 : 3, {
-      fill: i === active ? "#222" : "#cbd5e1"
+    s.arc(dx + 4, el.y + el.h - dotsH / 2, i === active2 ? 5 : 3, {
+      fill: i === active2 ? "#222" : "#cbd5e1"
     });
     dx += dotGap;
   }
@@ -6440,8 +6443,11 @@ var BocetoEditor = class {
   #history;
   #subs = /* @__PURE__ */ new Map();
   #serializedCache = null;
+  /** Component-definition source merged into every parse. See `EditorInit.imports`. */
+  #imports;
   constructor(init = {}) {
-    const doc = parseInitial(init.code);
+    this.#imports = init.imports;
+    const doc = this.#parse(init.code);
     const firstPage = doc.pages[0];
     this.#state = {
       doc,
@@ -6494,7 +6500,7 @@ var BocetoEditor = class {
    * Does NOT emit a `change` event — external sets are not user mutations.
    */
   setCode(code) {
-    const doc = parseInitial(code);
+    const doc = this.#parse(code);
     this.#state.doc = doc;
     this.#state.selection = /* @__PURE__ */ new Set();
     if (!doc.pages.find((p) => p.id === this.#state.currentPageId)) {
@@ -6503,6 +6509,31 @@ var BocetoEditor = class {
     this.#history.clear();
     this.#serializedCache = null;
     relayout(doc);
+  }
+  /**
+   * Replace the imports source and re-parse the current code with the new
+   * registry. Selection is preserved if the resolved ids still exist;
+   * history is cleared (imports change is not a user-editable mutation).
+   * No-op if `imports` is unchanged.
+   */
+  setImports(imports) {
+    if ((imports ?? void 0) === (this.#imports ?? void 0)) return;
+    this.#imports = imports || void 0;
+    const doc = this.#parse(this.code);
+    this.#state.doc = doc;
+    if (!doc.pages.find((p) => p.id === this.#state.currentPageId)) {
+      this.#state.currentPageId = doc.pages[0].id;
+    }
+    for (const id of [...this.#state.selection]) {
+      if (!findAny(doc, id)) this.#state.selection.delete(id);
+    }
+    this.#history.clear();
+    this.#serializedCache = null;
+    relayout(doc);
+  }
+  /** Current imports source, if any. */
+  get imports() {
+    return this.#imports;
   }
   // ── Selection ──────────────────────────────────────────────────────────
   select(ids, mode = "replace") {
@@ -6775,7 +6806,7 @@ var BocetoEditor = class {
     }
   }
   #restoreFromSnapshot(snapshot) {
-    const doc = parseInitial(snapshot);
+    const doc = this.#parse(snapshot);
     this.#state.doc = doc;
     if (!doc.pages.find((p) => p.id === this.#state.currentPageId)) {
       this.#state.currentPageId = doc.pages[0].id;
@@ -6797,11 +6828,20 @@ var BocetoEditor = class {
   #emitChange() {
     this.#emit("change", { code: this.code, doc: this.#state.doc });
   }
+  /**
+   * Parse `code` honoring the editor's stashed `imports`. Raw mode skips
+   * Pass-1, so we disable it whenever imports are set — otherwise the
+   * imported component definitions would be invisible to the parser.
+   */
+  #parse(code) {
+    const src = code ?? "";
+    const looksRaw = !src.includes("```") && !/^---/m.test(src.trim());
+    return parse(src, {
+      raw: looksRaw && !this.#imports,
+      ...this.#imports ? { imports: this.#imports } : {}
+    });
+  }
 };
-function parseInitial(code) {
-  const src = code ?? "";
-  return parse(src, { raw: !src.includes("```") && !/^---/m.test(src.trim()) });
-}
 function resolvePageId(doc, page) {
   if (page == null) return doc.pages[0]?.id ?? null;
   if (typeof page === "number") return doc.pages[page]?.id ?? null;
@@ -7395,13 +7435,31 @@ function createInlineEditor(host, canvas, editor, getZoom = () => 1) {
   return { open, close, el: div };
 }
 
+// src/editor/active-editor.ts
+var active = null;
+var listeners = /* @__PURE__ */ new Set();
+function getActiveEditor() {
+  return active;
+}
+function setActiveEditor(el) {
+  if (el === active) return;
+  active = el;
+  for (const fn of listeners) fn(active);
+}
+function onActiveEditorChange(fn) {
+  listeners.add(fn);
+  return () => {
+    listeners.delete(fn);
+  };
+}
+
 // src/boceto-edit.ts
 var DEFAULT_W = 860;
 var DEFAULT_H = 600;
 var yogaReady = initYoga();
 var BocetoEditElement = class extends HTMLElement {
   static get observedAttributes() {
-    return ["code", "src", "width", "height", "page", "readonly", "mode", "fit"];
+    return ["code", "src", "width", "height", "page", "readonly", "mode", "fit", "imports"];
   }
   #shadow;
   #canvas;
@@ -7414,6 +7472,8 @@ var BocetoEditElement = class extends HTMLElement {
   #paintScheduled = false;
   #rubberBand = null;
   #resizeObs = null;
+  #onPointerDownActive = null;
+  #onFocusInActive = null;
   /** True once the host has been sized by CSS (any non-zero rect). After
    * that point, attribute changes to `width`/`height` are ignored in favour
    * of CSS-driven sizing — that's how authors get a resizable canvas. */
@@ -7462,7 +7522,8 @@ var BocetoEditElement = class extends HTMLElement {
     this.#renderer = new CanvasRenderer(this.#canvas);
     this.#editor = new BocetoEditor({
       code: "",
-      readonly: this.hasAttribute("readonly")
+      readonly: this.hasAttribute("readonly"),
+      imports: this.getAttribute("imports") ?? void 0
     });
     this.#editor.on("change", () => this.#schedulePaint());
     this.#editor.on("select", () => {
@@ -7510,6 +7571,7 @@ var BocetoEditElement = class extends HTMLElement {
     this.#applyPageAttr();
     this.#bindInteractions();
     this.#observeResize();
+    this.#bindActiveEditorTracking();
     this.#schedulePaint();
   }
   disconnectedCallback() {
@@ -7519,6 +7581,15 @@ var BocetoEditElement = class extends HTMLElement {
     this.#contextMenu = null;
     this.#resizeObs?.disconnect();
     this.#resizeObs = null;
+    if (this.#onPointerDownActive) {
+      this.removeEventListener("pointerdown", this.#onPointerDownActive, true);
+      this.#onPointerDownActive = null;
+    }
+    if (this.#onFocusInActive) {
+      this.removeEventListener("focusin", this.#onFocusInActive, true);
+      this.#onFocusInActive = null;
+    }
+    if (getActiveEditor() === this) setActiveEditor(null);
   }
   attributeChangedCallback(name, _old, value) {
     if (name === "readonly") {
@@ -7537,7 +7608,23 @@ var BocetoEditElement = class extends HTMLElement {
       this.#schedulePaint();
     } else if (name === "page") {
       this.#applyPageAttr();
+    } else if (name === "imports") {
+      this.#editor.setImports(value ?? void 0);
+      this.#schedulePaint();
     }
+  }
+  /**
+   * Imports source — component definitions to merge before parsing `code`.
+   * Setting via property avoids attribute serialization for large strings.
+   * Returns the attribute value when the property hasn't been set, so it
+   * mirrors the `imports` attribute on read.
+   */
+  get imports() {
+    return this.#editor.imports ?? null;
+  }
+  set imports(v) {
+    this.#editor.setImports(v ?? void 0);
+    this.#schedulePaint();
   }
   // ── Internals ──────────────────────────────────────────────────────────
   async #readInitialSource() {
@@ -7594,6 +7681,22 @@ var BocetoEditElement = class extends HTMLElement {
       this.#schedulePaint();
     });
     this.#resizeObs.observe(this.#canvas);
+  }
+  /**
+   * Mark this editor as "active" (i.e. the most recently interacted with)
+   * whenever the user clicks into its host or focus moves inside it.
+   * Floating panels (`<boceto-palette>`, `<boceto-inspector>`) read this
+   * to scope themselves to a single editor on multi-editor pages.
+   *
+   * We listen on the host element with capture=true so events from inside
+   * the shadow root (the canvas) bubble up here first. Pointerdown covers
+   * mouse/touch; focusin covers keyboard tab-in and inline-edit fields.
+   */
+  #bindActiveEditorTracking() {
+    this.#onPointerDownActive = () => setActiveEditor(this);
+    this.#onFocusInActive = () => setActiveEditor(this);
+    this.addEventListener("pointerdown", this.#onPointerDownActive, true);
+    this.addEventListener("focusin", this.#onFocusInActive, true);
   }
   #applyPageAttr() {
     const v = this.getAttribute("page");
@@ -7934,6 +8037,7 @@ var BocetoPaletteElement = class extends HTMLElement {
   #cachedTarget = null;
   #onGlobalKey = null;
   #onTargetFocus = null;
+  #unsubActive = null;
   #toast = null;
   connectedCallback() {
     if (this.#panel) return;
@@ -7955,6 +8059,13 @@ var BocetoPaletteElement = class extends HTMLElement {
     } else this.#panel.hide();
     this.#installGlobalHotkey();
     this.#installFocusToast();
+    this.#unsubActive = onActiveEditorChange((active2) => {
+      if (!this.hasAttribute("open")) return;
+      const target = this.#findTargetMaybe();
+      if (active2 && target && active2 !== target) {
+        this.removeAttribute("open");
+      }
+    });
   }
   disconnectedCallback() {
     this.#panel?.dispose();
@@ -7967,6 +8078,8 @@ var BocetoPaletteElement = class extends HTMLElement {
       target?.removeEventListener("focusin", this.#onTargetFocus, true);
     }
     this.#onTargetFocus = null;
+    this.#unsubActive?.();
+    this.#unsubActive = null;
     this.#toast?.remove();
     this.#toast = null;
   }
@@ -8214,12 +8327,14 @@ var BocetoPaletteElement = class extends HTMLElement {
       if (!(e.metaKey || e.ctrlKey)) return;
       const target = this.#findTargetMaybe();
       if (!target) return;
-      const active = document.activeElement;
-      if (active && active !== document.body) {
-        const tag = active.tagName.toLowerCase();
-        const editable = active.isContentEditable;
-        const inOurPanel = !!this.#panel && (this.#panel.el === active || this.#panel.el.contains(active));
-        const inThisCanvas = active === target || target.contains(active);
+      const activeEditor = getActiveEditor();
+      if (activeEditor != null && activeEditor !== target) return;
+      const active2 = document.activeElement;
+      if (active2 && active2 !== document.body) {
+        const tag = active2.tagName.toLowerCase();
+        const editable = active2.isContentEditable;
+        const inOurPanel = !!this.#panel && (this.#panel.el === active2 || this.#panel.el.contains(active2));
+        const inThisCanvas = active2 === target || target.contains(active2);
         if ((tag === "input" || tag === "textarea" || tag === "select" || editable) && !inOurPanel && !inThisCanvas) {
           return;
         }
@@ -8518,6 +8633,7 @@ var BocetoInspectorElement = class extends HTMLElement {
   #target = null;
   #unsubSelect = null;
   #unsubChange = null;
+  #unsubActive = null;
   #attachRetry = null;
   connectedCallback() {
     if (this.#panel) return;
@@ -8534,6 +8650,7 @@ var BocetoInspectorElement = class extends HTMLElement {
     this.#body = this.#panel.body;
     this.#panel.hide();
     this.#attachToTarget();
+    this.#unsubActive = onActiveEditorChange(() => this.#applyActiveScoping());
   }
   disconnectedCallback() {
     this.#detach();
@@ -8541,6 +8658,8 @@ var BocetoInspectorElement = class extends HTMLElement {
     this.#panel = null;
     if (this.#attachRetry != null) clearTimeout(this.#attachRetry);
     this.#attachRetry = null;
+    this.#unsubActive?.();
+    this.#unsubActive = null;
   }
   attributeChangedCallback(name, _old, value) {
     if (!this.#panel) return;
@@ -8607,8 +8726,33 @@ var BocetoInspectorElement = class extends HTMLElement {
       else this.#render();
       return;
     }
-    if (auto) this.#panel.show();
+    if (auto) {
+      if (this.#isOurTargetActive()) this.#panel.show();
+      else this.#panel.hide();
+    }
     this.#render();
+  }
+  /**
+   * Returns true when no editor has been marked active yet (single-editor
+   * pages never call `setActiveEditor`, so we keep the legacy behavior of
+   * always showing) OR when the page's active editor is ours. Hides on
+   * multi-editor pages where someone else is in focus.
+   */
+  #isOurTargetActive() {
+    const active2 = getActiveEditor();
+    if (active2 == null) return true;
+    return active2 === this.#target;
+  }
+  /** Re-evaluate visibility against the current active editor. */
+  #applyActiveScoping() {
+    if (!this.#panel) return;
+    const auto = this.getAttribute("auto") !== null || !this.hasAttribute("auto");
+    if (!auto) return;
+    if (this.#isOurTargetActive()) {
+      this.#onSelectionChange();
+    } else {
+      this.#panel.hide();
+    }
   }
   // ── Render ─────────────────────────────────────────────────────────────
   #render() {

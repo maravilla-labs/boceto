@@ -93,4 +93,47 @@ describe('<boceto-view>', () => {
     expect(canvas.width).toBe(1000)
     expect(canvas.height).toBe(800)
   })
+
+  it('resolves components defined in `imports` (attribute)', async () => {
+    const el = document.createElement(TAG) as BocetoViewElement
+    el.setAttribute(
+      'imports',
+      '```boceto\ncomponent badge-pill(label)\n  element badge 0 0 80 24 "$label"\nend\n```',
+    )
+    el.setAttribute('code', 'element badge-pill 0 0 80 24 "" label="New"')
+    document.body.appendChild(el)
+    await flush()
+    // Imports feed the parser's resolution map but are intentionally NOT echoed
+    // in `doc.components` — that's reserved for components declared in `code`.
+    expect(el.document?.components).toEqual([])
+    const items = el.document?.pages[0]!.elements ?? []
+    expect(items).toHaveLength(1)
+    expect('kind' in items[0]! && items[0]!.kind).toBe('component-instance')
+  })
+
+  it('resolves components when `imports` is set via property (no attribute serialization)', async () => {
+    const el = document.createElement(TAG) as BocetoViewElement
+    el.setAttribute('code', 'element badge-pill 0 0 80 24 "" label="Beta"')
+    document.body.appendChild(el)
+    el.imports =
+      '```boceto\ncomponent badge-pill(label)\n  element badge 0 0 80 24 "$label"\nend\n```'
+    await flush()
+    expect(el.document?.pages[0]!.elements).toHaveLength(1)
+    expect(el.getAttribute('imports')).toBeNull() // property bypasses attribute
+  })
+
+  it('re-renders when `imports` attribute changes', async () => {
+    const el = document.createElement(TAG) as BocetoViewElement
+    el.setAttribute('code', 'element pricing-card 0 0 240 160 "" title="Pro" price="$9"')
+    document.body.appendChild(el)
+    await flush()
+    // Before imports: parse fails (unknown component) — document is null.
+    expect(el.document).toBeNull()
+    el.setAttribute(
+      'imports',
+      '```boceto\ncomponent pricing-card(title, price)\n  element card 0 0 240 160 "$title"\nend\n```',
+    )
+    await flush()
+    expect(el.document?.pages[0]!.elements).toHaveLength(1)
+  })
 })

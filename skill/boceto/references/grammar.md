@@ -22,6 +22,21 @@ element navbar 0 0 600 44 "MyApp"
 - Multiple blocks in the same markdown file become multiple pages in one doc.
 - Component definitions in one block are visible to every later block.
 
+**Per-fence render hints (SVG output).** The remark / markdown-it plugins also recognise `key=value` tokens in the fence info — these set the viewport for that one block when it renders to SVG, *without* changing the parsed doc. Use them when a mockup intentionally targets a non-default canvas (e.g. a 1280×800 desktop dashboard or a 320×640 mobile screen):
+
+````
+```boceto:Mobile width=320 height=640
+element phone-frame 0 0 320 640 ""
+…
+```
+
+```boceto:Showcase fit=fixed width=1280 height=800
+…
+```
+````
+
+Recognised keys: `fit` (`content` | `fixed`), `width`, `height`, `padding` (non-negative numbers). Default is `fit=content` (auto-size with 16px padding; `width`/`height` if given act as a *minimum* floor). Unknown keys or invalid values silently fall through to the page name — safe to add hints next to existing names. See `spec/boceto-spec.md` §2 for full semantics.
+
 **2. Standalone .boceto file**:
 
 ```

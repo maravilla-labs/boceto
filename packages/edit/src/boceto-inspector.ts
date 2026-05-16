@@ -2,6 +2,7 @@ import type { AttrValue, Element } from '@boceto/core'
 import type { BocetoEditElement } from './boceto-edit'
 import { attrsFor, type AttrKind, type AttrSpec } from './editor/element-attrs'
 import { createFloatingPanel, type FloatingPanelHandle } from './editor/floating-panel'
+import { getActiveEditor, onActiveEditorChange } from './editor/active-editor'
 
 /**
  * `<boceto-inspector>` — floating draggable properties panel for the
@@ -31,6 +32,7 @@ export class BocetoInspectorElement extends HTMLElement {
   #target: BocetoEditElement | null = null
   #unsubSelect: (() => void) | null = null
   #unsubChange: (() => void) | null = null
+  #unsubActive: (() => void) | null = null
   #attachRetry: number | null = null
 
   connectedCallback(): void {
@@ -48,6 +50,11 @@ export class BocetoInspectorElement extends HTMLElement {
     this.#body = this.#panel.body
     this.#panel.hide()
     this.#attachToTarget()
+    // Hide whenever a *different* editor becomes the active one. Without
+    // this, every inspector with a non-empty selection on its target stays
+    // visible — a TipTap doc with multiple Boceto blocks would stack
+    // inspectors on top of each other.
+    this.#unsubActive = onActiveEditorChange(() => this.#applyActiveScoping())
   }
 
   disconnectedCallback(): void {
@@ -56,6 +63,8 @@ export class BocetoInspectorElement extends HTMLElement {
     this.#panel = null
     if (this.#attachRetry != null) clearTimeout(this.#attachRetry)
     this.#attachRetry = null
+    this.#unsubActive?.()
+    this.#unsubActive = null
   }
 
   attributeChangedCallback(name: string, _old: string | null, value: string | null): void {
@@ -129,8 +138,42 @@ export class BocetoInspectorElement extends HTMLElement {
       else this.#render()
       return
     }
-    if (auto) this.#panel.show()
+    if (auto) {
+      // Only auto-show when our target IS the page's active editor.
+      // Otherwise we'd pop up an inspector for a stale selection on a
+      // non-focused editor (e.g. when the user clicks into a sibling
+      // TipTap node). The selection itself is preserved; visibility just
+      // follows focus.
+      if (this.#isOurTargetActive()) this.#panel.show()
+      else this.#panel.hide()
+    }
     this.#render()
+  }
+
+  /**
+   * Returns true when no editor has been marked active yet (single-editor
+   * pages never call `setActiveEditor`, so we keep the legacy behavior of
+   * always showing) OR when the page's active editor is ours. Hides on
+   * multi-editor pages where someone else is in focus.
+   */
+  #isOurTargetActive(): boolean {
+    const active = getActiveEditor()
+    if (active == null) return true
+    return active === this.#target
+  }
+
+  /** Re-evaluate visibility against the current active editor. */
+  #applyActiveScoping(): void {
+    if (!this.#panel) return
+    const auto = this.getAttribute('auto') !== null || !this.hasAttribute('auto')
+    if (!auto) return // manual-visibility mode: don't touch the panel
+    if (this.#isOurTargetActive()) {
+      // Reevaluate via the normal selection path so an active-editor with
+      // an empty selection still stays hidden.
+      this.#onSelectionChange()
+    } else {
+      this.#panel.hide()
+    }
   }
 
   // ── Render ─────────────────────────────────────────────────────────────

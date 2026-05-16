@@ -3263,12 +3263,15 @@ function parse(source, options = {}) {
     };
   }
   const rawBlocks = extractBlocks(source);
-  const { raw: rawComponents, blocks: blocksForPages } = collectComponentDefinitions(rawBlocks);
-  const components = parseComponentBodies(rawComponents);
+  const importSources = options.imports ? Array.isArray(options.imports) ? options.imports : [options.imports] : [];
+  const importBlocks = importSources.flatMap((src) => extractBlocks(src));
+  const { raw: ownRawComponents, blocks: blocksForPages } = collectComponentDefinitions(rawBlocks);
+  const { raw: importRawComponents } = importBlocks.length > 0 ? collectComponentDefinitions(importBlocks) : { raw: [] };
+  const allParsed = parseComponentBodies([...importRawComponents, ...ownRawComponents]);
+  const components = allParsed.slice(importRawComponents.length);
   validateComponents(components);
-  const componentMap = new Map(
-    components.map((c) => [c.name, c])
-  );
+  const componentMap = /* @__PURE__ */ new Map();
+  for (const c of allParsed) componentMap.set(c.name, c);
   const pages = [];
   let pageIndex = 0;
   for (const block of blocksForPages) {
@@ -5748,12 +5751,18 @@ var DEFAULT_W = 860;
 var DEFAULT_H = 600;
 var BocetoViewElement = class extends HTMLElement {
   static get observedAttributes() {
-    return ["code", "src", "width", "height", "page", "fit", "padding"];
+    return ["code", "src", "width", "height", "page", "fit", "padding", "imports"];
   }
   #canvas;
   #renderer;
   #shadow;
   #lastDoc = null;
+  /**
+   * Imports source set via the DOM property (bypasses the attribute, which
+   * would force serialization of potentially-large strings). Falls back to
+   * the `imports` attribute when this is `null`.
+   */
+  #importsProp = null;
   constructor() {
     super();
     this.#shadow = this.attachShadow({ mode: "open" });
@@ -5778,6 +5787,18 @@ var BocetoViewElement = class extends HTMLElement {
   setCode(code) {
     this.setAttribute("code", code);
   }
+  /**
+   * Imports source — component definitions to merge before parsing `code`.
+   * Setting via property avoids attribute serialization for large strings;
+   * setting via the `imports` attribute also works.
+   */
+  get imports() {
+    return this.#importsProp ?? this.getAttribute("imports");
+  }
+  set imports(v) {
+    this.#importsProp = v;
+    void this.#refresh();
+  }
   /** Latest parsed document, if any. */
   get document() {
     return this.#lastDoc;
@@ -5798,9 +5819,14 @@ var BocetoViewElement = class extends HTMLElement {
       }
     }
     if (source == null) source = this.textContent ?? "";
+    const imports = this.#importsProp ?? this.getAttribute("imports") ?? void 0;
+    const looksRaw = !source.includes("```") && !/^---/m.test(source.trim());
     let doc;
     try {
-      doc = parse(source, { raw: !source.includes("```") && !/^---/m.test(source.trim()) });
+      doc = parse(source, {
+        raw: looksRaw && !imports,
+        ...imports ? { imports } : {}
+      });
     } catch {
       return;
     }

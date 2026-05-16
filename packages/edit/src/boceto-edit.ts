@@ -11,6 +11,7 @@ import { createContextMenu, type ContextMenuHandle } from './editor/context-menu
 import { catalogEntry } from './editor/element-catalog'
 import { bindCanvas } from './editor/interactions'
 import { createInlineEditor } from './editor/inline-edit'
+import { getActiveEditor, setActiveEditor } from './editor/active-editor'
 
 const DEFAULT_W = 860
 const DEFAULT_H = 600
@@ -36,6 +37,11 @@ const yogaReady = initYoga()
  *   - `page`     page id, name, or numeric index
  *   - `readonly` if present, mutations are suppressed
  *   - `mode`     reserved for forward compat (only `select` in v0.2)
+ *   - `imports`  additional DSL source whose `component … end` definitions
+ *               feed the parser before `code` is parsed. Use when editing
+ *               one fence of a multi-fence doc and needing to resolve
+ *               components defined elsewhere. Also settable via the
+ *               `imports` JS property (preferred for large strings).
  *
  * Events (CustomEvent detail in parens):
  *   - `change`   ({ code, doc }) one per user-initiated commit
@@ -47,7 +53,7 @@ const yogaReady = initYoga()
  */
 export class BocetoEditElement extends HTMLElement {
   static get observedAttributes(): string[] {
-    return ['code', 'src', 'width', 'height', 'page', 'readonly', 'mode', 'fit']
+    return ['code', 'src', 'width', 'height', 'page', 'readonly', 'mode', 'fit', 'imports']
   }
 
   #shadow: ShadowRoot
@@ -61,6 +67,8 @@ export class BocetoEditElement extends HTMLElement {
   #paintScheduled = false
   #rubberBand: { x: number; y: number; w: number; h: number } | null = null
   #resizeObs: ResizeObserver | null = null
+  #onPointerDownActive: ((e: PointerEvent) => void) | null = null
+  #onFocusInActive: ((e: FocusEvent) => void) | null = null
   /** True once the host has been sized by CSS (any non-zero rect). After
    * that point, attribute changes to `width`/`height` are ignored in favour
    * of CSS-driven sizing — that's how authors get a resizable canvas. */
@@ -114,6 +122,7 @@ export class BocetoEditElement extends HTMLElement {
     this.#editor = new BocetoEditor({
       code: '',
       readonly: this.hasAttribute('readonly'),
+      imports: this.getAttribute('imports') ?? undefined,
     })
     this.#editor.on('change', () => this.#schedulePaint())
     this.#editor.on('select', () => {
@@ -169,6 +178,7 @@ export class BocetoEditElement extends HTMLElement {
     this.#applyPageAttr()
     this.#bindInteractions()
     this.#observeResize()
+    this.#bindActiveEditorTracking()
     this.#schedulePaint()
   }
 
@@ -179,6 +189,17 @@ export class BocetoEditElement extends HTMLElement {
     this.#contextMenu = null
     this.#resizeObs?.disconnect()
     this.#resizeObs = null
+    if (this.#onPointerDownActive) {
+      this.removeEventListener('pointerdown', this.#onPointerDownActive, true)
+      this.#onPointerDownActive = null
+    }
+    if (this.#onFocusInActive) {
+      this.removeEventListener('focusin', this.#onFocusInActive, true)
+      this.#onFocusInActive = null
+    }
+    // If we were the active editor on the page, clear the registry so
+    // panels don't try to render against a detached host.
+    if (getActiveEditor() === this) setActiveEditor(null)
   }
 
   attributeChangedCallback(name: string, _old: string | null, value: string | null): void {
@@ -202,7 +223,24 @@ export class BocetoEditElement extends HTMLElement {
       this.#schedulePaint()
     } else if (name === 'page') {
       this.#applyPageAttr()
+    } else if (name === 'imports') {
+      this.#editor.setImports(value ?? undefined)
+      this.#schedulePaint()
     }
+  }
+
+  /**
+   * Imports source — component definitions to merge before parsing `code`.
+   * Setting via property avoids attribute serialization for large strings.
+   * Returns the attribute value when the property hasn't been set, so it
+   * mirrors the `imports` attribute on read.
+   */
+  get imports(): string | null {
+    return this.#editor.imports ?? null
+  }
+  set imports(v: string | null) {
+    this.#editor.setImports(v ?? undefined)
+    this.#schedulePaint()
   }
 
   // ── Internals ──────────────────────────────────────────────────────────
@@ -268,6 +306,23 @@ export class BocetoEditElement extends HTMLElement {
       this.#schedulePaint()
     })
     this.#resizeObs.observe(this.#canvas)
+  }
+
+  /**
+   * Mark this editor as "active" (i.e. the most recently interacted with)
+   * whenever the user clicks into its host or focus moves inside it.
+   * Floating panels (`<boceto-palette>`, `<boceto-inspector>`) read this
+   * to scope themselves to a single editor on multi-editor pages.
+   *
+   * We listen on the host element with capture=true so events from inside
+   * the shadow root (the canvas) bubble up here first. Pointerdown covers
+   * mouse/touch; focusin covers keyboard tab-in and inline-edit fields.
+   */
+  #bindActiveEditorTracking(): void {
+    this.#onPointerDownActive = () => setActiveEditor(this)
+    this.#onFocusInActive = () => setActiveEditor(this)
+    this.addEventListener('pointerdown', this.#onPointerDownActive, true)
+    this.addEventListener('focusin', this.#onFocusInActive, true)
   }
 
   #applyPageAttr(): void {

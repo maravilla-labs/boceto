@@ -34,16 +34,36 @@ export function parse(source: string, options: ParseOptions = {}): BocetoDoc {
 
   const rawBlocks = extractBlocks(source)
 
-  // Pass 1a: pull every component header + raw body out of every block.
-  const { raw: rawComponents, blocks: blocksForPages } = collectComponentDefinitions(rawBlocks)
-  // Pass 1b: parse each body with the full component registry available so
-  // composites can reference each other regardless of source order.
-  const components = parseComponentBodies(rawComponents)
+  // Optional imports: prepend their blocks for Pass-1 component extraction
+  // only — their pages are discarded so importing a doc doesn't leak its
+  // mockups into ours.
+  const importSources = options.imports
+    ? Array.isArray(options.imports)
+      ? options.imports
+      : [options.imports]
+    : []
+  const importBlocks = importSources.flatMap((src) => extractBlocks(src))
+
+  // Pass 1a (source side): own component defs are what we'll expose on
+  // `doc.components` and round-trip through serialize.
+  const { raw: ownRawComponents, blocks: blocksForPages } = collectComponentDefinitions(rawBlocks)
+  // Pass 1a (imports side): import-defined components join the registry used
+  // for resolution but are NOT added to `doc.components` — that would round-
+  // trip them through serialize and trip duplicate-component validation on
+  // the next parse.
+  const { raw: importRawComponents } = importBlocks.length > 0
+    ? collectComponentDefinitions(importBlocks)
+    : { raw: [] as ReturnType<typeof collectComponentDefinitions>['raw'] }
+
+  // Pass 1b: parse all bodies together so cross-references resolve regardless
+  // of which side declared them. Imports go first so an own component with
+  // the same name overrides the import in the resolution map.
+  const allParsed = parseComponentBodies([...importRawComponents, ...ownRawComponents])
+  const components = allParsed.slice(importRawComponents.length) // own only
   validateComponents(components)
 
-  const componentMap: ReadonlyMap<string, Component> = new Map(
-    components.map((c) => [c.name, c] as const),
-  )
+  const componentMap = new Map<string, Component>()
+  for (const c of allParsed) componentMap.set(c.name, c) // own overrides import (later wins)
 
   // Pass 2: parse pages with the component registry available so references
   // resolve to ComponentInstance items.

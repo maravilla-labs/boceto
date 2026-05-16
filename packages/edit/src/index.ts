@@ -1,6 +1,11 @@
 export { BocetoEditElement, defineBocetoEdit, TAG } from './boceto-edit'
 export { BocetoPaletteElement, defineBocetoPalette, PALETTE_TAG } from './boceto-palette'
 export { BocetoInspectorElement, defineBocetoInspector, INSPECTOR_TAG } from './boceto-inspector'
+export {
+  getActiveEditor,
+  setActiveEditor,
+  onActiveEditorChange,
+} from './editor/active-editor'
 export { ELEMENT_CATALOG, catalogEntry, type ElementCategory } from './editor/element-catalog'
 export {
   BocetoEditor,

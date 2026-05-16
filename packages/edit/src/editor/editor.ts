@@ -42,6 +42,13 @@ export interface EditorInit {
   page?: string | number
   /** History capacity. Defaults to 100. */
   historyLimit?: number
+  /**
+   * Additional DSL source whose `component … end` definitions feed the parser
+   * before `code` is parsed. Use when this editor instance edits one fence of
+   * a multi-fence doc and needs to resolve components defined in sibling
+   * fences. Update later via `setImports`.
+   */
+  imports?: string
 }
 
 /**
@@ -55,9 +62,12 @@ export class BocetoEditor {
   #history: History
   #subs = new Map<EditorEventName, Set<(payload: unknown) => void>>()
   #serializedCache: string | null = null
+  /** Component-definition source merged into every parse. See `EditorInit.imports`. */
+  #imports: string | undefined
 
   constructor(init: EditorInit = {}) {
-    const doc = parseInitial(init.code)
+    this.#imports = init.imports
+    const doc = this.#parse(init.code)
     const firstPage = doc.pages[0]!
     this.#state = {
       doc,
@@ -123,7 +133,7 @@ export class BocetoEditor {
    * Does NOT emit a `change` event — external sets are not user mutations.
    */
   setCode(code: string): void {
-    const doc = parseInitial(code)
+    const doc = this.#parse(code)
     this.#state.doc = doc
     this.#state.selection = new Set()
     if (!doc.pages.find((p) => p.id === this.#state.currentPageId)) {
@@ -132,6 +142,33 @@ export class BocetoEditor {
     this.#history.clear()
     this.#serializedCache = null
     relayout(doc)
+  }
+
+  /**
+   * Replace the imports source and re-parse the current code with the new
+   * registry. Selection is preserved if the resolved ids still exist;
+   * history is cleared (imports change is not a user-editable mutation).
+   * No-op if `imports` is unchanged.
+   */
+  setImports(imports: string | undefined): void {
+    if ((imports ?? undefined) === (this.#imports ?? undefined)) return
+    this.#imports = imports || undefined
+    const doc = this.#parse(this.code)
+    this.#state.doc = doc
+    if (!doc.pages.find((p) => p.id === this.#state.currentPageId)) {
+      this.#state.currentPageId = doc.pages[0]!.id
+    }
+    for (const id of [...this.#state.selection]) {
+      if (!findAny(doc, id)) this.#state.selection.delete(id)
+    }
+    this.#history.clear()
+    this.#serializedCache = null
+    relayout(doc)
+  }
+
+  /** Current imports source, if any. */
+  get imports(): string | undefined {
+    return this.#imports
   }
 
   // ── Selection ──────────────────────────────────────────────────────────
@@ -469,7 +506,7 @@ export class BocetoEditor {
   }
 
   #restoreFromSnapshot(snapshot: string): void {
-    const doc = parseInitial(snapshot)
+    const doc = this.#parse(snapshot)
     this.#state.doc = doc
     if (!doc.pages.find((p) => p.id === this.#state.currentPageId)) {
       this.#state.currentPageId = doc.pages[0]!.id
@@ -494,11 +531,20 @@ export class BocetoEditor {
   #emitChange(): void {
     this.#emit('change', { code: this.code, doc: this.#state.doc })
   }
-}
 
-function parseInitial(code: string | undefined): BocetoDoc {
-  const src = code ?? ''
-  return parse(src, { raw: !src.includes('```') && !/^---/m.test(src.trim()) })
+  /**
+   * Parse `code` honoring the editor's stashed `imports`. Raw mode skips
+   * Pass-1, so we disable it whenever imports are set — otherwise the
+   * imported component definitions would be invisible to the parser.
+   */
+  #parse(code: string | undefined): BocetoDoc {
+    const src = code ?? ''
+    const looksRaw = !src.includes('```') && !/^---/m.test(src.trim())
+    return parse(src, {
+      raw: looksRaw && !this.#imports,
+      ...(this.#imports ? { imports: this.#imports } : {}),
+    })
+  }
 }
 
 function resolvePageId(doc: BocetoDoc, page: string | number | undefined): string | null {

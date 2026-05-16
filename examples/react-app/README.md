@@ -7,13 +7,14 @@ imported in real apps; a full Vite scaffold lands once the editor port is in.
 To use the wrappers in your own React app today:
 
 ```tsx
-import { BocetoView, BocetoEdit } from '@boceto/react'
+import { BocetoView, BocetoEditFull } from '@boceto/react'
 
 export function Demo() {
   return (
     <>
       <BocetoView code={'element navbar 0 0 460 44 "MyApp"'} />
-      <BocetoEdit
+      {/* Editor + floating palette + property inspector, wired together. */}
+      <BocetoEditFull
         code={'element box 0 0 100 50 "Edit me"'}
         onChange={(code) => console.log(code)}
       />
@@ -21,3 +22,8 @@ export function Demo() {
   )
 }
 ```
+
+Prefer `BocetoEditFull` when you want a usable authoring surface. `BocetoEdit`
+alone renders only the canvas — handy when you need a custom layout for the
+palette/inspector and wire them yourself via `BocetoPalette` / `BocetoInspector`
+with a shared `id`.

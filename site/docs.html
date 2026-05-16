@@ -1261,13 +1261,29 @@ const updated = ed.code   // serialised on demand</pre>
         <!-- ─────────────────────────────── Framework wrappers -->
         <h3 id="boceto-react"><code>@boceto/react</code> — React wrappers</h3>
         <p>
-          Thin wrappers around the two custom elements. Props pass through as attributes;
+          React wrappers around the custom elements. Props pass through as attributes;
           events fan back out via <code>onRender</code> / <code>onChange</code>.
+          <code>BocetoEditFull</code> bundles the editor with its floating
+          palette and inspector — use it when you want a working authoring
+          surface (the bare <code>BocetoEdit</code> renders only the canvas).
         </p>
-        <pre>import { BocetoView, BocetoEdit } from '@boceto/react'
+        <pre>import { BocetoView, BocetoEditFull } from '@boceto/react'
 
 &lt;BocetoView code={code} width={600} height={320} /&gt;
-&lt;BocetoEdit code={code} onChange={setCode} readOnly={isLocked} /&gt;</pre>
+&lt;BocetoEditFull code={code} onChange={setCode} readOnly={isLocked} /&gt;
+
+// Custom layout — wire palette + inspector by a shared id:
+import { BocetoEdit, BocetoPalette, BocetoInspector } from '@boceto/react'
+
+&lt;BocetoEdit id="ed-1" code={code} onChange={setCode} /&gt;
+&lt;BocetoPalette for="ed-1" /&gt;
+&lt;BocetoInspector for="ed-1" /&gt;</pre>
+        <p>
+          The editor also exposes the new <code>imports</code> prop introduced
+          by <a href="#boceto-tiptap"><code>@boceto/tiptap</code></a>, so a
+          React-hosted editor can resolve components defined in a sibling
+          fence when embedded inside a doc-aware host.
+        </p>
 
         <h3 id="boceto-vue"><code>@boceto/vue</code> — Vue 3 wrappers</h3>
         <p>
@@ -1296,6 +1312,52 @@ const updated = ed.code   // serialised on demand</pre>
 
 &lt;BocetoView {code} width={600} height={320} on:render={(e) =&gt; console.log(e.detail.doc)} /&gt;
 &lt;BocetoEdit bind:code readOnly={isLocked} /&gt;</pre>
+
+        <h3 id="boceto-tiptap"><code>@boceto/tiptap</code> — TipTap node + extension</h3>
+        <p>
+          A TipTap node (<code>bocetoBlock</code>) and an extension
+          (<code>BocetoContext</code>) for embedding Boceto blocks inside any
+          TipTap editor. The extension broadcasts the doc-level Boceto source
+          to every node view, so a <code>component</code> defined in one
+          fenced block is resolvable from any other block in the same
+          document — <em>without</em> merging them into a single fence.
+        </p>
+        <p>
+          This is the cross-block context the markdown plugins
+          (<code>@boceto/remark</code>, <code>@boceto/markdown-it</code>) get
+          for free, ported into a TipTap editor that stores each block as an
+          atomic node.
+        </p>
+        <pre>import { useEditor } from '@tiptap/react'
+import StarterKit from '@tiptap/starter-kit'
+import { BocetoBlock, BocetoContext, BOCETO_ICON_SVG } from '@boceto/tiptap'
+import { withReactNodeView } from '@boceto/tiptap/react'
+
+const editor = useEditor({
+  extensions: [StarterKit, withReactNodeView(BocetoBlock), BocetoContext],
+  content: /* markdown / HTML with one or more ```boceto fences */,
+})
+
+// Toolbar button:
+&lt;button onClick={() =&gt; editor?.chain().focus().insertBocetoBlock().run()}&gt;
+  &lt;span dangerouslySetInnerHTML={{ __html: BOCETO_ICON_SVG }} /&gt;
+&lt;/button&gt;</pre>
+        <p>
+          <strong>Heads-up:</strong> the built-in React node view mounts the
+          full editing trio — <code>&lt;boceto-edit&gt;</code>, <code>&lt;boceto-palette&gt;</code>,
+          <code>&lt;boceto-inspector&gt;</code>. If you swap in your own node
+          view, mount all three; <code>@boceto/react</code>'s wrapper only
+          renders <code>&lt;boceto-edit&gt;</code>, so authoring without the
+          palette + inspector is unusable.
+        </p>
+        <p>
+          Under the hood, <code>BocetoContext</code> populates
+          <code>editor.storage.bocetoContext.source</code> with every block's
+          fenced DSL joined together. The node view subtracts its own code and
+          passes the rest to <code>&lt;boceto-view&gt;</code> /
+          <code>&lt;boceto-edit&gt;</code> via the new <code>imports</code>
+          attribute. Runnable demo: <code>examples/tiptap-demo</code>.
+        </p>
         </section>
 
         <section id="sec-ai" data-section="sec-ai">

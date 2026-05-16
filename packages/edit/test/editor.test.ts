@@ -326,3 +326,64 @@ describe('BocetoEditor — composites & flex containers as units', () => {
     expect(ed.doc.pages[0]!.elements[0]!.y).toBe(65)
   })
 })
+
+const BADGE_IMPORT = [
+  '```boceto',
+  'component badge-pill(label)',
+  '  element badge 0 0 80 24 "$label"',
+  'end',
+  '```',
+].join('\n')
+
+describe('BocetoEditor — imports', () => {
+  it('resolves a component defined only in imports', () => {
+    const ed = new BocetoEditor({
+      code: 'element badge-pill 0 0 80 24 "" label="New"',
+      imports: BADGE_IMPORT,
+    })
+    const items = ed.doc.pages[0]!.elements
+    expect(items).toHaveLength(1)
+    expect((items[0] as { kind?: string }).kind).toBe('component-instance')
+    expect(ed.imports).toBe(BADGE_IMPORT)
+  })
+
+  it('setImports re-parses the current code against the new registry', () => {
+    // Start with valid code (no components needed), then swap to code + imports
+    // that resolves a component. Verifies setImports + setCode interplay.
+    const ed = new BocetoEditor({ code: 'element box 0 0 10 10 ""' })
+    ed.setImports(BADGE_IMPORT)
+    ed.setCode('element badge-pill 0 0 80 24 "" label="Hi"')
+    const items = ed.doc.pages[0]!.elements
+    expect(items).toHaveLength(1)
+    expect((items[0] as { kind?: string }).kind).toBe('component-instance')
+  })
+
+  it('setImports is a no-op when value is unchanged', () => {
+    const ed = new BocetoEditor({ code: SIMPLE, imports: BADGE_IMPORT })
+    const docBefore = ed.doc
+    ed.setImports(BADGE_IMPORT)
+    expect(ed.doc).toBe(docBefore) // identity unchanged
+  })
+
+  it('setCode preserves imports (component still resolves after setCode)', () => {
+    const ed = new BocetoEditor({ code: 'element box 0 0 10 10 ""', imports: BADGE_IMPORT })
+    ed.setCode('element badge-pill 0 0 80 24 "" label="After"')
+    const items = ed.doc.pages[0]!.elements
+    expect(items).toHaveLength(1)
+    expect((items[0] as { kind?: string }).kind).toBe('component-instance')
+  })
+
+  it('undo/redo still work after imports are set (snapshot restore honors imports)', () => {
+    const ed = new BocetoEditor({
+      code: 'element badge-pill 0 0 80 24 "" label="One"',
+      imports: BADGE_IMPORT,
+    })
+    const firstInstId = ed.doc.pages[0]!.elements[0]!.id
+    ed.move([firstInstId], 10, 0)
+    expect(ed.canUndo).toBe(true)
+    ed.undo()
+    const items = ed.doc.pages[0]!.elements
+    expect(items).toHaveLength(1)
+    expect((items[0] as { kind?: string }).kind).toBe('component-instance')
+  })
+})

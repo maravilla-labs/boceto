@@ -2,6 +2,7 @@ import type { ElementType } from '@boceto/core'
 import type { BocetoEditElement } from './boceto-edit'
 import { ELEMENT_CATALOG } from './editor/element-catalog'
 import { createFloatingPanel, type FloatingPanelHandle } from './editor/floating-panel'
+import { getActiveEditor, onActiveEditorChange } from './editor/active-editor'
 
 /**
  * `<boceto-palette>` — floating draggable element picker that adds elements
@@ -39,6 +40,7 @@ export class BocetoPaletteElement extends HTMLElement {
   #cachedTarget: BocetoEditElement | null = null
   #onGlobalKey: ((e: KeyboardEvent) => void) | null = null
   #onTargetFocus: ((e: FocusEvent) => void) | null = null
+  #unsubActive: (() => void) | null = null
   #toast: HTMLDivElement | null = null
 
   connectedCallback(): void {
@@ -64,6 +66,16 @@ export class BocetoPaletteElement extends HTMLElement {
     } else this.#panel.hide()
     this.#installGlobalHotkey()
     this.#installFocusToast()
+    // Close ourselves whenever a *different* editor becomes active. Without
+    // this, a TipTap doc with multiple Boceto blocks can end up with several
+    // open palettes stacked over each other.
+    this.#unsubActive = onActiveEditorChange((active) => {
+      if (!this.hasAttribute('open')) return
+      const target = this.#findTargetMaybe()
+      if (active && target && active !== target) {
+        this.removeAttribute('open')
+      }
+    })
   }
 
   disconnectedCallback(): void {
@@ -78,6 +90,8 @@ export class BocetoPaletteElement extends HTMLElement {
       target?.removeEventListener('focusin', this.#onTargetFocus, true)
     }
     this.#onTargetFocus = null
+    this.#unsubActive?.()
+    this.#unsubActive = null
     this.#toast?.remove()
     this.#toast = null
   }
@@ -369,6 +383,13 @@ export class BocetoPaletteElement extends HTMLElement {
       // Only act when our target editor exists on the page.
       const target = this.#findTargetMaybe()
       if (!target) return
+      // Multi-editor scoping: when something has been marked active, only
+      // the palette for the active editor responds. Single-editor pages
+      // never call `setActiveEditor`, so `activeEditor == null` falls
+      // through to the legacy "first palette on the page handles it"
+      // behavior.
+      const activeEditor = getActiveEditor()
+      if (activeEditor != null && activeEditor !== target) return
       // Don't steal ⌘K while the user is typing into an input or
       // contenteditable elsewhere on the page (browsers may bind ⌘K to the
       // URL bar; preventDefault works there, but we still don't want to
