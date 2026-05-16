@@ -1,6 +1,6 @@
 {
   "name": "@boceto/vue",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Vue 3 wrappers for <boceto-view> and <boceto-edit>.",
   "license": "MIT",
   "author": "Maravilla Labs",
@@ -13,7 +13,13 @@
   "bugs": {
     "url": "https://github.com/maravilla-labs/boceto/issues"
   },
-  "keywords": ["boceto", "wireframe", "vue", "vue3", "web-components"],
+  "keywords": [
+    "boceto",
+    "wireframe",
+    "vue",
+    "vue3",
+    "web-components"
+  ],
   "type": "module",
   "sideEffects": false,
   "main": "./dist/index.cjs",
@@ -26,7 +32,10 @@
       "require": "./dist/index.cjs"
     }
   },
-  "files": ["dist", "README.md"],
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",

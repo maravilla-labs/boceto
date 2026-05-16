@@ -7,5 +7,5 @@
   "access": "public",
   "baseBranch": "main",
   "updateInternalDependencies": "patch",
-  "ignore": ["@boceto/example-vanilla-html", "@boceto/example-react-app", "@boceto/example-markdown-it-demo", "@boceto/example-remark-demo"]
+  "ignore": ["@boceto/example-vanilla-html", "@boceto/example-react-app", "@boceto/example-markdown-it-demo", "@boceto/example-remark-demo", "@boceto/example-tiptap-demo"]
 }

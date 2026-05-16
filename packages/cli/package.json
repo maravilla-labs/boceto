@@ -1,6 +1,6 @@
 {
   "name": "boceto",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Unified install + configure CLI for Boceto. `npx boceto init` wires up the authoring skill and the MCP server for your AI tools in one go; `npx boceto add skill <target>` and `npx boceto add mcp <client>` are the per-integration commands. Mirrors the Svelte `sv add` pattern.",
   "license": "MIT",
   "author": "Maravilla Labs",

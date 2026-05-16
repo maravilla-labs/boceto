@@ -1,6 +1,6 @@
 {
   "name": "@boceto/view",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Read-only <boceto-view> web component.",
   "license": "MIT",
   "author": "Maravilla Labs",
@@ -13,9 +13,19 @@
   "bugs": {
     "url": "https://github.com/maravilla-labs/boceto/issues"
   },
-  "keywords": ["boceto", "wireframe", "web-components", "custom-elements", "markdown", "remark", "markdown-it"],
+  "keywords": [
+    "boceto",
+    "wireframe",
+    "web-components",
+    "custom-elements",
+    "markdown",
+    "remark",
+    "markdown-it"
+  ],
   "type": "module",
-  "sideEffects": ["**/auto.*"],
+  "sideEffects": [
+    "**/auto.*"
+  ],
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -31,7 +41,10 @@
       "require": "./dist/auto.cjs"
     }
   },
-  "files": ["dist", "README.md"],
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
