@@ -11,10 +11,13 @@ import { createRoot } from 'react-dom/client'
 import { useEditor, EditorContent, type Editor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Link from '@tiptap/extension-link'
-import Table from '@tiptap/extension-table'
-import TableRow from '@tiptap/extension-table-row'
-import TableCell from '@tiptap/extension-table-cell'
-import TableHeader from '@tiptap/extension-table-header'
+// TipTap v3 dropped the default export from `@tiptap/extension-table`; the
+// sibling row/cell/header packages still re-export their named extension
+// AND a default. Use named imports everywhere so we're consistent.
+import { Table } from '@tiptap/extension-table'
+import { TableRow } from '@tiptap/extension-table-row'
+import { TableCell } from '@tiptap/extension-table-cell'
+import { TableHeader } from '@tiptap/extension-table-header'
 import { BocetoBlock, BocetoContext, BOCETO_ICON_SVG } from '@boceto/tiptap'
 import { withReactNodeView } from '@boceto/tiptap/react'
 
