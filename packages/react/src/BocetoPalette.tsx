@@ -20,6 +20,16 @@ export interface BocetoPaletteProps {
    * a host-controlled location. Visibility is then the host's responsibility.
    */
   dock?: boolean
+  /**
+   * Visual theme for the panel chrome (canvas is not affected).
+   *  - `light` (default) — light bg + dark text.
+   *  - `dark` — zinc-950 bg + zinc-100 text. Suited for dark host apps.
+   *  - `auto` — follows the user's `prefers-color-scheme`.
+   *
+   * For fine-grained custom palettes, omit this prop and override the
+   * `--boceto-panel-*` CSS variables on the panel root from host CSS.
+   */
+  theme?: 'light' | 'dark' | 'auto'
   className?: string
   style?: CSSProperties
 }
@@ -45,6 +55,7 @@ export function BocetoPalette(props: BocetoPaletteProps): JSX.Element {
     for: props.for,
     mount: props.mount,
     dock: props.dock ? '' : undefined,
+    theme: props.theme,
     class: props.className,
     style: props.style,
   })

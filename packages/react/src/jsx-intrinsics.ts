@@ -72,6 +72,11 @@ interface BocetoPanelExtras {
    * it). Pair with `mount` so the panel lands in your container.
    */
   dock?: boolean | string
+  /**
+   * Visual theme for the panel chrome (canvas is not affected).
+   * `light` (default), `dark`, or `auto` (follows `prefers-color-scheme`).
+   */
+  theme?: 'light' | 'dark' | 'auto'
 }
 
 interface BocetoInspectorExtras extends BocetoPanelExtras {

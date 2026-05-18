@@ -49,6 +49,11 @@ interface BocetoPanelAttrs extends HTMLAttributes<HTMLElement> {
    * Pair with `mount` so the panel lands inside your container.
    */
   dock?: boolean | string
+  /**
+   * Visual theme for the panel chrome (canvas is not affected).
+   * `light` (default), `dark`, or `auto` (follows `prefers-color-scheme`).
+   */
+  theme?: 'light' | 'dark' | 'auto'
 }
 
 interface BocetoInspectorAttrs extends BocetoPanelAttrs {

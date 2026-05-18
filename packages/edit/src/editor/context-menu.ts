@@ -43,14 +43,14 @@ export function createContextMenu(
     display: 'none',
     minWidth: '180px',
     padding: '4px 0',
-    background: '#fff',
-    border: '1px solid #d4d4d8',
+    background: 'var(--boceto-panel-bg, #fff)',
+    border: '1px solid var(--boceto-panel-input-border, #d4d4d8)',
     borderRadius: '6px',
     boxShadow: '0 6px 18px rgba(0,0,0,0.12), 0 2px 4px rgba(0,0,0,0.08)',
     fontFamily:
       'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
     fontSize: '13px',
-    color: '#222',
+    color: 'var(--boceto-panel-fg, #222)',
     zIndex: '2147483000',
     userSelect: 'none',
   } as CSSStyleDeclaration)
@@ -66,7 +66,7 @@ export function createContextMenu(
         sep.dataset.bocetoContextMenu = 'separator'
         Object.assign(sep.style, {
           height: '1px',
-          background: '#e4e4e7',
+          background: 'var(--boceto-panel-border, #e4e4e7)',
           margin: '4px 0',
         } as CSSStyleDeclaration)
         el.appendChild(sep)
@@ -87,7 +87,7 @@ export function createContextMenu(
         border: '0',
         textAlign: 'left',
         font: 'inherit',
-        color: item.disabled ? '#a1a1aa' : 'inherit',
+        color: item.disabled ? 'var(--boceto-panel-muted, #a1a1aa)' : 'inherit',
         cursor: item.disabled ? 'default' : 'pointer',
       } as CSSStyleDeclaration)
       const label = document.createElement('span')
@@ -97,7 +97,7 @@ export function createContextMenu(
         const hint = document.createElement('span')
         hint.textContent = item.hint
         Object.assign(hint.style, {
-          color: '#71717a',
+          color: 'var(--boceto-panel-muted, #71717a)',
           fontSize: '11px',
           marginLeft: 'auto',
           letterSpacing: '0.02em',
@@ -106,7 +106,7 @@ export function createContextMenu(
       }
       if (!item.disabled) {
         row.addEventListener('mouseenter', () => {
-          row.style.background = '#f4f4f5'
+          row.style.background = 'var(--boceto-panel-hover-bg, #f4f4f5)'
         })
         row.addEventListener('mouseleave', () => {
           row.style.background = 'transparent'

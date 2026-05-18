@@ -2,6 +2,7 @@ import { Fragment, useId, type CSSProperties } from 'react'
 import { BocetoEdit, type BocetoEditProps } from './BocetoEdit'
 import { BocetoPalette } from './BocetoPalette'
 import { BocetoInspector } from './BocetoInspector'
+import { BocetoComponents } from './BocetoComponents'
 
 export interface BocetoEditFullProps extends BocetoEditProps {
   /**
@@ -23,6 +24,24 @@ export interface BocetoEditFullProps extends BocetoEditProps {
    * Mirrors `<BocetoInspector auto>`.
    */
   inspectorAuto?: boolean
+  /**
+   * Mount the floating palette? Default `true`. Set to `false` when a
+   * docked panel elsewhere on the page already targets this editor (e.g.
+   * a Photoshop-style sidebar via `<BocetoPalette mount=… dock>`), so the
+   * floating one doesn't double-up.
+   */
+  palette?: boolean
+  /**
+   * Mount the floating inspector? Default `true`. Set to `false` when a
+   * docked inspector elsewhere is already bound to this editor.
+   */
+  inspector?: boolean
+  /**
+   * Mount the floating components panel? Default `false` (the components
+   * panel is not auto-mounted by `BocetoEditFull`; pass `true` to include
+   * it floating, alongside the editor).
+   */
+  components?: boolean
 }
 
 /**
@@ -46,6 +65,9 @@ export function BocetoEditFull(props: BocetoEditFullProps): JSX.Element {
     paletteStyle,
     inspectorStyle,
     inspectorAuto,
+    palette = true,
+    inspector = true,
+    components = false,
     id: providedId,
     ...editProps
   } = props
@@ -58,13 +80,18 @@ export function BocetoEditFull(props: BocetoEditFullProps): JSX.Element {
   return (
     <Fragment>
       <BocetoEdit {...editProps} id={id} />
-      <BocetoPalette for={id} className={paletteClassName} style={paletteStyle} />
-      <BocetoInspector
-        for={id}
-        auto={inspectorAuto !== false}
-        className={inspectorClassName}
-        style={inspectorStyle}
-      />
+      {palette && (
+        <BocetoPalette for={id} className={paletteClassName} style={paletteStyle} />
+      )}
+      {inspector && (
+        <BocetoInspector
+          for={id}
+          auto={inspectorAuto !== false}
+          className={inspectorClassName}
+          style={inspectorStyle}
+        />
+      )}
+      {components && <BocetoComponents for={id} />}
     </Fragment>
   )
 }

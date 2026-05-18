@@ -205,6 +205,10 @@ export function bindCanvas(
     // custom menu). Right-clicking text inside an inline-edit overlay is
     // outside the canvas, so this only fires for canvas right-clicks.
     e.preventDefault()
+    // Stop propagation so hosts like ProseMirror (TipTap NodeViews) don't
+    // also see the gesture and paint a node-selection background over the
+    // canvas. The canvas owns the right-click gesture end-to-end.
+    e.stopPropagation()
     if (editor.readonly) return
     if (!opts.onContextMenu) return
     const { x, y } = toCanvasCoords(canvas, e as PointerEvent, zoomNow())
@@ -278,6 +282,10 @@ export function bindCanvas(
     const types = e.dataTransfer?.types
     if (!types || !Array.from(types).includes('application/boceto-element-type')) return
     e.preventDefault() // signal that we accept the drop
+    // Hosts like ProseMirror also bind dragover at the editor level and will
+    // claim the drop themselves once they see the gesture. Stop the bubble so
+    // the canvas is the only handler that sees a boceto-element drag.
+    e.stopPropagation()
     if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy'
   }
 
@@ -287,6 +295,9 @@ export function bindCanvas(
     const type = e.dataTransfer?.getData('application/boceto-element-type')
     if (!type) return
     e.preventDefault()
+    // Same reasoning as dragover — keep the drop inside the canvas; we've
+    // already handled it.
+    e.stopPropagation()
     const { x, y } = toCanvasCoords(canvas, e, zoomNow())
     opts.onDrop({ x, y, type })
   }

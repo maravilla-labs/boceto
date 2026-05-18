@@ -26,6 +26,14 @@ export interface BocetoComponentsProps {
    * a host-controlled location.
    */
   dock?: boolean
+  /**
+   * Visual theme for the panel chrome (canvas is not affected).
+   *  - `light` (default), `dark`, or `auto` (follows `prefers-color-scheme`).
+   *
+   * For fine-grained custom palettes, omit this prop and override the
+   * `--boceto-panel-*` CSS variables on the panel root from host CSS.
+   */
+  theme?: 'light' | 'dark' | 'auto'
   className?: string
   style?: CSSProperties
 }
@@ -53,6 +61,7 @@ export function BocetoComponents(props: BocetoComponentsProps): JSX.Element {
     open: props.open ? '' : undefined,
     mount: props.mount,
     dock: props.dock ? '' : undefined,
+    theme: props.theme,
     class: props.className,
     style: props.style,
   })

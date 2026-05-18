@@ -26,6 +26,14 @@ export interface BocetoInspectorProps {
    * The body still renders "Nothing selected" when the selection is empty.
    */
   dock?: boolean
+  /**
+   * Visual theme for the panel chrome (canvas is not affected).
+   *  - `light` (default), `dark`, or `auto` (follows `prefers-color-scheme`).
+   *
+   * For fine-grained custom palettes, omit this prop and override the
+   * `--boceto-panel-*` CSS variables on the panel root from host CSS.
+   */
+  theme?: 'light' | 'dark' | 'auto'
   className?: string
   style?: CSSProperties
 }
@@ -51,6 +59,7 @@ export function BocetoInspector(props: BocetoInspectorProps): JSX.Element {
     auto: props.auto === false ? undefined : '',
     mount: props.mount,
     dock: props.dock ? '' : undefined,
+    theme: props.theme,
     class: props.className,
     style: props.style,
   })

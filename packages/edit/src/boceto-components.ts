@@ -1,7 +1,7 @@
 import type { BocetoEditElement } from './boceto-edit'
 import type { BocetoEditor } from './editor/editor'
 import type { ComponentSummary } from './editor/components'
-import { createFloatingPanel, type FloatingPanelHandle } from './editor/floating-panel'
+import { applyPanelTheme, createFloatingPanel, type FloatingPanelHandle } from './editor/floating-panel'
 import { getActiveEditor, onActiveEditorChange } from './editor/active-editor'
 
 /**
@@ -24,7 +24,7 @@ import { getActiveEditor, onActiveEditorChange } from './editor/active-editor'
  */
 export class BocetoComponentsElement extends HTMLElement {
   static get observedAttributes(): string[] {
-    return ['for', 'x', 'y', 'open', 'mount', 'dock']
+    return ['for', 'x', 'y', 'open', 'mount', 'dock', 'theme']
   }
 
   #panel: FloatingPanelHandle | null = null
@@ -53,6 +53,7 @@ export class BocetoComponentsElement extends HTMLElement {
       onClose: () => this.removeAttribute('open'),
       mount,
       dock,
+      theme: this.#resolveTheme(),
     })
     this.#buildBody()
     // Docked panels are always visible — host controls when they're on screen.
@@ -73,6 +74,11 @@ export class BocetoComponentsElement extends HTMLElement {
     const id = this.getAttribute('mount')
     if (!id) return null
     return document.getElementById(id)
+  }
+
+  #resolveTheme(): 'light' | 'dark' | 'auto' {
+    const v = this.getAttribute('theme')
+    return v === 'dark' || v === 'auto' ? v : 'light'
   }
 
   disconnectedCallback(): void {
@@ -99,6 +105,8 @@ export class BocetoComponentsElement extends HTMLElement {
     } else if (name === 'x' || name === 'y') {
       const v = numAttr(this, name, 16)
       this.#panel.el.style[name === 'x' ? 'left' : 'top'] = `${v}px`
+    } else if (name === 'theme') {
+      applyPanelTheme(this.#panel.el, this.#resolveTheme())
     }
   }
 
@@ -163,10 +171,10 @@ export class BocetoComponentsElement extends HTMLElement {
     Object.assign(this.#editModeChip.style, {
       display: 'none',
       padding: '8px 12px',
-      background: '#fef3c7',
-      borderBottom: '1px solid #fde68a',
+      background: 'var(--boceto-panel-warning-bg, #fef3c7)',
+      borderBottom: '1px solid var(--boceto-panel-warning-border, #fde68a)',
       fontSize: '12px',
-      color: '#854d0e',
+      color: 'var(--boceto-panel-warning-fg, #854d0e)',
       alignItems: 'center',
       gap: '8px',
     } as CSSStyleDeclaration)
@@ -177,9 +185,9 @@ export class BocetoComponentsElement extends HTMLElement {
     Object.assign(headerRow.style, {
       position: 'sticky',
       top: '0',
-      background: '#fff',
+      background: 'var(--boceto-panel-bg, #fff)',
       padding: '8px 10px',
-      borderBottom: '1px solid #e4e4e7',
+      borderBottom: '1px solid var(--boceto-panel-border, #e4e4e7)',
       display: 'flex',
       gap: '6px',
       zIndex: '1',
@@ -190,11 +198,13 @@ export class BocetoComponentsElement extends HTMLElement {
     Object.assign(this.#searchInput.style, {
       flex: '1',
       padding: '4px 8px',
-      border: '1px solid #d4d4d8',
+      border: '1px solid var(--boceto-panel-input-border, #d4d4d8)',
       borderRadius: '4px',
       font: 'inherit',
       fontSize: '12.5px',
       outline: 'none',
+      background: 'var(--boceto-panel-input-bg, #fff)',
+      color: 'var(--boceto-panel-fg, #222)',
     } as CSSStyleDeclaration)
     this.#searchInput.addEventListener('input', () => this.#renderList())
     const newBtn = document.createElement('button')
@@ -202,16 +212,21 @@ export class BocetoComponentsElement extends HTMLElement {
     newBtn.textContent = '+ New'
     Object.assign(newBtn.style, {
       padding: '4px 10px',
-      border: '1px solid #4a90d9',
-      background: '#4a90d9',
-      color: '#fff',
+      border: '1px solid var(--boceto-panel-accent, #4a90d9)',
+      background: 'var(--boceto-panel-accent, #4a90d9)',
+      color: 'var(--boceto-panel-accent-fg, #fff)',
       borderRadius: '4px',
       cursor: 'pointer',
       font: 'inherit',
       fontSize: '12px',
       whiteSpace: 'nowrap',
     } as CSSStyleDeclaration)
-    newBtn.addEventListener('click', () => this.#openNewComponentForm())
+    newBtn.addEventListener('click', (e) => {
+      // Block the click from leaking to host editors (e.g. a parent
+      // ProseMirror) — the panel owns the gesture end-to-end.
+      e.stopPropagation()
+      this.#openNewComponentForm()
+    })
     headerRow.append(this.#searchInput, newBtn)
     body.appendChild(headerRow)
 
@@ -243,7 +258,7 @@ export class BocetoComponentsElement extends HTMLElement {
       Object.assign(empty.style, {
         padding: '20px 14px',
         textAlign: 'center',
-        color: '#a1a1aa',
+        color: 'var(--boceto-panel-muted, #a1a1aa)',
         fontSize: '12px',
       } as CSSStyleDeclaration)
       this.#listEl.appendChild(empty)
@@ -294,7 +309,7 @@ export class BocetoComponentsElement extends HTMLElement {
     const row = document.createElement('div')
     Object.assign(row.style, {
       padding: '8px 12px',
-      borderBottom: '1px solid #f4f4f5',
+      borderBottom: '1px solid var(--boceto-panel-border, #f4f4f5)',
     } as CSSStyleDeclaration)
 
     const head = document.createElement('div')
@@ -310,7 +325,7 @@ export class BocetoComponentsElement extends HTMLElement {
     Object.assign(nameEl.style, {
       fontFamily: 'ui-monospace, SF Mono, Menlo, Consolas, monospace',
       fontSize: '12.5px',
-      color: '#27272a',
+      color: 'var(--boceto-panel-fg, #27272a)',
       flex: '1',
       overflow: 'hidden',
       textOverflow: 'ellipsis',
@@ -332,7 +347,7 @@ export class BocetoComponentsElement extends HTMLElement {
       hint.textContent = c.hint
       Object.assign(hint.style, {
         fontSize: '11px',
-        color: '#71717a',
+        color: 'var(--boceto-panel-muted, #71717a)',
         marginBottom: '6px',
       } as CSSStyleDeclaration)
       row.appendChild(hint)
@@ -416,8 +431,8 @@ export class BocetoComponentsElement extends HTMLElement {
     const form = document.createElement('form')
     Object.assign(form.style, {
       padding: '10px 12px',
-      background: '#f9fafb',
-      borderBottom: '1px solid #e4e4e7',
+      background: 'var(--boceto-panel-secondary-bg, #f9fafb)',
+      borderBottom: '1px solid var(--boceto-panel-border, #e4e4e7)',
       display: 'grid',
       gap: '6px',
     } as CSSStyleDeclaration)
@@ -446,19 +461,35 @@ export class BocetoComponentsElement extends HTMLElement {
 
     queueMicrotask(() => nameInput.focus())
 
-    cancel.addEventListener('click', () => this.#renderList())
+    cancel.addEventListener('click', (e) => {
+      // Stop the click from bubbling into a host's editor that may also
+      // be listening (e.g. a parent ProseMirror) — the cancel action is
+      // purely a panel concern.
+      e.stopPropagation()
+      this.#renderList()
+    })
     form.addEventListener('submit', (e) => {
       e.preventDefault()
+      // Same reasoning as cancel — keep the submit gesture inside the panel.
+      e.stopPropagation()
       const name = nameInput.value.trim()
       if (!name) return
       const params = paramsInput.value
         .split(',')
         .map((p) => p.trim())
         .filter((p) => p.length > 0)
+      // Re-resolve target at submit time as defence — if the bound editor
+      // unmounted between form-open and Create-click (e.g. user closed the
+      // boceto block in the host editor), `this.#target` may be stale.
+      const target = this.#target ?? this.#findTarget()
+      if (!target?.editor) {
+        window.alert('No editor is currently bound to the Components panel.')
+        return
+      }
       try {
-        const c = this.#target!.editor.createComponent({ name, params })
+        const c = target.editor.createComponent({ name, params })
         // Jump straight into editing the body.
-        this.#target!.editor.enterComponentEditMode(c.name)
+        target.editor.enterComponentEditMode(c.name)
       } catch (err) {
         window.alert((err as Error).message ?? String(err))
       }
@@ -476,7 +507,7 @@ function sectionHeader(text: string): HTMLDivElement {
     fontSize: '10.5px',
     textTransform: 'uppercase',
     letterSpacing: '0.06em',
-    color: '#a1a1aa',
+    color: 'var(--boceto-panel-muted, #a1a1aa)',
     fontWeight: '600',
   } as CSSStyleDeclaration)
   return h
@@ -489,17 +520,19 @@ function actionButton(label: string, onClick: () => void, disabled = false): HTM
   b.disabled = disabled
   Object.assign(b.style, {
     padding: '3px 8px',
-    border: '1px solid #d4d4d8',
-    background: '#fff',
+    border: '1px solid var(--boceto-panel-input-border, #d4d4d8)',
+    background: 'var(--boceto-panel-bg, #fff)',
     borderRadius: '4px',
     cursor: disabled ? 'default' : 'pointer',
-    color: disabled ? '#a1a1aa' : '#27272a',
+    color: disabled
+      ? 'var(--boceto-panel-muted, #a1a1aa)'
+      : 'var(--boceto-panel-fg, #27272a)',
     font: 'inherit',
     fontSize: '11.5px',
   } as CSSStyleDeclaration)
   if (!disabled) {
-    b.addEventListener('mouseenter', () => (b.style.background = '#f4f4f5'))
-    b.addEventListener('mouseleave', () => (b.style.background = '#fff'))
+    b.addEventListener('mouseenter', () => (b.style.background = 'var(--boceto-panel-hover-bg, #f4f4f5)'))
+    b.addEventListener('mouseleave', () => (b.style.background = 'var(--boceto-panel-bg, #fff)'))
     b.addEventListener('click', onClick)
   }
   return b
@@ -510,21 +543,22 @@ function styleField(el: HTMLInputElement): void {
     width: '100%',
     boxSizing: 'border-box',
     padding: '5px 8px',
-    border: '1px solid #d4d4d8',
+    border: '1px solid var(--boceto-panel-input-border, #d4d4d8)',
     borderRadius: '4px',
     font: 'inherit',
     fontSize: '12.5px',
     outline: 'none',
-    background: '#fff',
+    background: 'var(--boceto-panel-input-bg, #fff)',
+    color: 'var(--boceto-panel-fg, #222)',
   } as CSSStyleDeclaration)
 }
 
 function stylePrimaryBtn(el: HTMLButtonElement): void {
   Object.assign(el.style, {
     padding: '4px 10px',
-    border: '1px solid #4a90d9',
-    background: '#4a90d9',
-    color: '#fff',
+    border: '1px solid var(--boceto-panel-accent, #4a90d9)',
+    background: 'var(--boceto-panel-accent, #4a90d9)',
+    color: 'var(--boceto-panel-accent-fg, #fff)',
     borderRadius: '4px',
     cursor: 'pointer',
     font: 'inherit',
@@ -535,9 +569,9 @@ function stylePrimaryBtn(el: HTMLButtonElement): void {
 function styleSecondaryBtn(el: HTMLButtonElement): void {
   Object.assign(el.style, {
     padding: '4px 10px',
-    border: '1px solid #d4d4d8',
-    background: '#fff',
-    color: '#27272a',
+    border: '1px solid var(--boceto-panel-input-border, #d4d4d8)',
+    background: 'var(--boceto-panel-bg, #fff)',
+    color: 'var(--boceto-panel-fg, #27272a)',
     borderRadius: '4px',
     cursor: 'pointer',
     font: 'inherit',

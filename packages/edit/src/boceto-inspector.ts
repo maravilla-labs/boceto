@@ -1,7 +1,7 @@
 import { isComponentInstance, type AttrValue, type ComponentInstance, type Element } from '@boceto/core'
 import type { BocetoEditElement } from './boceto-edit'
 import { attrsFor, type AttrKind, type AttrSpec } from './editor/element-attrs'
-import { createFloatingPanel, type FloatingPanelHandle } from './editor/floating-panel'
+import { applyPanelTheme, createFloatingPanel, type FloatingPanelHandle } from './editor/floating-panel'
 import { getActiveEditor, onActiveEditorChange } from './editor/active-editor'
 
 /**
@@ -24,7 +24,7 @@ import { getActiveEditor, onActiveEditorChange } from './editor/active-editor'
  */
 export class BocetoInspectorElement extends HTMLElement {
   static get observedAttributes(): string[] {
-    return ['for', 'x', 'y', 'auto', 'open', 'mount', 'dock']
+    return ['for', 'x', 'y', 'auto', 'open', 'mount', 'dock', 'theme']
   }
 
   #panel: FloatingPanelHandle | null = null
@@ -50,6 +50,7 @@ export class BocetoInspectorElement extends HTMLElement {
       onClose: () => this.removeAttribute('open'),
       mount,
       dock,
+      theme: this.#resolveTheme(),
     })
     this.#body = this.#panel.body
     // Docked panels are always visible — the host's tab/rail layout
@@ -76,6 +77,11 @@ export class BocetoInspectorElement extends HTMLElement {
     return document.getElementById(id)
   }
 
+  #resolveTheme(): 'light' | 'dark' | 'auto' {
+    const v = this.getAttribute('theme')
+    return v === 'dark' || v === 'auto' ? v : 'light'
+  }
+
   disconnectedCallback(): void {
     this.#detach()
     this.#panel?.dispose()
@@ -100,6 +106,8 @@ export class BocetoInspectorElement extends HTMLElement {
     } else if (name === 'x' || name === 'y') {
       const v = numAttr(this, name, 16)
       this.#panel.el.style[name === 'x' ? 'left' : 'top'] = `${v}px`
+    } else if (name === 'theme') {
+      applyPanelTheme(this.#panel.el, this.#resolveTheme())
     }
   }
 
@@ -214,7 +222,7 @@ export class BocetoInspectorElement extends HTMLElement {
       empty.textContent = 'Nothing selected.'
       Object.assign(empty.style, {
         padding: '20px 14px',
-        color: '#a1a1aa',
+        color: 'var(--boceto-panel-muted, #a1a1aa)',
         textAlign: 'center',
       } as CSSStyleDeclaration)
       this.#body.appendChild(empty)
@@ -225,7 +233,7 @@ export class BocetoInspectorElement extends HTMLElement {
       multi.textContent = `${ids.length} items selected.`
       Object.assign(multi.style, {
         padding: '20px 14px',
-        color: '#a1a1aa',
+        color: 'var(--boceto-panel-muted, #a1a1aa)',
         textAlign: 'center',
       } as CSSStyleDeclaration)
       this.#body.appendChild(multi)
@@ -397,7 +405,7 @@ export class BocetoInspectorElement extends HTMLElement {
     Object.assign(name.style, {
       fontFamily: 'ui-monospace, SF Mono, Menlo, Consolas, monospace',
       fontSize: '12.5px',
-      color: '#27272a',
+      color: 'var(--boceto-panel-fg, #27272a)',
       flex: '1',
     } as CSSStyleDeclaration)
     nameRow.appendChild(name)
@@ -406,9 +414,9 @@ export class BocetoInspectorElement extends HTMLElement {
     action.textContent = isLocal ? 'Edit' : 'Go to source'
     Object.assign(action.style, {
       padding: '3px 10px',
-      border: '1px solid #4a90d9',
-      background: '#fff',
-      color: '#4a90d9',
+      border: '1px solid var(--boceto-panel-accent, #4a90d9)',
+      background: 'var(--boceto-panel-bg, #fff)',
+      color: 'var(--boceto-panel-accent, #4a90d9)',
       borderRadius: '4px',
       cursor: 'pointer',
       font: 'inherit',
@@ -505,7 +513,7 @@ function section(title: string): HTMLDivElement {
     fontSize: '10.5px',
     textTransform: 'uppercase',
     letterSpacing: '0.06em',
-    color: '#a1a1aa',
+    color: 'var(--boceto-panel-muted, #a1a1aa)',
     fontWeight: '600',
     marginBottom: '6px',
   } as CSSStyleDeclaration)
@@ -585,11 +593,11 @@ function colorInput(value: string, onCommit: (v: string) => void): HTMLInputElem
   Object.assign(c.style, {
     width: '36px',
     height: '24px',
-    border: '1px solid #d4d4d8',
+    border: '1px solid var(--boceto-panel-input-border, #d4d4d8)',
     borderRadius: '4px',
     padding: '0',
     cursor: 'pointer',
-    background: '#fff',
+    background: 'var(--boceto-panel-input-bg, #fff)',
   } as CSSStyleDeclaration)
   c.addEventListener('change', () => onCommit(c.value))
   return c
@@ -654,18 +662,19 @@ function styleField(el: HTMLInputElement | HTMLSelectElement): void {
     width: '100%',
     boxSizing: 'border-box',
     padding: '4px 6px',
-    border: '1px solid #d4d4d8',
+    border: '1px solid var(--boceto-panel-input-border, #d4d4d8)',
     borderRadius: '4px',
     font: 'inherit',
     fontSize: '12.5px',
     outline: 'none',
-    background: '#fff',
+    background: 'var(--boceto-panel-input-bg, #fff)',
+    color: 'var(--boceto-panel-fg, #222)',
   } as CSSStyleDeclaration)
   el.addEventListener('focus', () => {
-    el.style.borderColor = '#4a90d9'
+    el.style.borderColor = 'var(--boceto-panel-accent, #4a90d9)'
   })
   el.addEventListener('blur', () => {
-    el.style.borderColor = '#d4d4d8'
+    el.style.borderColor = 'var(--boceto-panel-input-border, #d4d4d8)'
   })
 }
 

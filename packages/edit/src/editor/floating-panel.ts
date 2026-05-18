@@ -44,6 +44,68 @@ export interface FloatingPanelOptions {
    * `document.body` (likely not what you want — pair them).
    */
   dock?: boolean
+  /**
+   * Visual theme for the panel chrome and controls. The canvas (in
+   * `<boceto-edit>` / `<boceto-view>`) is **not** themed — only the panel
+   * shell. Three values:
+   *  - `light` (default) — light bg + dark text. Matches the historical look.
+   *  - `dark` — zinc-950 bg + zinc-100 text. Suited for dark host apps.
+   *  - `auto` — follows `prefers-color-scheme` of the user's OS / page.
+   *
+   * Implementation: each value sets a known suite of CSS custom properties
+   * on the panel root (`--boceto-panel-bg`, `--boceto-panel-fg`, …). Host
+   * pages that want full custom palettes can omit `theme` and override the
+   * variables themselves from light-DOM CSS.
+   */
+  theme?: 'light' | 'dark' | 'auto'
+}
+
+/** Apply a theme's CSS variables to the panel root. Exported so the panel
+ *  custom elements can re-apply on attribute changes. */
+export function applyPanelTheme(
+  root: HTMLElement,
+  theme: 'light' | 'dark' | 'auto' | null | undefined,
+): void {
+  const mode =
+    theme === 'auto'
+      ? (window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+      : theme === 'dark'
+        ? 'dark'
+        : 'light'
+  const vars: Record<string, string> =
+    mode === 'dark'
+      ? {
+          '--boceto-panel-bg': '#09090b',
+          '--boceto-panel-fg': '#f4f4f5',
+          '--boceto-panel-muted': '#a1a1aa',
+          '--boceto-panel-border': '#27272a',
+          '--boceto-panel-accent': '#4a90d9',
+          '--boceto-panel-accent-fg': '#ffffff',
+          '--boceto-panel-hover-bg': '#18181b',
+          '--boceto-panel-secondary-bg': '#18181b',
+          '--boceto-panel-input-bg': '#18181b',
+          '--boceto-panel-input-border': '#3f3f46',
+          '--boceto-panel-warning-bg': '#3f2d0a',
+          '--boceto-panel-warning-fg': '#fde68a',
+          '--boceto-panel-warning-border': '#854d0e',
+        }
+      : {
+          '--boceto-panel-bg': '#ffffff',
+          '--boceto-panel-fg': '#222222',
+          '--boceto-panel-muted': '#71717a',
+          '--boceto-panel-border': '#e4e4e7',
+          '--boceto-panel-accent': '#4a90d9',
+          '--boceto-panel-accent-fg': '#ffffff',
+          '--boceto-panel-hover-bg': '#f4f4f5',
+          '--boceto-panel-secondary-bg': '#fafafa',
+          '--boceto-panel-input-bg': '#ffffff',
+          '--boceto-panel-input-border': '#d4d4d8',
+          '--boceto-panel-warning-bg': '#fef3c7',
+          '--boceto-panel-warning-fg': '#854d0e',
+          '--boceto-panel-warning-border': '#fde68a',
+        }
+  for (const [k, v] of Object.entries(vars)) root.style.setProperty(k, v)
+  root.dataset.bocetoPanelTheme = mode
 }
 
 export interface FloatingPanelHandle {
@@ -66,12 +128,16 @@ export function createFloatingPanel(opts: FloatingPanelOptions): FloatingPanelHa
   const root = document.createElement('div')
   root.dataset.bocetoPanel = 'root'
   if (dock) root.dataset.bocetoPanelMode = 'dock'
-  // Base styles shared by both modes.
+  // Seed the theme variables on the root before any child reads them.
+  // `light` is the default if no theme is provided.
+  applyPanelTheme(root, opts.theme ?? 'light')
+  // Base styles shared by both modes. Colors are driven by CSS variables
+  // so consumers can re-theme without touching every inline style here.
   const baseStyle: Partial<CSSStyleDeclaration> = {
-    background: '#fff',
+    background: 'var(--boceto-panel-bg, #fff)',
     fontFamily: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
     fontSize: '13px',
-    color: '#222',
+    color: 'var(--boceto-panel-fg, #222)',
     display: 'flex',
     flexDirection: 'column',
     overflow: 'hidden',
@@ -103,7 +169,7 @@ export function createFloatingPanel(opts: FloatingPanelOptions): FloatingPanelHa
       top: `${opts.y ?? 16}px`,
       width: `${opts.width ?? 280}px`,
       maxHeight: opts.height ? `${opts.height}px` : '80vh',
-      border: '1px solid #d4d4d8',
+      border: '1px solid var(--boceto-panel-border, #d4d4d8)',
       borderRadius: '8px',
       boxShadow: '0 6px 20px rgba(0,0,0,0.10), 0 2px 4px rgba(0,0,0,0.06)',
       zIndex: '2147482000',
@@ -117,13 +183,13 @@ export function createFloatingPanel(opts: FloatingPanelOptions): FloatingPanelHa
     alignItems: 'center',
     gap: '8px',
     padding: '8px 10px',
-    borderBottom: '1px solid #e4e4e7',
-    background: '#fafafa',
+    borderBottom: '1px solid var(--boceto-panel-border, #e4e4e7)',
+    background: 'var(--boceto-panel-secondary-bg, #fafafa)',
     cursor: dock ? 'default' : 'grab',
     fontSize: '12px',
     letterSpacing: '0.04em',
     textTransform: 'uppercase',
-    color: '#52525b',
+    color: 'var(--boceto-panel-muted, #52525b)',
     fontWeight: '600',
   } as CSSStyleDeclaration)
 
@@ -132,7 +198,10 @@ export function createFloatingPanel(opts: FloatingPanelOptions): FloatingPanelHa
     const grip = document.createElement('span')
     grip.dataset.bocetoPanel = 'grip'
     grip.textContent = '⋮⋮'
-    Object.assign(grip.style, { color: '#a1a1aa', letterSpacing: '-3px' } as CSSStyleDeclaration)
+    Object.assign(grip.style, {
+      color: 'var(--boceto-panel-muted, #a1a1aa)',
+      letterSpacing: '-3px',
+    } as CSSStyleDeclaration)
     header.appendChild(grip)
   }
 
@@ -155,13 +224,16 @@ export function createFloatingPanel(opts: FloatingPanelOptions): FloatingPanelHa
       height: '22px',
       border: '0',
       background: 'transparent',
-      color: '#71717a',
+      color: 'var(--boceto-panel-muted, #71717a)',
       fontSize: '16px',
       lineHeight: '1',
       cursor: 'pointer',
       borderRadius: '4px',
     } as CSSStyleDeclaration)
-    close.addEventListener('mouseenter', () => (close.style.background = '#f4f4f5'))
+    close.addEventListener(
+      'mouseenter',
+      () => (close.style.background = 'var(--boceto-panel-hover-bg, #f4f4f5)'),
+    )
     close.addEventListener('mouseleave', () => (close.style.background = 'transparent'))
     close.addEventListener('click', (e) => {
       e.preventDefault()

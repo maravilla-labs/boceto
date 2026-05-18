@@ -97,6 +97,11 @@ export class BocetoEditElement extends HTMLElement {
         height: 100%;
         touch-action: none;
         outline: none;
+        /* The canvas is interactive but holds no selectable text — keep
+         * the OS from painting a text-selection highlight when the user
+         * right-clicks or drags over it. */
+        user-select: none;
+        -webkit-user-select: none;
       }
       .rubber {
         position: absolute;

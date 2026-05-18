@@ -1,7 +1,7 @@
 import type { ElementType } from '@boceto/core'
 import type { BocetoEditElement } from './boceto-edit'
 import { ELEMENT_CATALOG } from './editor/element-catalog'
-import { createFloatingPanel, type FloatingPanelHandle } from './editor/floating-panel'
+import { applyPanelTheme, createFloatingPanel, type FloatingPanelHandle } from './editor/floating-panel'
 import { getActiveEditor, onActiveEditorChange } from './editor/active-editor'
 
 /**
@@ -30,7 +30,7 @@ import { getActiveEditor, onActiveEditorChange } from './editor/active-editor'
  */
 export class BocetoPaletteElement extends HTMLElement {
   static get observedAttributes(): string[] {
-    return ['for', 'x', 'y', 'open', 'mount', 'dock']
+    return ['for', 'x', 'y', 'open', 'mount', 'dock', 'theme']
   }
 
   #panel: FloatingPanelHandle | null = null
@@ -62,6 +62,7 @@ export class BocetoPaletteElement extends HTMLElement {
       onClose: () => this.removeAttribute('open'),
       mount,
       dock,
+      theme: this.#resolveTheme(),
     })
     this.#buildBody()
     // Docked panels are always-visible — the host's tab/rail layout owns
@@ -94,6 +95,11 @@ export class BocetoPaletteElement extends HTMLElement {
     const id = this.getAttribute('mount')
     if (!id) return null
     return document.getElementById(id)
+  }
+
+  #resolveTheme(): 'light' | 'dark' | 'auto' {
+    const v = this.getAttribute('theme')
+    return v === 'dark' || v === 'auto' ? v : 'light'
   }
 
   disconnectedCallback(): void {
@@ -137,6 +143,8 @@ export class BocetoPaletteElement extends HTMLElement {
     } else if (name === 'x' || name === 'y') {
       const v = numAttr(this, name, 16)
       this.#panel.el.style[name === 'x' ? 'left' : 'top'] = `${v}px`
+    } else if (name === 'theme') {
+      applyPanelTheme(this.#panel.el, this.#resolveTheme())
     }
   }
 
@@ -155,8 +163,8 @@ export class BocetoPaletteElement extends HTMLElement {
       position: 'sticky',
       top: '0',
       padding: '10px',
-      background: '#fff',
-      borderBottom: '1px solid #e4e4e7',
+      background: 'var(--boceto-panel-bg, #fff)',
+      borderBottom: '1px solid var(--boceto-panel-border, #e4e4e7)',
       zIndex: '1',
     } as CSSStyleDeclaration)
     this.#search = document.createElement('input')
@@ -167,11 +175,13 @@ export class BocetoPaletteElement extends HTMLElement {
       width: '100%',
       boxSizing: 'border-box',
       padding: '6px 10px',
-      border: '1px solid #d4d4d8',
+      border: '1px solid var(--boceto-panel-input-border, #d4d4d8)',
       borderRadius: '6px',
       font: 'inherit',
       fontSize: '13px',
       outline: 'none',
+      background: 'var(--boceto-panel-input-bg, #fff)',
+      color: 'var(--boceto-panel-fg, #222)',
     } as CSSStyleDeclaration)
     this.#search.addEventListener('input', () => this.#renderList())
     this.#search.addEventListener('keydown', (e) => {
@@ -219,7 +229,7 @@ export class BocetoPaletteElement extends HTMLElement {
           fontSize: '10.5px',
           textTransform: 'uppercase',
           letterSpacing: '0.06em',
-          color: '#a1a1aa',
+          color: 'var(--boceto-panel-muted, #a1a1aa)',
           fontWeight: '600',
         } as CSSStyleDeclaration)
         this.#list.appendChild(header)
@@ -238,7 +248,7 @@ export class BocetoPaletteElement extends HTMLElement {
         Object.assign(empty.style, {
           padding: '20px 14px',
           textAlign: 'center',
-          color: '#71717a',
+          color: 'var(--boceto-panel-muted, #71717a)',
         } as CSSStyleDeclaration)
         this.#list.appendChild(empty)
         return
@@ -283,7 +293,7 @@ export class BocetoPaletteElement extends HTMLElement {
       textAlign: 'left',
       font: 'inherit',
       fontSize: '12.5px',
-      color: '#27272a',
+      color: 'var(--boceto-panel-fg, #27272a)',
       cursor: 'pointer',
       fontFamily: 'ui-monospace, SF Mono, Menlo, Consolas, monospace',
       whiteSpace: 'nowrap',
@@ -291,8 +301,8 @@ export class BocetoPaletteElement extends HTMLElement {
       textOverflow: 'ellipsis',
     } as CSSStyleDeclaration)
     row.addEventListener('mouseenter', () => {
-      row.style.background = '#f4f4f5'
-      row.style.borderColor = '#e4e4e7'
+      row.style.background = 'var(--boceto-panel-hover-bg, #f4f4f5)'
+      row.style.borderColor = 'var(--boceto-panel-border, #e4e4e7)'
     })
     row.addEventListener('mouseleave', () => {
       row.style.background = 'transparent'
@@ -303,6 +313,10 @@ export class BocetoPaletteElement extends HTMLElement {
       e.dataTransfer?.setData('application/boceto-element-type', entry.type)
       e.dataTransfer?.setData('text/plain', entry.type)
       if (e.dataTransfer) e.dataTransfer.effectAllowed = 'copy'
+      // Prevent host editors (e.g. a parent ProseMirror) from also
+      // treating this as a draggable inside their document — the only
+      // legitimate drop target is a boceto canvas.
+      e.stopPropagation()
     })
     return row
   }
