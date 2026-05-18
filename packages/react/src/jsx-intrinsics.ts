@@ -55,9 +55,23 @@ interface BocetoPanelExtras {
   for?: string
   /** Initial visibility. The attribute is presence-checked — pass `""` or `true`. */
   open?: boolean | string
-  /** Initial top-left position in viewport pixels. */
+  /** Initial top-left position in viewport pixels. Floating mode only. */
   x?: number | string
   y?: number | string
+  /**
+   * `id` of a DOM element the panel should attach to instead of
+   * `document.body`. Pair with `dock` to embed inside a host-controlled
+   * rail / tab strip (Photoshop-style sidebar). The slot must exist in
+   * the DOM before the panel's `connectedCallback` runs.
+   */
+  mount?: string
+  /**
+   * Docked layout — flips `position: fixed` → flow, drops the drag
+   * handle, shadow, and close button, and the panel becomes
+   * always-visible (the host's tab / rail controls when the user sees
+   * it). Pair with `mount` so the panel lands in your container.
+   */
+  dock?: boolean | string
 }
 
 interface BocetoInspectorExtras extends BocetoPanelExtras {

@@ -3281,6 +3281,18 @@ function substituteParams(s, params) {
   return s.replace(VAR_BRACED_RE, (_, name) => params[name] ?? "").replace(VAR_BARE_RE, (_, name) => params[name] ?? "");
 }
 
+// src/parser/frontmatter.ts
+var OPEN_RE = /^---[ \t]*\r?\n/;
+var CLOSE_RE = /\r?\n---[ \t]*(\r?\n|$)/;
+function stripFrontmatter(source) {
+  const open = source.match(OPEN_RE);
+  if (!open || open.index !== 0) return source;
+  const afterOpen = source.slice(open[0].length);
+  const close = afterOpen.match(CLOSE_RE);
+  if (!close || close.index === void 0) return source;
+  return afterOpen.slice(close.index + close[0].length);
+}
+
 // src/parser/index.ts
 function parse(source, options = {}) {
   if (options.raw) {
@@ -3289,7 +3301,8 @@ function parse(source, options = {}) {
       components: []
     };
   }
-  const rawBlocks = extractBlocks(source);
+  const stripped = stripFrontmatter(source);
+  const rawBlocks = extractBlocks(stripped);
   const importSources = options.imports ? Array.isArray(options.imports) ? options.imports : [options.imports] : [];
   const importBlocks = importSources.flatMap((src) => extractBlocks(src));
   const { raw: ownRawComponents, blocks: blocksForPages } = collectComponentDefinitions(rawBlocks);
@@ -3298,6 +3311,9 @@ function parse(source, options = {}) {
   const components = allParsed.slice(importRawComponents.length);
   validateComponents(components);
   const componentMap = /* @__PURE__ */ new Map();
+  if (options.importedComponents) {
+    for (const c of options.importedComponents) componentMap.set(c.name, c);
+  }
   for (const c of allParsed) componentMap.set(c.name, c);
   const pages = [];
   let pageIndex = 0;
@@ -3312,6 +3328,311 @@ function parse(source, options = {}) {
     pages.push({ id: "p0", name: "Page 1", elements: [], arrows: [] });
   }
   return { pages, components };
+}
+
+// src/imports/index.ts
+var LibraryCache = class {
+  store = /* @__PURE__ */ new Map();
+  get(absPath) {
+    return this.store.get(absPath);
+  }
+  set(absPath, entry) {
+    this.store.set(absPath, entry);
+  }
+  /** Drop one file's entry. Use from a file watcher on each change. */
+  invalidate(absPath) {
+    this.store.delete(absPath);
+  }
+  /** Drop every entry that depends on `absPath` (including the entry itself). */
+  invalidateDependents(absPath) {
+    const dropped = [];
+    for (const [key, entry] of this.store) {
+      if (key === absPath || entry.paths.includes(absPath)) {
+        this.store.delete(key);
+        dropped.push(key);
+      }
+    }
+    return dropped;
+  }
+  clear() {
+    this.store.clear();
+  }
+  /** For tests / instrumentation: number of cached entries. */
+  get size() {
+    return this.store.size;
+  }
+};
+var BocetoImportError = class extends Error {
+  constructor(message, options) {
+    super(message);
+    this.name = "BocetoImportError";
+    if (options?.cause !== void 0) {
+      this.cause = options.cause;
+    }
+  }
+};
+var FRONTMATTER_OPEN_RE = /^---[ \t]*\r?\n/;
+var FRONTMATTER_CLOSE_RE = /\r?\n---[ \t]*(\r?\n|$)/;
+function extractFrontmatter(source) {
+  const openMatch = source.match(FRONTMATTER_OPEN_RE);
+  if (!openMatch || openMatch.index !== 0) return { meta: {}, body: source };
+  const afterOpen = source.slice(openMatch[0].length);
+  const closeMatch = afterOpen.match(FRONTMATTER_CLOSE_RE);
+  if (!closeMatch || closeMatch.index === void 0) {
+    return { meta: {}, body: source };
+  }
+  const fmText = afterOpen.slice(0, closeMatch.index);
+  const body = afterOpen.slice(closeMatch.index + closeMatch[0].length);
+  return { meta: parseMiniYaml(fmText), body };
+}
+function parseMiniYaml(text) {
+  const lines = text.split(/\r?\n/);
+  for (let i = 0; i < lines.length; i++) {
+    const stripped = stripComment(lines[i] ?? "");
+    const m = stripped.match(/^(\s*)boceto\s*:\s*(.*)$/);
+    if (!m) continue;
+    const baseIndent = m[1].length;
+    const inline = m[2].trim();
+    if (inline) {
+      return {};
+    }
+    const boceto = {};
+    i++;
+    while (i < lines.length) {
+      const childRaw = lines[i] ?? "";
+      const child = stripComment(childRaw);
+      if (!child.trim()) {
+        i++;
+        continue;
+      }
+      const childIndent = (child.match(/^(\s*)/)?.[1] ?? "").length;
+      if (childIndent <= baseIndent) break;
+      const km = child.match(/^\s*([A-Za-z_][A-Za-z0-9_-]*)\s*:\s*(.*)$/);
+      if (!km) {
+        i++;
+        continue;
+      }
+      const key = km[1];
+      const inlineVal = km[2].trim();
+      if (key !== "import") {
+        i++;
+        continue;
+      }
+      if (inlineVal) {
+        boceto.import = parseScalarOrFlow(inlineVal);
+        i++;
+        continue;
+      }
+      const items = [];
+      i++;
+      while (i < lines.length) {
+        const itemRaw = lines[i] ?? "";
+        const item = stripComment(itemRaw);
+        if (!item.trim()) {
+          i++;
+          continue;
+        }
+        const itemIndent = (item.match(/^(\s*)/)?.[1] ?? "").length;
+        if (itemIndent <= childIndent) break;
+        const im = item.match(/^\s*-\s*(.*)$/);
+        if (im) items.push(parseScalar(im[1].trim()));
+        i++;
+      }
+      boceto.import = items;
+    }
+    return { boceto };
+  }
+  return {};
+}
+function stripComment(line) {
+  let inSingle = false;
+  let inDouble = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (c === "'" && !inDouble) inSingle = !inSingle;
+    else if (c === '"' && !inSingle) inDouble = !inDouble;
+    else if (c === "#" && !inSingle && !inDouble) return line.slice(0, i);
+  }
+  return line;
+}
+function parseScalar(s) {
+  const t = s.trim();
+  if (t.length >= 2 && t.startsWith('"') && t.endsWith('"')) return t.slice(1, -1);
+  if (t.length >= 2 && t.startsWith("'") && t.endsWith("'")) return t.slice(1, -1);
+  return t;
+}
+function parseScalarOrFlow(s) {
+  const t = s.trim();
+  if (t.startsWith("[") && t.endsWith("]")) {
+    const inner = t.slice(1, -1).trim();
+    if (!inner) return [];
+    return inner.split(",").map((part) => parseScalar(part.trim()));
+  }
+  return parseScalar(t);
+}
+var GLOB_CHARS_RE = /[*?[{]/;
+function isGlob(p) {
+  return GLOB_CHARS_RE.test(p);
+}
+function resolvePath(dir, pattern) {
+  const slashed = pattern.replace(/\\/g, "/");
+  const dirSlashed = dir.replace(/\\/g, "/");
+  const base = slashed.startsWith("/") ? slashed : `${dirSlashed}/${slashed}`;
+  const parts = base.split("/");
+  const out = [];
+  for (const part of parts) {
+    if (part === "" || part === ".") {
+      if (out.length === 0 && part === "") out.push("");
+      continue;
+    }
+    if (part === "..") {
+      if (out.length > 1) out.pop();
+      continue;
+    }
+    out.push(part);
+  }
+  const joined = out.join("/");
+  return joined || "/";
+}
+function dirname(p) {
+  const s = p.replace(/\\/g, "/");
+  const i = s.lastIndexOf("/");
+  if (i < 0) return ".";
+  if (i === 0) return "/";
+  return s.slice(0, i);
+}
+function isWithin(child, parent) {
+  const c = child.replace(/\\/g, "/");
+  const p = parent.replace(/\\/g, "/").replace(/\/$/, "");
+  if (c === p) return true;
+  return c.startsWith(p + "/");
+}
+async function sha256Hex(bytes) {
+  const subtle = globalThis.crypto?.subtle;
+  if (subtle) {
+    const copy = new Uint8Array(bytes.byteLength);
+    copy.set(bytes);
+    const buf = await subtle.digest("SHA-256", copy.buffer);
+    const view = new Uint8Array(buf);
+    let out = "";
+    for (let i = 0; i < view.length; i++) {
+      const b = view[i];
+      out += (b < 16 ? "0" : "") + b.toString(16);
+    }
+    return out;
+  }
+  let h = 5381;
+  for (let i = 0; i < bytes.length; i++) h = (h * 33 ^ bytes[i]) >>> 0;
+  return `len-${bytes.length}-${h.toString(16)}`;
+}
+function bytesToString(bytes) {
+  return new TextDecoder("utf-8").decode(bytes);
+}
+async function resolveBocetoImports(opts) {
+  const visiting = opts.visiting ?? /* @__PURE__ */ new Set();
+  const fileAbs = opts.filePath;
+  if (visiting.has(fileAbs)) {
+    return { importedComponents: [], importedPaths: [] };
+  }
+  visiting.add(fileAbs);
+  const { meta } = extractFrontmatter(opts.source);
+  const patterns = normaliseImportList(meta.boceto?.import);
+  if (patterns.length === 0) {
+    return { importedComponents: [], importedPaths: [] };
+  }
+  const dir = dirname(fileAbs);
+  const projectRoot = opts.projectRoot ?? dir;
+  const seen = /* @__PURE__ */ new Set();
+  const ordered = [];
+  for (const pat of patterns) {
+    if (isGlob(pat)) {
+      const matches = await opts.glob(pat, { cwd: dir });
+      for (const m of matches.slice().sort()) {
+        const abs = resolvePath(dir, m);
+        if (!seen.has(abs)) {
+          seen.add(abs);
+          ordered.push(abs);
+        }
+      }
+    } else {
+      const abs = resolvePath(dir, pat);
+      if (!seen.has(abs)) {
+        seen.add(abs);
+        ordered.push(abs);
+      }
+    }
+  }
+  for (const p of ordered) {
+    if (!isWithin(p, projectRoot)) {
+      throw new BocetoImportError(
+        `Import path escapes projectRoot: ${p} (root: ${projectRoot})`
+      );
+    }
+  }
+  const collectedComponents = [];
+  const collectedPaths = [];
+  const nameOrigin = /* @__PURE__ */ new Map();
+  for (const absPath of ordered) {
+    if (visiting.has(absPath)) continue;
+    let entry = opts.cache.get(absPath);
+    if (!entry) {
+      let bytes;
+      try {
+        bytes = await opts.fs.readFile(absPath);
+      } catch (err) {
+        throw new BocetoImportError(
+          `Cannot read boceto import "${absPath}": ${err.message ?? String(err)}`,
+          { cause: err }
+        );
+      }
+      const hash = await sha256Hex(bytes);
+      const text = bytesToString(bytes);
+      const child = await resolveBocetoImports({
+        ...opts,
+        filePath: absPath,
+        source: text,
+        visiting
+      });
+      const { body } = extractFrontmatter(text);
+      let ownComponents;
+      try {
+        const doc = parse(body, { importedComponents: child.importedComponents });
+        ownComponents = doc.components;
+      } catch (err) {
+        throw new BocetoImportError(
+          `Failed to parse boceto import "${absPath}": ${err.message ?? String(err)}`,
+          { cause: err }
+        );
+      }
+      entry = {
+        hash,
+        components: [...child.importedComponents, ...ownComponents],
+        paths: [absPath, ...child.importedPaths]
+      };
+      opts.cache.set(absPath, entry);
+    }
+    for (const c of entry.components) {
+      const prior = nameOrigin.get(c.name);
+      if (prior && prior !== absPath) {
+        throw new BocetoImportError(
+          `Component "${c.name}" is defined in multiple boceto imports: ${prior} and ${absPath}`
+        );
+      }
+      if (!prior) {
+        nameOrigin.set(c.name, absPath);
+        collectedComponents.push(c);
+      }
+    }
+    for (const p of entry.paths) {
+      if (!collectedPaths.includes(p)) collectedPaths.push(p);
+    }
+  }
+  return { importedComponents: collectedComponents, importedPaths: collectedPaths };
+}
+function normaliseImportList(v) {
+  if (v == null) return [];
+  if (typeof v === "string") return v ? [v] : [];
+  return v.filter((s) => typeof s === "string" && s.length > 0);
 }
 
 // src/serializer.ts
@@ -6274,6 +6595,6 @@ var SvgRenderer = class {
   }
 };
 
-export { BocetoParseError, CanvasRenderer, CanvasSurface, DEFAULT_FONT, DEFAULT_SLOT, ELEMENT_TYPES, PALETTE, SvgRenderer, SvgSurface, applyFlexLayout, arrow, drawElement, fillColor2 as fillColor, fontString, getRenderer, hashString, initYoga, isComponentInstance, isFlexContainer, isSlot, isYogaReady, layoutBox, mulberry32, pageContentBox, parse, registerElement, selectPage, serialize, sketchLine, sketchRect, sketchText, strokeColor2 as strokeColor, tokenize, wrapText };
+export { BocetoImportError, BocetoParseError, CanvasRenderer, CanvasSurface, DEFAULT_FONT, DEFAULT_SLOT, ELEMENT_TYPES, LibraryCache, PALETTE, SvgRenderer, SvgSurface, applyFlexLayout, arrow, drawElement, extractFrontmatter, fillColor2 as fillColor, fontString, getRenderer, hashString, initYoga, isComponentInstance, isFlexContainer, isSlot, isYogaReady, layoutBox, mulberry32, pageContentBox, parse, registerElement, resolveBocetoImports, selectPage, serialize, sketchLine, sketchRect, sketchText, stripFrontmatter, strokeColor2 as strokeColor, tokenize, wrapText };
 //# sourceMappingURL=browser.js.map
 //# sourceMappingURL=browser.js.map

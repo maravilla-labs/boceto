@@ -3255,6 +3255,16 @@ var VAR_BARE_RE = /\$([A-Za-z_][A-Za-z0-9_]*)/g;
 function substituteParams(s, params) {
   return s.replace(VAR_BRACED_RE, (_, name) => params[name] ?? "").replace(VAR_BARE_RE, (_, name) => params[name] ?? "");
 }
+var OPEN_RE = /^---[ \t]*\r?\n/;
+var CLOSE_RE = /\r?\n---[ \t]*(\r?\n|$)/;
+function stripFrontmatter(source) {
+  const open = source.match(OPEN_RE);
+  if (!open || open.index !== 0) return source;
+  const afterOpen = source.slice(open[0].length);
+  const close = afterOpen.match(CLOSE_RE);
+  if (!close || close.index === void 0) return source;
+  return afterOpen.slice(close.index + close[0].length);
+}
 function parse(source, options = {}) {
   if (options.raw) {
     return {
@@ -3262,7 +3272,8 @@ function parse(source, options = {}) {
       components: []
     };
   }
-  const rawBlocks = extractBlocks(source);
+  const stripped = stripFrontmatter(source);
+  const rawBlocks = extractBlocks(stripped);
   const importSources = options.imports ? Array.isArray(options.imports) ? options.imports : [options.imports] : [];
   const importBlocks = importSources.flatMap((src) => extractBlocks(src));
   const { raw: ownRawComponents, blocks: blocksForPages } = collectComponentDefinitions(rawBlocks);
@@ -3271,6 +3282,9 @@ function parse(source, options = {}) {
   const components = allParsed.slice(importRawComponents.length);
   validateComponents(components);
   const componentMap = /* @__PURE__ */ new Map();
+  if (options.importedComponents) {
+    for (const c of options.importedComponents) componentMap.set(c.name, c);
+  }
   for (const c of allParsed) componentMap.set(c.name, c);
   const pages = [];
   let pageIndex = 0;

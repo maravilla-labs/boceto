@@ -10,7 +10,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap" />
     <script type="module" src="./assets/boceto-view.js?v=14"></script>
-    <script type="module" src="./assets/boceto-edit.js?v=14"></script>
+    <script type="module" src="./assets/boceto-edit.js?v=15"></script>
     <script type="module" src="./assets/tiptap-island.js?v=2"></script>
     <style>
       .ed-shell {
@@ -74,6 +74,67 @@
       boceto-edit, boceto-view {
         display: block;
       }
+
+      /* Docked-panel showcase (section 3) — Photoshop-style sidebar with
+         three tabs (Palette / Inspector / Components). Demonstrates the
+         `mount` + `dock` attributes shipped in @boceto/edit 0.4. */
+      .ed-dock {
+        display: grid;
+        grid-template-columns: 1fr 280px;
+        gap: 0;
+        align-items: stretch;
+        min-height: 480px;
+        height: 560px;
+        border-top: 1px solid var(--rule);
+      }
+      .ed-dock .ed-dock__canvas {
+        position: relative;
+        overflow: hidden;
+        border-right: 1px solid var(--rule);
+      }
+      .ed-dock .ed-dock__canvas boceto-edit {
+        width: 100%;
+        height: 100%;
+      }
+      .ed-dock .ed-dock__rail {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        background: #fff;
+      }
+      .ed-dock .ed-dock__tabs {
+        display: flex;
+        gap: 0;
+        border-bottom: 1px solid var(--rule);
+        background: #fafafa;
+        flex: 0 0 auto;
+      }
+      .ed-dock .ed-dock__tab {
+        flex: 1;
+        padding: 8px 10px;
+        background: transparent;
+        border: 0;
+        border-bottom: 2px solid transparent;
+        font: inherit;
+        font-size: 11.5px;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: #71717a;
+        cursor: pointer;
+      }
+      .ed-dock .ed-dock__tab:hover { color: var(--ink); }
+      .ed-dock .ed-dock__tab[aria-selected="true"] {
+        color: var(--ink);
+        border-bottom-color: #4a90d9;
+        font-weight: 600;
+      }
+      .ed-dock .ed-dock__slot {
+        display: none;
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: hidden;
+      }
+      .ed-dock .ed-dock__slot[data-active="true"] { display: flex; }
 
       /* TipTap island */
       .tt-island { padding: 12px 18px; }
@@ -304,12 +365,14 @@
 
     <main class="ed-shell">
       <section class="ed-head">
-        <h1>Two ways to embed Boceto</h1>
+        <h1>Three ways to embed Boceto</h1>
         <p class="tagline" style="text-align: left; margin-left: 0; font-size: 17px;">
           The <code>&lt;boceto-edit&gt;</code> custom element is a canvas editor for hand-drawn
-          wireframes — drag, resize, multi-select, undo. Use it standalone, or drop it into a
-          rich-text editor via <code>@boceto/tiptap</code> for literate-component docs where one
-          fenced block defines a component and another uses it.
+          wireframes — drag, resize, multi-select, undo. Use it standalone with floating panels,
+          drop it into a rich-text editor via <code>@boceto/tiptap</code> for literate-component
+          docs, or embed it in your own app layout with the sidekick panels
+          <strong>docked into your sidebar</strong> via the new <code>mount</code> +
+          <code>dock</code> attributes (0.4).
         </p>
       </section>
 
@@ -324,6 +387,7 @@
           <li>Drag the bottom-right corner of the editor pane to make the canvas bigger.</li>
           <li><kbd>⌘</kbd>+<kbd>]</kbd> bring forward · <kbd>⌘</kbd>+<kbd>⇧</kbd>+<kbd>]</kbd> to front · <kbd>⌘</kbd>+<kbd>[</kbd> send backward · <kbd>⌘</kbd>+<kbd>⇧</kbd>+<kbd>[</kbd> to back.</li>
           <li><kbd>Backspace</kbd> deletes · <kbd>⌘</kbd>+<kbd>D</kbd> duplicates · <kbd>⌘</kbd>+<kbd>Z</kbd> / <kbd>⌘</kbd>+<kbd>⇧</kbd>+<kbd>Z</kbd> undo / redo · double-click to rename.</li>
+          <li><strong>Docked sidebar (section 3 below):</strong> the same palette / inspector / components panels embedded in a host sidebar with tabs — pass <code>mount="&lt;slot-id&gt;" dock</code> to any of the three to swap floating for inline.</li>
         </ul>
       </div>
 
@@ -372,6 +436,49 @@
         </header>
         <div class="body" style="padding: 8px 0;">
           <div id="tt-island" class="tt-island"></div>
+        </div>
+      </div>
+
+      <!-- Docked-panel showcase. Same `<boceto-edit>`, but the three
+           sidekick panels mount inline into host-controlled slots via the
+           new `mount` + `dock` attributes shipped in @boceto/edit 0.4. -->
+      <div class="ed-pane">
+        <header>
+          <span>3 · Docked panels — Photoshop-style sidebar <span class="badge" style="margin-left: 6px;">new in 0.4</span></span>
+          <span class="badge">click a tab · panels live in the rail, not floating</span>
+        </header>
+        <div class="body ed-dock">
+          <div class="ed-dock__canvas">
+            <boceto-edit id="ed-docked"
+                         fit="content" padding="32"
+                         code='component pricing-card(title, price)
+  element card 0 0 240 200 ""
+  element heading 12 12 216 28 "$title"
+  element heading 12 50 216 36 "$price"
+  element label 12 100 216 60 "Lorem ipsum dolor sit amet, consectetur"
+  element primary-button 12 168 216 32 "Choose"
+end
+
+element pricing-card 0 0 240 200 "" title="Pro" price="$29/mo"
+element pricing-card 280 0 240 200 "" title="Team" price="$99/mo"'></boceto-edit>
+          </div>
+          <aside class="ed-dock__rail">
+            <div class="ed-dock__tabs" role="tablist" aria-label="Boceto panels">
+              <button class="ed-dock__tab" role="tab" aria-selected="true"  data-tab="inspector">Inspector</button>
+              <button class="ed-dock__tab" role="tab" aria-selected="false" data-tab="palette">Palette</button>
+              <button class="ed-dock__tab" role="tab" aria-selected="false" data-tab="components">Components</button>
+            </div>
+            <div class="ed-dock__slot" id="dock-inspector-slot"  data-active="true"  role="tabpanel"></div>
+            <div class="ed-dock__slot" id="dock-palette-slot"    data-active="false" role="tabpanel"></div>
+            <div class="ed-dock__slot" id="dock-components-slot" data-active="false" role="tabpanel"></div>
+            <!-- The panels mount into the slots above via `mount=<slot-id>`.
+                 `dock` flips position:fixed → flow, drops the drag handle,
+                 and makes them always-visible (the host controls visibility
+                 through the tab selector — no auto-hide on selection). -->
+            <boceto-inspector  for="ed-docked" mount="dock-inspector-slot"  dock auto></boceto-inspector>
+            <boceto-palette    for="ed-docked" mount="dock-palette-slot"    dock></boceto-palette>
+            <boceto-components for="ed-docked" mount="dock-components-slot" dock></boceto-components>
+          </aside>
         </div>
       </div>
 
@@ -434,6 +541,27 @@ element stepper-input 580 392 90 32 "220"
         $editor.addEventListener('select', (e) => {
           const n = e.detail.ids.length
           $status.textContent = n === 0 ? 'no selection' : `${n} selected`
+        })
+      })
+
+      // Section 3 — docked panel tab switching. The panels are always
+      // mounted (dock mode); we just toggle which slot is on-screen via
+      // `data-active`. The boceto editor inside the docked canvas owns
+      // its own state (no event wiring needed beyond what the panels do
+      // for themselves through `for="ed-docked"`).
+      const dockTabs = document.querySelectorAll('.ed-dock__tab')
+      const dockSlots = {
+        inspector: document.getElementById('dock-inspector-slot'),
+        palette: document.getElementById('dock-palette-slot'),
+        components: document.getElementById('dock-components-slot'),
+      }
+      dockTabs.forEach((tab) => {
+        tab.addEventListener('click', () => {
+          const target = tab.getAttribute('data-tab')
+          dockTabs.forEach((t) => t.setAttribute('aria-selected', String(t === tab)))
+          Object.entries(dockSlots).forEach(([key, slot]) => {
+            slot.setAttribute('data-active', String(key === target))
+          })
         })
       })
     </script>

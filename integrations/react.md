@@ -93,6 +93,53 @@ declare global {
 
 The panel lists every component in scope (local + imported), supports create/rename/edit-in-place/promote-from-selection. See `boceto://references/components.md` for full UX details.
 
+## Docked panels — Photoshop-style sidebar (v0.4+)
+
+By default `BocetoEditFull` and the à-la-carte `<BocetoPalette>` / `<BocetoInspector>` / `<BocetoComponents>` panels float (mounted in `document.body`, draggable). For apps with their own sidebar layout, pass `mount` + `dock` and the panels flow inline into host-controlled slots instead:
+
+```tsx
+import { useState } from 'react'
+import { BocetoEdit, BocetoInspector, BocetoPalette, BocetoComponents } from '@boceto/react'
+
+type Tab = 'inspector' | 'palette' | 'components'
+
+export function Designer() {
+  const editorId = 'designer-edit'
+  const [tab, setTab] = useState<Tab>('inspector')
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', height: '100vh' }}>
+      <BocetoEdit id={editorId} code={src} onChange={setSrc} style={{ height: '100%' }} />
+
+      <aside style={{ display: 'flex', flexDirection: 'column' }}>
+        {/* Tab strip — host UI */}
+        <div role="tablist">
+          <button onClick={() => setTab('inspector')}>Inspector</button>
+          <button onClick={() => setTab('palette')}>Palette</button>
+          <button onClick={() => setTab('components')}>Components</button>
+        </div>
+        {/* Mount slots — boceto panels render INTO these via `mount=<id>` */}
+        <div id="rail-inspector"  style={{ display: tab === 'inspector'  ? 'flex' : 'none', flex: 1, minHeight: 0 }} />
+        <div id="rail-palette"    style={{ display: tab === 'palette'    ? 'flex' : 'none', flex: 1, minHeight: 0 }} />
+        <div id="rail-components" style={{ display: tab === 'components' ? 'flex' : 'none', flex: 1, minHeight: 0 }} />
+        {/* Dock the panels into their slots */}
+        <BocetoInspector  for={editorId} mount="rail-inspector"  dock />
+        <BocetoPalette    for={editorId} mount="rail-palette"    dock />
+        <BocetoComponents for={editorId} mount="rail-components" dock />
+      </aside>
+    </div>
+  )
+}
+```
+
+What `dock` does:
+
+- `position: fixed` → flow layout (the panel fills its mount container).
+- Drops the drag handle, shadow, and close button (the host's chrome owns that).
+- Panels become **always-visible** — `<BocetoInspector dock>` still renders "Nothing selected" when nothing is selected; visibility is the host's call via the tab/slot toggling above.
+- The active-editor / `open`-attribute auto-toggle is skipped — multi-editor pages don't auto-hide docked panels.
+
+Mount slots must exist in the DOM **before** the boceto element's `connectedCallback` runs. The example above renders the `<div id="rail-…" />` slots first in JSX order, so they're attached when the panels mount on the same React render. Floating mode is unchanged when you omit `mount` + `dock`.
+
 ## Reading the source
 
 `onChange` fires on every user commit. The detail is the new DSL source string:

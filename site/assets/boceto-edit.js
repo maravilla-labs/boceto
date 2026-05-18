@@ -3258,6 +3258,16 @@ var VAR_BARE_RE = /\$([A-Za-z_][A-Za-z0-9_]*)/g;
 function substituteParams(s, params) {
   return s.replace(VAR_BRACED_RE, (_, name) => params[name] ?? "").replace(VAR_BARE_RE, (_, name) => params[name] ?? "");
 }
+var OPEN_RE = /^---[ \t]*\r?\n/;
+var CLOSE_RE = /\r?\n---[ \t]*(\r?\n|$)/;
+function stripFrontmatter(source) {
+  const open = source.match(OPEN_RE);
+  if (!open || open.index !== 0) return source;
+  const afterOpen = source.slice(open[0].length);
+  const close = afterOpen.match(CLOSE_RE);
+  if (!close || close.index === void 0) return source;
+  return afterOpen.slice(close.index + close[0].length);
+}
 function parse(source, options = {}) {
   if (options.raw) {
     return {
@@ -3265,7 +3275,8 @@ function parse(source, options = {}) {
       components: []
     };
   }
-  const rawBlocks = extractBlocks(source);
+  const stripped = stripFrontmatter(source);
+  const rawBlocks = extractBlocks(stripped);
   const importSources = options.imports ? Array.isArray(options.imports) ? options.imports : [options.imports] : [];
   const importBlocks = importSources.flatMap((src) => extractBlocks(src));
   const { raw: ownRawComponents, blocks: blocksForPages } = collectComponentDefinitions(rawBlocks);
@@ -3274,6 +3285,9 @@ function parse(source, options = {}) {
   const components = allParsed.slice(importRawComponents.length);
   validateComponents(components);
   const componentMap = /* @__PURE__ */ new Map();
+  if (options.importedComponents) {
+    for (const c of options.importedComponents) componentMap.set(c.name, c);
+  }
   for (const c of allParsed) componentMap.set(c.name, c);
   const pages = [];
   let pageIndex = 0;
@@ -6202,8 +6216,12 @@ function pageNumberFromId(pageId) {
   return m ? Number(m[1]) : 0;
 }
 function removeTopLevel(doc, ids) {
+  return removeTopLevelFromPages(doc.pages, ids);
+}
+function removeTopLevelFromPages(pages, ids) {
   let removed = 0;
-  for (const page of doc.pages) {
+  for (const page of pages) {
+    const before = page.elements.length;
     const next = page.elements.filter((it) => {
       if (ids.has(it.id)) {
         removed++;
@@ -6211,16 +6229,19 @@ function removeTopLevel(doc, ids) {
       }
       return true;
     });
-    if (next.length !== page.elements.length) page.elements = next;
-    if (removed > 0) {
+    if (next.length !== before) page.elements = next;
+    if (next.length !== before) {
       page.arrows = page.arrows.filter((a) => !ids.has(a.from) && !ids.has(a.to));
     }
   }
   return removed;
 }
 function duplicateTopLevel(doc, ids) {
+  return duplicateTopLevelInPages(doc.pages, ids);
+}
+function duplicateTopLevelInPages(pages, ids) {
   const created = [];
-  for (const page of doc.pages) {
+  for (const page of pages) {
     const targets = page.elements.filter((it) => ids.has(it.id));
     for (const item of targets) {
       if (isFlexContainer(item) || isComponentInstance(item)) continue;
@@ -6290,9 +6311,12 @@ function relayout(doc) {
   applyFlexLayout(doc);
 }
 function reorderItems(doc, ids, mode) {
+  return reorderItemsInPages(doc.pages, ids, mode);
+}
+function reorderItemsInPages(pages, ids, mode) {
   if (ids.size === 0) return 0;
   let touched = 0;
-  for (const page of doc.pages) {
+  for (const page of pages) {
     const before = page.elements;
     if (!before.some((it) => ids.has(it.id))) continue;
     const next = reorderArray(before, ids, mode);
@@ -6336,6 +6360,458 @@ function sameRefs(a, b) {
   if (a.length !== b.length) return false;
   for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
   return true;
+}
+
+// src/editor/components.ts
+var ELEMENT_TYPE_SET3 = new Set(ELEMENT_TYPES);
+var COMPONENT_NAME_RE = /^[A-Za-z][A-Za-z0-9_-]*$/;
+var PARAM_NAME_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
+var PARAM_TOKEN_RE = /\$(?:\{([A-Za-z_][A-Za-z0-9_]*)\}|([A-Za-z_][A-Za-z0-9_]*))/g;
+var ComponentMutationError = class extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "ComponentMutationError";
+  }
+};
+function buildComponentSummaries(args) {
+  const out = [];
+  const localNames = /* @__PURE__ */ new Set();
+  const counts = countInstancesOnPage(args.currentPage);
+  for (const c of args.localComponents) {
+    localNames.add(c.name);
+    out.push({
+      name: c.name,
+      params: [...c.params],
+      origin: "local",
+      definition: c,
+      instanceCount: counts.get(c.name) ?? 0
+    });
+  }
+  for (const c of args.importedComponents) {
+    if (localNames.has(c.name)) continue;
+    out.push({
+      name: c.name,
+      params: [...c.params],
+      origin: "imported",
+      definition: c,
+      instanceCount: counts.get(c.name) ?? 0,
+      hint: args.hints.get(c.name)
+    });
+  }
+  return out;
+}
+function countInstancesOnPage(page) {
+  const m = /* @__PURE__ */ new Map();
+  if (!page) return m;
+  walk(page.elements);
+  return m;
+  function walk(items) {
+    for (const it of items) {
+      if (isComponentInstance(it)) {
+        m.set(it.componentName, (m.get(it.componentName) ?? 0) + 1);
+        continue;
+      }
+      if (isFlexContainer(it)) {
+        walk(it.children);
+        continue;
+      }
+      if ("children" in it && Array.isArray(it.children)) {
+        walk(it.children);
+      }
+    }
+  }
+}
+function findInstancesOnPage(page, name) {
+  const out = [];
+  walk(page.elements);
+  return out;
+  function walk(items) {
+    for (const it of items) {
+      if (isComponentInstance(it)) {
+        if (!name || it.componentName === name) out.push(it);
+        continue;
+      }
+      if (isFlexContainer(it)) {
+        walk(it.children);
+        continue;
+      }
+      if ("children" in it && Array.isArray(it.children)) {
+        walk(it.children);
+      }
+    }
+  }
+}
+function createComponent(doc, input) {
+  validateName(input.name);
+  if (doc.components.some((c) => c.name === input.name)) {
+    throw new ComponentMutationError(`Component "${input.name}" already exists`);
+  }
+  const params = (input.params ?? []).map((p) => p.trim()).filter((p) => p.length > 0);
+  validateParams(input.name, params);
+  const body = input.body && input.body.length > 0 ? input.body : [
+    {
+      id: "c0",
+      type: "box",
+      x: 0,
+      y: 0,
+      w: 200,
+      h: 100,
+      label: "",
+      attrs: {}
+    }
+  ];
+  const component = { name: input.name, params, body };
+  doc.components.push(component);
+  return component;
+}
+function deleteComponent(doc, name, options = {}) {
+  const idx = doc.components.findIndex((c) => c.name === name);
+  if (idx < 0) return false;
+  const instances = countInstancesAcrossDoc(doc, name);
+  if (instances > 0 && !options.deleteInstances) {
+    throw new ComponentMutationError(
+      `Cannot delete component "${name}": ${instances} instance(s) still reference it. Pass { deleteInstances: true } to drop them.`
+    );
+  }
+  if (options.deleteInstances && instances > 0) removeAllInstances(doc, name);
+  doc.components.splice(idx, 1);
+  return true;
+}
+function renameComponent(doc, oldName, newName) {
+  if (oldName === newName) return false;
+  const c = doc.components.find((c2) => c2.name === oldName);
+  if (!c) return false;
+  validateName(newName);
+  if (doc.components.some((c2) => c2.name === newName)) {
+    throw new ComponentMutationError(`A component named "${newName}" already exists`);
+  }
+  c.name = newName;
+  for (const other of doc.components) renameInBody(other.body, oldName, newName);
+  for (const page of doc.pages) renameInItems(page.elements, oldName, newName);
+  return true;
+}
+function renameInItems(items, oldName, newName) {
+  for (const it of items) {
+    if (isComponentInstance(it)) {
+      if (it.componentName === oldName) it.componentName = newName;
+      renameInItems(it.expanded, oldName, newName);
+      continue;
+    }
+    if (isFlexContainer(it)) {
+      renameInItems(it.children, oldName, newName);
+      continue;
+    }
+    if ("children" in it && Array.isArray(it.children)) {
+      renameInItems(it.children, oldName, newName);
+    }
+  }
+}
+function renameInBody(items, oldName, newName) {
+  for (const it of items) {
+    if (isSlot(it)) continue;
+    if ("from" in it && "to" in it) continue;
+    if (isComponentInstance(it)) {
+      if (it.componentName === oldName) it.componentName = newName;
+      continue;
+    }
+    if (isFlexContainer(it)) {
+      renameInBody(it.children, oldName, newName);
+      continue;
+    }
+    if ("children" in it && Array.isArray(it.children)) {
+      renameInBody(it.children, oldName, newName);
+    }
+  }
+}
+function updateComponentDef(doc, name, patch) {
+  const c = doc.components.find((c2) => c2.name === name);
+  if (!c) return false;
+  if (patch.params != null) {
+    const params = patch.params.map((p) => p.trim()).filter((p) => p.length > 0);
+    validateParams(name, params);
+    const removed = c.params.filter((p) => !params.includes(p));
+    c.params = params;
+    if (removed.length > 0) {
+      for (const page of doc.pages) dropInstanceParams(page.elements, name, removed);
+    }
+  }
+  if (patch.shell !== void 0) {
+    if (patch.shell == null) delete c.shell;
+    else c.shell = patch.shell;
+  }
+  if (patch.defaults !== void 0) {
+    if (patch.defaults == null) delete c.defaults;
+    else c.defaults = patch.defaults;
+  }
+  return true;
+}
+function dropInstanceParams(items, name, removed) {
+  for (const it of items) {
+    if (isComponentInstance(it)) {
+      if (it.componentName === name) {
+        for (const k of removed) delete it.params[k];
+      }
+      dropInstanceParams(it.expanded, name, removed);
+      continue;
+    }
+    if (isFlexContainer(it)) {
+      dropInstanceParams(it.children, name, removed);
+      continue;
+    }
+    if ("children" in it && Array.isArray(it.children)) {
+      dropInstanceParams(it.children, name, removed);
+    }
+  }
+}
+function updateInstanceParams(doc, instanceId, next) {
+  for (const page of doc.pages) {
+    const inst = findInstanceById(page.elements, instanceId);
+    if (inst) {
+      for (const k of Object.keys(inst.params)) delete inst.params[k];
+      for (const [k, v] of Object.entries(next)) {
+        if (v !== "") inst.params[k] = v;
+      }
+      return true;
+    }
+  }
+  return false;
+}
+function findInstanceById(items, id) {
+  for (const it of items) {
+    if (isComponentInstance(it)) {
+      if (it.id === id) return it;
+      const inner = findInstanceById(it.expanded, id);
+      if (inner) return inner;
+      continue;
+    }
+    if (isFlexContainer(it)) {
+      const inner = findInstanceById(it.children, id);
+      if (inner) return inner;
+      continue;
+    }
+    if ("children" in it && Array.isArray(it.children)) {
+      const inner = findInstanceById(it.children, id);
+      if (inner) return inner;
+    }
+  }
+  return null;
+}
+function promoteToComponent(doc, page, args) {
+  if (args.ids.length === 0) {
+    throw new ComponentMutationError("Cannot promote: no items selected");
+  }
+  validateName(args.name);
+  if (doc.components.some((c) => c.name === args.name)) {
+    throw new ComponentMutationError(`A component named "${args.name}" already exists`);
+  }
+  const indexOf = /* @__PURE__ */ new Map();
+  for (let i = 0; i < page.elements.length; i++) indexOf.set(page.elements[i].id, i);
+  const lifted = [];
+  for (const id of args.ids) {
+    const i = indexOf.get(id);
+    if (i === void 0) {
+      throw new ComponentMutationError(
+        `Cannot promote: item "${id}" is not a top-level element on the current page (nested items can't be lifted in v1)`
+      );
+    }
+    lifted.push({ item: page.elements[i], index: i });
+  }
+  lifted.sort((a, b) => a.index - b.index);
+  let x0 = Infinity;
+  let y0 = Infinity;
+  let x1 = -Infinity;
+  let y1 = -Infinity;
+  for (const { item } of lifted) {
+    const b = layoutBox(item);
+    if (b.x < x0) x0 = b.x;
+    if (b.y < y0) y0 = b.y;
+    if (b.x + b.w > x1) x1 = b.x + b.w;
+    if (b.y + b.h > y1) y1 = b.y + b.h;
+  }
+  const ox = Math.max(0, Math.floor(x0));
+  const oy = Math.max(0, Math.floor(y0));
+  const bw = Math.max(1, Math.ceil(x1 - ox));
+  const bh = Math.max(1, Math.ceil(y1 - oy));
+  const body = lifted.map(
+    ({ item }) => translateForBody(item, -ox, -oy)
+  );
+  let params;
+  if (args.params != null) {
+    params = args.params.map((p) => p.trim()).filter((p) => p.length > 0);
+  } else {
+    params = inferParams(body);
+  }
+  validateParams(args.name, params);
+  const liftedIds = new Set(args.ids);
+  page.elements = page.elements.filter((it) => !liftedIds.has(it.id));
+  page.arrows = page.arrows.filter((a) => !liftedIds.has(a.from) && !liftedIds.has(a.to));
+  doc.components.push({ name: args.name, params, body });
+  const instanceId = mintInstanceId(page, args.name);
+  const instance = {
+    kind: "component-instance",
+    id: instanceId,
+    componentName: args.name,
+    x: ox,
+    y: oy,
+    w: bw,
+    h: bh,
+    params: {},
+    expanded: []
+    // (re-)filled by the next parse-from-serialized round
+  };
+  page.elements.push(instance);
+  return { instanceId, componentName: args.name };
+}
+function translateForBody(item, dx, dy) {
+  if (isComponentInstance(item)) {
+    return {
+      ...item,
+      x: typeof item.x === "number" ? item.x + dx : item.x,
+      y: typeof item.y === "number" ? item.y + dy : item.y,
+      params: { ...item.params },
+      expanded: [],
+      // re-derived by parser
+      computed: void 0
+    };
+  }
+  if (isFlexContainer(item)) {
+    return {
+      ...item,
+      x: item.x + dx,
+      y: item.y + dy,
+      children: item.children.map((c) => translateForBody(c, 0, 0)),
+      computed: void 0
+    };
+  }
+  const el = item;
+  return {
+    ...el,
+    x: el.x + dx,
+    y: el.y + dy,
+    attrs: { ...el.attrs },
+    children: el.children ? el.children.map((c) => translateForBody(c, 0, 0)) : void 0,
+    computed: void 0
+  };
+}
+function inferParams(items) {
+  const seen = /* @__PURE__ */ new Set();
+  const order = [];
+  const push = (n) => {
+    if (!seen.has(n)) {
+      seen.add(n);
+      order.push(n);
+    }
+  };
+  const scan = (s) => {
+    if (!s) return;
+    for (const m of s.matchAll(PARAM_TOKEN_RE)) push(m[1] ?? m[2]);
+  };
+  const visit = (xs) => {
+    for (const it of xs) {
+      if (isSlot(it)) continue;
+      if ("from" in it && "to" in it) {
+        const a = it;
+        scan(a.label);
+        continue;
+      }
+      if (isComponentInstance(it)) {
+        const ci = it;
+        for (const v of Object.values(ci.params)) scan(v);
+        continue;
+      }
+      if (isFlexContainer(it)) {
+        const fc = it;
+        visit(fc.children);
+        continue;
+      }
+      const el = it;
+      scan(el.label);
+      scan(el.note);
+      for (const v of Object.values(el.attrs)) if (typeof v === "string") scan(v);
+      if (el.children) visit(el.children);
+    }
+  };
+  visit(items);
+  return order;
+}
+function mintInstanceId(page, componentName) {
+  const used = /* @__PURE__ */ new Set();
+  collectIdsTopLevel(page.elements, used);
+  let n = 0;
+  while (used.has(`${componentName}${n}`)) n++;
+  return `${componentName}${n}`;
+}
+function collectIdsTopLevel(items, into) {
+  for (const it of items) into.add(it.id);
+}
+function appendInstance(doc, page, componentName, args) {
+  const all = new Set(doc.components.map((c) => c.name));
+  if (!all.has(componentName)) {
+    throw new ComponentMutationError(
+      `Cannot instantiate "${componentName}": no such local component`
+    );
+  }
+  const id = mintInstanceId(page, componentName);
+  const instance = {
+    kind: "component-instance",
+    id,
+    componentName,
+    x: args.x,
+    y: args.y,
+    w: args.w ?? 200,
+    h: args.h ?? 120,
+    params: {},
+    expanded: []
+  };
+  page.elements.push(instance);
+  return instance;
+}
+function countInstancesAcrossDoc(doc, name) {
+  let count = 0;
+  for (const page of doc.pages) count += findInstancesOnPage(page, name).length;
+  return count;
+}
+function removeAllInstances(doc, name) {
+  for (const page of doc.pages) {
+    const removedIds = /* @__PURE__ */ new Set();
+    const next = page.elements.filter((it) => {
+      if (isComponentInstance(it) && it.componentName === name) {
+        removedIds.add(it.id);
+        return false;
+      }
+      return true;
+    });
+    if (next.length !== page.elements.length) {
+      page.elements = next;
+      page.arrows = page.arrows.filter((a) => !removedIds.has(a.from) && !removedIds.has(a.to));
+    }
+  }
+}
+function validateName(name) {
+  if (!COMPONENT_NAME_RE.test(name)) {
+    throw new ComponentMutationError(
+      `Invalid component name "${name}" (must match /^[A-Za-z][A-Za-z0-9_-]*$/)`
+    );
+  }
+  if (ELEMENT_TYPE_SET3.has(name)) {
+    throw new ComponentMutationError(
+      `Component name "${name}" collides with a built-in element type`
+    );
+  }
+}
+function validateParams(componentName, params) {
+  const seen = /* @__PURE__ */ new Set();
+  for (const p of params) {
+    if (!PARAM_NAME_RE.test(p)) {
+      throw new ComponentMutationError(
+        `Component "${componentName}" has invalid param "${p}" (must match /^[A-Za-z_][A-Za-z0-9_]*$/)`
+      );
+    }
+    if (seen.has(p)) {
+      throw new ComponentMutationError(`Component "${componentName}" has duplicate param "${p}"`);
+    }
+    seen.add(p);
+  }
 }
 
 // src/editor/state.ts
@@ -6445,9 +6921,18 @@ var BocetoEditor = class {
   #serializedCache = null;
   /** Component-definition source merged into every parse. See `EditorInit.imports`. */
   #imports;
+  /** Imported components — extracted once per `setImports` for the panel + summaries. */
+  #importedComponents = [];
+  /** Host-supplied origin hints for imported components (e.g. "block 2"). */
+  #importHints = /* @__PURE__ */ new Map();
+  /** Name of the component currently being edited in component-edit mode (null in page mode). */
+  #editingComponent = null;
+  /** Synthetic page wrapping `component.body` when in edit mode. Not in `doc.pages`. */
+  #editPage = null;
   constructor(init = {}) {
     this.#imports = init.imports;
     const doc = this.#parse(init.code);
+    this.#refreshImportedComponents();
     const firstPage = doc.pages[0];
     this.#state = {
       doc,
@@ -6475,6 +6960,7 @@ var BocetoEditor = class {
     return this.#state.currentPageId;
   }
   get currentPage() {
+    if (this.#editPage) return this.#editPage;
     const p = this.#state.doc.pages.find((p2) => p2.id === this.#state.currentPageId);
     return p ?? this.#state.doc.pages[0];
   }
@@ -6506,6 +6992,8 @@ var BocetoEditor = class {
     if (!doc.pages.find((p) => p.id === this.#state.currentPageId)) {
       this.#state.currentPageId = doc.pages[0].id;
     }
+    this.#editingComponent = null;
+    this.#editPage = null;
     this.#history.clear();
     this.#serializedCache = null;
     relayout(doc);
@@ -6521,6 +7009,7 @@ var BocetoEditor = class {
     this.#imports = imports || void 0;
     const doc = this.#parse(this.code);
     this.#state.doc = doc;
+    this.#refreshImportedComponents();
     if (!doc.pages.find((p) => p.id === this.#state.currentPageId)) {
       this.#state.currentPageId = doc.pages[0].id;
     }
@@ -6579,7 +7068,7 @@ var BocetoEditor = class {
     const before = this.code;
     let anyMoved = false;
     for (const id of ids) {
-      const hit = findTopLevel(this.#state.doc, id);
+      const hit = this.#findTopLevelHere(id);
       if (!hit) {
         this.#emit("error", { message: `Cannot move nested item ${id}` });
         continue;
@@ -6597,7 +7086,7 @@ var BocetoEditor = class {
    */
   resize(id, edge, dx, dy, origin, opts = {}) {
     if (this.#state.readonly) return;
-    const hit = findTopLevel(this.#state.doc, id);
+    const hit = this.#findTopLevelHere(id);
     if (!hit) {
       this.#emit("error", { message: `Cannot resize nested item ${id}` });
       return;
@@ -6609,8 +7098,24 @@ var BocetoEditor = class {
   }
   /** Convenience: current bbox for a top-level item (for capturing drag origin). */
   boxOf(id) {
-    const hit = findTopLevel(this.#state.doc, id);
+    const hit = this.#findTopLevelHere(id);
     return hit ? currentBox(hit.item) : null;
+  }
+  /**
+   * Locate a top-level item by id in the editor's currently-active surface
+   * — either the visible doc page or the synthetic edit page when in
+   * component-edit mode. Geometry mutations all route through this so
+   * editing a component body uses the same machinery as editing a page.
+   */
+  #findTopLevelHere(id) {
+    if (this.#editPage) {
+      for (let i = 0; i < this.#editPage.elements.length; i++) {
+        const it = this.#editPage.elements[i];
+        if (it.id === id) return { page: this.#editPage, item: it, index: i };
+      }
+      return null;
+    }
+    return findTopLevel(this.#state.doc, id);
   }
   /**
    * Re-run the flex layout pass. Useful when consumers construct the
@@ -6652,7 +7157,7 @@ var BocetoEditor = class {
     if (ids.length === 0) return;
     const set = new Set(ids);
     const before = this.code;
-    const removed = removeTopLevel(this.#state.doc, set);
+    const removed = this.#editPage ? removeTopLevelFromPages([this.#editPage], set) : removeTopLevel(this.#state.doc, set);
     if (removed === 0) return;
     for (const id of set) this.#state.selection.delete(id);
     this.#emit("select", { ids: [...this.#state.selection] });
@@ -6680,7 +7185,7 @@ var BocetoEditor = class {
     if (this.#state.readonly) return;
     if (ids.length === 0) return;
     const before = this.code;
-    const touched = reorderItems(this.#state.doc, new Set(ids), mode);
+    const touched = this.#editPage ? reorderItemsInPages([this.#editPage], new Set(ids), mode) : reorderItems(this.#state.doc, new Set(ids), mode);
     if (touched === 0) return;
     relayout(this.#state.doc);
     this.#afterMutation(before, true);
@@ -6690,7 +7195,7 @@ var BocetoEditor = class {
     if (ids.length === 0) return [];
     const before = this.code;
     const set = new Set(ids);
-    const created = duplicateTopLevel(this.#state.doc, set);
+    const created = this.#editPage ? duplicateTopLevelInPages([this.#editPage], set) : duplicateTopLevel(this.#state.doc, set);
     if (created.length === 0) return [];
     relayout(this.#state.doc);
     this.#afterMutation(before, true);
@@ -6728,6 +7233,185 @@ var BocetoEditor = class {
     this.#state.selection = /* @__PURE__ */ new Set();
     this.#emit("page", { pageId: id });
     this.#emit("select", { ids: [] });
+  }
+  // ── Components ─────────────────────────────────────────────────────────
+  /** Component currently being edited (null in page mode). */
+  get editingComponent() {
+    return this.#editingComponent;
+  }
+  /**
+   * Panel-friendly summary of every component visible to this editor — both
+   * local (defined in `doc.components`) and imported (visible via the
+   * `imports` source). Instance counts come from the **current page**.
+   * Imported entries pick up any `tagImportOrigin` hint the host has set.
+   */
+  components() {
+    return buildComponentSummaries({
+      localComponents: this.#state.doc.components,
+      importedComponents: this.#importedComponents,
+      currentPage: this.currentPage,
+      hints: this.#importHints
+    });
+  }
+  /** Every ComponentInstance on the current page. Optional name filter. */
+  instances(name) {
+    return findInstancesOnPage(this.currentPage, name);
+  }
+  /**
+   * Annotate an imported component with a human-readable origin hint (e.g.
+   * "block 2" or "from ./shared/cards.md"). The hint flows through to
+   * `components()` and is shown verbatim in the panel.
+   */
+  tagImportOrigin(name, hint) {
+    if (!hint) this.#importHints.delete(name);
+    else this.#importHints.set(name, hint);
+  }
+  createComponent(input) {
+    if (this.#state.readonly) throw new Error("editor is readonly");
+    const before = this.code;
+    const c = createComponent(this.#state.doc, input);
+    relayout(this.#state.doc);
+    this.#afterMutation(before, true);
+    return c;
+  }
+  deleteComponent(name, options = {}) {
+    if (this.#state.readonly) return false;
+    if (this.#editingComponent === name) {
+      this.#emit("error", { message: `Cannot delete component "${name}" while editing it` });
+      return false;
+    }
+    const before = this.code;
+    const removed = deleteComponent(this.#state.doc, name, options);
+    if (!removed) return false;
+    for (const id of [...this.#state.selection]) {
+      if (!findAny(this.#state.doc, id)) this.#state.selection.delete(id);
+    }
+    this.#emit("select", { ids: [...this.#state.selection] });
+    relayout(this.#state.doc);
+    this.#afterMutation(before, true);
+    return true;
+  }
+  renameComponent(oldName, newName) {
+    if (this.#state.readonly) return false;
+    if (oldName === newName) return false;
+    const before = this.code;
+    const ok = renameComponent(this.#state.doc, oldName, newName);
+    if (!ok) return false;
+    if (this.#editingComponent === oldName) this.#editingComponent = newName;
+    relayout(this.#state.doc);
+    this.#afterMutation(before, true);
+    return true;
+  }
+  updateComponentDef(name, patch) {
+    if (this.#state.readonly) return false;
+    const before = this.code;
+    const ok = updateComponentDef(this.#state.doc, name, patch);
+    if (!ok) return false;
+    relayout(this.#state.doc);
+    this.#afterMutation(before, true);
+    return true;
+  }
+  /**
+   * Add a `ComponentInstance` call site for a local component to the current
+   * page. Returns the new instance's id. Refuses unknown component names.
+   * The new instance is round-tripped through serialize → parse so its
+   * `expanded` tree is populated for hit-testing.
+   */
+  addInstance(componentName, x, y, opts = {}) {
+    if (this.#state.readonly) return null;
+    if (this.#editPage) {
+      this.#emit("error", { message: "Cannot add an instance while editing a component body" });
+      return null;
+    }
+    const before = this.code;
+    try {
+      const inst = appendInstance(this.#state.doc, this.currentPage, componentName, {
+        x,
+        y,
+        w: opts.w,
+        h: opts.h
+      });
+      const reparsed = this.#parse(serialize(this.#state.doc));
+      this.#state.doc = reparsed;
+      this.#refreshImportedComponents();
+      relayout(this.#state.doc);
+      this.#afterMutation(before, true);
+      return inst.id;
+    } catch (err) {
+      this.#emit("error", { message: err.message ?? String(err) });
+      return null;
+    }
+  }
+  updateInstanceParams(instanceId, params) {
+    if (this.#state.readonly) return false;
+    const before = this.code;
+    const ok = updateInstanceParams(this.#state.doc, instanceId, params);
+    if (!ok) return false;
+    relayout(this.#state.doc);
+    this.#afterMutation(before, true);
+    return true;
+  }
+  /**
+   * Lift the currently-selected (or supplied) top-level items into a new
+   * `Component` definition. The selection is replaced by one instance call
+   * site placed at the union-bbox of the lifted items. Selection moves to
+   * the new instance. Operates on the current page only — sub-selections
+   * inside an expanded subtree are refused.
+   */
+  promoteToComponent(args) {
+    if (this.#state.readonly) throw new Error("editor is readonly");
+    if (this.#editingComponent) {
+      throw new Error("Cannot promote to component while editing a component body");
+    }
+    const before = this.code;
+    const result = promoteToComponent(this.#state.doc, this.currentPage, args);
+    const next = this.#parse(serialize(this.#state.doc));
+    this.#state.doc = next;
+    this.#refreshImportedComponents();
+    relayout(this.#state.doc);
+    const inst = this.instances().find((i) => i.componentName === result.componentName);
+    if (inst) {
+      this.#state.selection = /* @__PURE__ */ new Set([inst.id]);
+      this.#emit("select", { ids: [inst.id] });
+    }
+    this.#afterMutation(before, true);
+    return result;
+  }
+  /**
+   * Enter component-edit mode for the local component `name`. The canvas
+   * swaps to a synthetic page whose `elements` IS the component body — all
+   * existing geometry mutations route through unchanged. Fires the `page`
+   * event so panels (palette/inspector) update their scope.
+   */
+  enterComponentEditMode(name) {
+    if (this.#state.readonly) return;
+    if (this.#editingComponent === name) return;
+    const c = this.#state.doc.components.find((c2) => c2.name === name);
+    if (!c) {
+      this.#emit("error", { message: `Cannot edit unknown or imported component "${name}"` });
+      return;
+    }
+    this.#editingComponent = name;
+    this.#editPage = {
+      id: `__edit__${name}`,
+      name: `Editing: ${name}`,
+      elements: c.body,
+      arrows: []
+    };
+    this.#state.selection = /* @__PURE__ */ new Set();
+    this.#emit("select", { ids: [] });
+    this.#emit("page", { pageId: this.#editPage.id });
+    relayout(this.#state.doc);
+  }
+  /** Exit component-edit mode and return to the previously-active page. */
+  exitComponentEditMode() {
+    if (!this.#editingComponent) return;
+    this.#editingComponent = null;
+    this.#editPage = null;
+    this.#state.selection = /* @__PURE__ */ new Set();
+    this.#emit("select", { ids: [] });
+    this.#emit("page", { pageId: this.#state.currentPageId });
+    relayout(this.#state.doc);
   }
   // ── History ────────────────────────────────────────────────────────────
   undo() {
@@ -6778,6 +7462,22 @@ var BocetoEditor = class {
    * the right chrome.
    */
   render(renderer, w, h, extra) {
+    if (this.#editPage) {
+      this.#state.doc.pages.push(this.#editPage);
+      try {
+        renderer.render(this.#state.doc, {
+          width: w,
+          height: h,
+          page: this.#editPage.id,
+          selectedIds: this.#state.selection,
+          hoveredId: extra?.hoveredId,
+          zoom: extra?.zoom
+        });
+      } finally {
+        this.#state.doc.pages.pop();
+      }
+      return;
+    }
     renderer.render(this.#state.doc, {
       width: w,
       height: h,
@@ -6812,6 +7512,21 @@ var BocetoEditor = class {
       this.#state.currentPageId = doc.pages[0].id;
       this.#emit("page", { pageId: this.#state.currentPageId });
     }
+    if (this.#editingComponent) {
+      const c = doc.components.find((c2) => c2.name === this.#editingComponent);
+      if (c) {
+        this.#editPage = {
+          id: `__edit__${c.name}`,
+          name: `Editing: ${c.name}`,
+          elements: c.body,
+          arrows: []
+        };
+      } else {
+        this.#editingComponent = null;
+        this.#editPage = null;
+        this.#emit("page", { pageId: this.#state.currentPageId });
+      }
+    }
     for (const id of [...this.#state.selection]) {
       if (!findAny(doc, id)) this.#state.selection.delete(id);
     }
@@ -6840,6 +7555,23 @@ var BocetoEditor = class {
       raw: looksRaw && !this.#imports,
       ...this.#imports ? { imports: this.#imports } : {}
     });
+  }
+  /**
+   * Parse the current `imports` source in isolation to extract the list of
+   * components it brings in — used by `components()` for the imported
+   * section of the panel. Called whenever `#imports` changes.
+   */
+  #refreshImportedComponents() {
+    if (!this.#imports) {
+      this.#importedComponents = [];
+      return;
+    }
+    try {
+      const importsDoc = parse(this.#imports);
+      this.#importedComponents = importsDoc.components.slice();
+    } catch {
+      this.#importedComponents = [];
+    }
   }
 };
 function resolvePageId(doc, page) {
@@ -7537,6 +8269,15 @@ var BocetoEditElement = class extends HTMLElement {
     });
     this.#editor.on("page", (e) => {
       this.dispatchEvent(new CustomEvent("page", { detail: e, bubbles: true }));
+      const editing = this.#editor.editingComponent;
+      this.dispatchEvent(
+        new CustomEvent("componenteditmode", {
+          detail: { name: editing },
+          bubbles: true,
+          composed: true
+        })
+      );
+      this.#schedulePaint();
     });
     this.#editor.on(
       "change",
@@ -7713,12 +8454,42 @@ var BocetoEditElement = class extends HTMLElement {
         this.#rubberBand = extra?.rubberBand ?? null;
         this.#schedulePaint();
       },
-      onLabelEdit: (id) => this.#inline?.open(id),
+      onLabelEdit: (id) => this.#handleDoubleClick(id),
       onContextMenu: (info) => this.#openContextMenu(info),
       onDrop: (info) => this.#dropElement(info),
       getZoom: () => this.#zoom,
       focusTarget: this.#canvas
     });
+  }
+  /**
+   * Double-click handler. For a `ComponentInstance` the gesture means "edit
+   * this component" — open inline definition for locals, fire
+   * `gotodefinition` for imports. Falls through to inline label editing for
+   * everything else.
+   */
+  #handleDoubleClick(id) {
+    const item = this.#editor.findItem(id);
+    if (item && isComponentInstance(item)) {
+      const summaries = this.#editor.components();
+      const summary = summaries.find((c) => c.name === item.componentName);
+      if (summary?.origin === "local") {
+        this.#editor.enterComponentEditMode(item.componentName);
+      } else {
+        this.dispatchEvent(
+          new CustomEvent("gotodefinition", {
+            detail: {
+              componentName: item.componentName,
+              origin: summary ? "imported" : "unknown",
+              hint: summary?.hint
+            },
+            bubbles: true,
+            composed: true
+          })
+        );
+      }
+      return;
+    }
+    this.#inline?.open(id);
   }
   /**
    * Drop handler for palette → canvas DnD. The dataTransfer carries the
@@ -7745,7 +8516,53 @@ var BocetoEditElement = class extends HTMLElement {
     const meta = isMacLike() ? "\u2318" : "Ctrl";
     const shift = "\u21E7";
     const hasSelection = info.ids.length > 0;
-    this.#contextMenu.open(info.x, info.y, [
+    const items = [];
+    if (info.ids.length === 1) {
+      const item = ed.findItem(info.ids[0]);
+      if (item && isComponentInstance(item)) {
+        const summaries = ed.components();
+        const summary = summaries.find((c) => c.name === item.componentName);
+        const isLocal = summary?.origin === "local";
+        items.push(
+          {
+            label: isLocal ? "Edit component" : "Go to source",
+            onSelect: () => {
+              if (isLocal) ed.enterComponentEditMode(item.componentName);
+              else
+                this.dispatchEvent(
+                  new CustomEvent("gotodefinition", {
+                    detail: {
+                      componentName: item.componentName,
+                      origin: summary ? "imported" : "unknown",
+                      hint: summary?.hint
+                    },
+                    bubbles: true,
+                    composed: true
+                  })
+                );
+            }
+          },
+          {
+            label: "Find instances",
+            onSelect: () => {
+              const ids = ed.instances(item.componentName).map((i) => i.id);
+              if (ids.length > 0) ed.select(ids, "replace");
+            }
+          },
+          { label: "", separator: true, onSelect: () => void 0 }
+        );
+      }
+    }
+    if (info.ids.length > 1) {
+      items.push(
+        {
+          label: "Make component from selection\u2026",
+          onSelect: () => this.#promptPromote(info.ids)
+        },
+        { label: "", separator: true, onSelect: () => void 0 }
+      );
+    }
+    items.push(
       {
         label: "Bring to Front",
         hint: `${meta}${shift}]`,
@@ -7783,7 +8600,28 @@ var BocetoEditElement = class extends HTMLElement {
         disabled: !hasSelection,
         onSelect: () => ed.removeItems(info.ids)
       }
-    ]);
+    );
+    this.#contextMenu.open(info.x, info.y, items);
+  }
+  /**
+   * Promote-to-component prompt. Uses a single `window.prompt` for v1 —
+   * good enough to validate the gesture; a richer in-shadow form can come
+   * later. Params can be left blank to infer from `$ident` tokens.
+   */
+  #promptPromote(ids) {
+    const name = window.prompt("Component name (kebab-case):");
+    if (!name) return;
+    const paramsStr = window.prompt("Params (comma-separated, optional):", "") ?? "";
+    const params = paramsStr.split(",").map((p) => p.trim()).filter((p) => p.length > 0);
+    try {
+      this.#editor.promoteToComponent({
+        ids: [...ids],
+        name,
+        ...params.length > 0 ? { params } : {}
+      });
+    } catch (err) {
+      window.alert(err.message ?? String(err));
+    }
   }
   #schedulePaint() {
     if (this.#paintScheduled) return;
@@ -7863,27 +8701,53 @@ function defineBocetoEdit(tag = TAG) {
 
 // src/editor/floating-panel.ts
 function createFloatingPanel(opts) {
+  const dock = opts.dock === true;
+  const mountTarget = opts.mount ?? document.body;
   const root = document.createElement("div");
   root.dataset.bocetoPanel = "root";
-  Object.assign(root.style, {
-    position: "fixed",
-    left: `${opts.x ?? 16}px`,
-    top: `${opts.y ?? 16}px`,
-    width: `${opts.width ?? 280}px`,
-    maxHeight: opts.height ? `${opts.height}px` : "80vh",
+  if (dock) root.dataset.bocetoPanelMode = "dock";
+  const baseStyle = {
     background: "#fff",
-    border: "1px solid #d4d4d8",
-    borderRadius: "8px",
-    boxShadow: "0 6px 20px rgba(0,0,0,0.10), 0 2px 4px rgba(0,0,0,0.06)",
     fontFamily: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
     fontSize: "13px",
     color: "#222",
-    zIndex: "2147482000",
     display: "flex",
     flexDirection: "column",
     overflow: "hidden",
     userSelect: "none"
-  });
+  };
+  if (dock) {
+    Object.assign(root.style, {
+      ...baseStyle,
+      // Inline flow inside the host container.
+      position: "static",
+      width: opts.width ? `${opts.width}px` : "100%",
+      // The host owns the outer chrome — no shadow, no border, no rounding.
+      // We keep a faint top divider for visual separation when the host
+      // stacks multiple docked panels.
+      border: "0",
+      borderRadius: "0",
+      boxShadow: "none",
+      // Stretch to fill the host's available height; the body still scrolls
+      // internally so the parent layout stays predictable.
+      flex: "1 1 auto",
+      minHeight: "0",
+      maxHeight: opts.height ? `${opts.height}px` : "100%"
+    });
+  } else {
+    Object.assign(root.style, {
+      ...baseStyle,
+      position: "fixed",
+      left: `${opts.x ?? 16}px`,
+      top: `${opts.y ?? 16}px`,
+      width: `${opts.width ?? 280}px`,
+      maxHeight: opts.height ? `${opts.height}px` : "80vh",
+      border: "1px solid #d4d4d8",
+      borderRadius: "8px",
+      boxShadow: "0 6px 20px rgba(0,0,0,0.10), 0 2px 4px rgba(0,0,0,0.06)",
+      zIndex: "2147482000"
+    });
+  }
   const header = document.createElement("div");
   header.dataset.bocetoPanel = "header";
   Object.assign(header.style, {
@@ -7893,24 +8757,26 @@ function createFloatingPanel(opts) {
     padding: "8px 10px",
     borderBottom: "1px solid #e4e4e7",
     background: "#fafafa",
-    cursor: "grab",
+    cursor: dock ? "default" : "grab",
     fontSize: "12px",
     letterSpacing: "0.04em",
     textTransform: "uppercase",
     color: "#52525b",
     fontWeight: "600"
   });
-  const grip = document.createElement("span");
-  grip.dataset.bocetoPanel = "grip";
-  grip.textContent = "\u22EE\u22EE";
-  Object.assign(grip.style, { color: "#a1a1aa", letterSpacing: "-3px" });
-  header.appendChild(grip);
+  if (!dock) {
+    const grip = document.createElement("span");
+    grip.dataset.bocetoPanel = "grip";
+    grip.textContent = "\u22EE\u22EE";
+    Object.assign(grip.style, { color: "#a1a1aa", letterSpacing: "-3px" });
+    header.appendChild(grip);
+  }
   const titleEl = document.createElement("span");
   titleEl.dataset.bocetoPanel = "title";
   titleEl.textContent = opts.title;
   titleEl.style.flex = "1";
   header.appendChild(titleEl);
-  if (opts.onClose) {
+  if (opts.onClose && !dock) {
     const close = document.createElement("button");
     close.dataset.bocetoPanel = "close";
     close.type = "button";
@@ -7951,47 +8817,61 @@ function createFloatingPanel(opts) {
     overscrollBehavior: "contain"
   });
   root.append(header, body);
-  document.body.appendChild(root);
+  mountTarget.appendChild(root);
   let dragging = false;
   let pid = -1;
   let originX = 0;
   let originY = 0;
   let panelOriginX = 0;
   let panelOriginY = 0;
-  header.addEventListener("pointerdown", (e) => {
-    if (e.target !== header && e.target.dataset.bocetoPanel !== "grip" && e.target.dataset.bocetoPanel !== "title") {
-      return;
-    }
-    dragging = true;
-    pid = e.pointerId;
-    originX = e.clientX;
-    originY = e.clientY;
-    const rect = root.getBoundingClientRect();
-    panelOriginX = rect.left;
-    panelOriginY = rect.top;
-    header.setPointerCapture(e.pointerId);
-    header.style.cursor = "grabbing";
-    e.preventDefault();
-  });
-  header.addEventListener("pointermove", (e) => {
-    if (!dragging || e.pointerId !== pid) return;
-    const dx = e.clientX - originX;
-    const dy = e.clientY - originY;
-    const next = clampToViewport(panelOriginX + dx, panelOriginY + dy, root);
-    root.style.left = `${next.x}px`;
-    root.style.top = `${next.y}px`;
-  });
-  function endDrag(e) {
-    if (!dragging || e.pointerId !== pid) return;
-    dragging = false;
-    try {
-      header.releasePointerCapture(pid);
-    } catch {
-    }
-    header.style.cursor = "grab";
+  if (!dock) {
+    let endDrag2 = function(e) {
+      if (!dragging || e.pointerId !== pid) return;
+      dragging = false;
+      try {
+        header.releasePointerCapture(pid);
+      } catch {
+      }
+      header.style.cursor = "grab";
+    };
+    header.addEventListener("pointerdown", (e) => {
+      if (e.target !== header && e.target.dataset.bocetoPanel !== "grip" && e.target.dataset.bocetoPanel !== "title") {
+        return;
+      }
+      dragging = true;
+      pid = e.pointerId;
+      originX = e.clientX;
+      originY = e.clientY;
+      const rect = root.getBoundingClientRect();
+      panelOriginX = rect.left;
+      panelOriginY = rect.top;
+      header.setPointerCapture(e.pointerId);
+      header.style.cursor = "grabbing";
+      e.preventDefault();
+    });
+    header.addEventListener("pointermove", (e) => {
+      if (!dragging || e.pointerId !== pid) return;
+      const dx = e.clientX - originX;
+      const dy = e.clientY - originY;
+      const next = clampToViewport(panelOriginX + dx, panelOriginY + dy, root);
+      root.style.left = `${next.x}px`;
+      root.style.top = `${next.y}px`;
+    });
+    header.addEventListener("pointerup", endDrag2);
+    header.addEventListener("pointercancel", endDrag2);
+    const onResize = () => {
+      if (!isElementInDocument(root)) return;
+      const next = clampToViewport(
+        parseFloat(root.style.left) || 0,
+        parseFloat(root.style.top) || 0,
+        root
+      );
+      root.style.left = `${next.x}px`;
+      root.style.top = `${next.y}px`;
+    };
+    window.addEventListener("resize", onResize);
+    root.__bocetoResizeHandler = onResize;
   }
-  header.addEventListener("pointerup", endDrag);
-  header.addEventListener("pointercancel", endDrag);
   let visible = true;
   return {
     el: root,
@@ -8011,6 +8891,8 @@ function createFloatingPanel(opts) {
       return visible;
     },
     dispose() {
+      const handler = root.__bocetoResizeHandler;
+      if (handler) window.removeEventListener("resize", handler);
       root.remove();
     }
   };
@@ -8024,11 +8906,14 @@ function clampToViewport(x, y, el) {
   const clampedY = Math.max(4, Math.min(y, vh - h - 4));
   return { x: clampedX, y: clampedY };
 }
+function isElementInDocument(el) {
+  return document.body.contains(el);
+}
 
 // src/boceto-palette.ts
 var BocetoPaletteElement = class extends HTMLElement {
   static get observedAttributes() {
-    return ["for", "x", "y", "open"];
+    return ["for", "x", "y", "open", "mount", "dock"];
   }
   #panel = null;
   #search = null;
@@ -8044,28 +8929,42 @@ var BocetoPaletteElement = class extends HTMLElement {
     this.style.display = "none";
     const x = numAttr3(this, "x", NaN);
     const y = numAttr3(this, "y", NaN);
+    const dock = this.hasAttribute("dock");
+    const mount = this.#resolveMount();
     this.#panel = createFloatingPanel({
       title: "Add element  (\u2318K)",
       x: Number.isFinite(x) ? x : 16,
       y: Number.isFinite(y) ? y : 16,
-      width: 520,
+      width: dock ? void 0 : 520,
       height: void 0,
-      onClose: () => this.removeAttribute("open")
+      onClose: () => this.removeAttribute("open"),
+      mount,
+      dock
     });
     this.#buildBody();
-    if (this.hasAttribute("open")) {
-      this.#positionOverEditor();
+    if (dock || this.hasAttribute("open")) {
+      if (!dock) this.#positionOverEditor();
       this.#panel.show();
     } else this.#panel.hide();
     this.#installGlobalHotkey();
-    this.#installFocusToast();
-    this.#unsubActive = onActiveEditorChange((active2) => {
-      if (!this.hasAttribute("open")) return;
-      const target = this.#findTargetMaybe();
-      if (active2 && target && active2 !== target) {
-        this.removeAttribute("open");
-      }
-    });
+    if (!dock) this.#installFocusToast();
+    if (!dock) {
+      this.#unsubActive = onActiveEditorChange((active2) => {
+        if (!this.hasAttribute("open")) return;
+        const target = this.#findTargetMaybe();
+        if (active2 && target && active2 !== target) {
+          this.removeAttribute("open");
+        }
+      });
+    }
+  }
+  /** Resolve the `mount` attribute (an element id) into the DOM node the
+   *  panel should attach to. Returns `null` when the attribute is unset OR
+   *  when the id doesn't resolve — falls back to document.body. */
+  #resolveMount() {
+    const id = this.getAttribute("mount");
+    if (!id) return null;
+    return document.getElementById(id);
   }
   disconnectedCallback() {
     this.#panel?.dispose();
@@ -8626,7 +9525,7 @@ function attrsFor(type) {
 // src/boceto-inspector.ts
 var BocetoInspectorElement = class extends HTMLElement {
   static get observedAttributes() {
-    return ["for", "x", "y", "auto", "open"];
+    return ["for", "x", "y", "auto", "open", "mount", "dock"];
   }
   #panel = null;
   #body = null;
@@ -8638,19 +9537,33 @@ var BocetoInspectorElement = class extends HTMLElement {
   connectedCallback() {
     if (this.#panel) return;
     this.style.display = "none";
+    const dock = this.hasAttribute("dock");
+    const mount = this.#resolveMount();
     const x = numAttr4(this, "x", Math.max(16, window.innerWidth - 320));
     const y = numAttr4(this, "y", 120);
     this.#panel = createFloatingPanel({
       title: "Inspector",
       x,
       y,
-      width: 300,
-      onClose: () => this.removeAttribute("open")
+      width: dock ? void 0 : 300,
+      onClose: () => this.removeAttribute("open"),
+      mount,
+      dock
     });
     this.#body = this.#panel.body;
-    this.#panel.hide();
+    if (!dock) this.#panel.hide();
     this.#attachToTarget();
-    this.#unsubActive = onActiveEditorChange(() => this.#applyActiveScoping());
+    if (!dock) {
+      this.#unsubActive = onActiveEditorChange(() => this.#applyActiveScoping());
+    }
+  }
+  /** Resolve the `mount` attribute (an element id) into a DOM node. Returns
+   *  null when the attribute is unset OR doesn't resolve — falls back to
+   *  document.body. */
+  #resolveMount() {
+    const id = this.getAttribute("mount");
+    if (!id) return null;
+    return document.getElementById(id);
   }
   disconnectedCallback() {
     this.#detach();
@@ -8720,6 +9633,10 @@ var BocetoInspectorElement = class extends HTMLElement {
   #onSelectionChange() {
     if (!this.#target || !this.#panel) return;
     const ids = [...this.#target.editor.selection];
+    if (this.hasAttribute("dock")) {
+      this.#render();
+      return;
+    }
     const auto = this.getAttribute("auto") !== null || !this.hasAttribute("auto");
     if (ids.length === 0) {
       if (auto) this.#panel.hide();
@@ -8784,6 +9701,10 @@ var BocetoInspectorElement = class extends HTMLElement {
     }
     const item = editor.findItem(ids[0]);
     if (!item) return;
+    if (isComponentInstance(item)) {
+      this.#renderComponentInstance(editor, item);
+      return;
+    }
     const isElement = !("kind" in item);
     const el = item;
     const sectionCommon = section("Common");
@@ -8903,6 +9824,117 @@ var BocetoInspectorElement = class extends HTMLElement {
         this.#body.appendChild(sectionAttrs);
       }
     }
+  }
+  /**
+   * Inspector rendering when the selection is a single `ComponentInstance`.
+   * Shows the component name (clickable — opens edit mode for local, fires
+   * `gotodefinition` for imported), every param with an editable value,
+   * plus geometry rows so users can fine-tune position / size.
+   */
+  #renderComponentInstance(editor, inst) {
+    if (!this.#body || !this.#target) return;
+    const allComponents = editor.components();
+    const summary = allComponents.find((c) => c.name === inst.componentName);
+    const isLocal = summary?.origin === "local";
+    const head = section("Component");
+    const nameRow = document.createElement("div");
+    Object.assign(nameRow.style, {
+      display: "flex",
+      alignItems: "center",
+      gap: "8px",
+      marginBottom: "6px"
+    });
+    const name = document.createElement("span");
+    name.textContent = inst.componentName;
+    Object.assign(name.style, {
+      fontFamily: "ui-monospace, SF Mono, Menlo, Consolas, monospace",
+      fontSize: "12.5px",
+      color: "#27272a",
+      flex: "1"
+    });
+    nameRow.appendChild(name);
+    const action = document.createElement("button");
+    action.type = "button";
+    action.textContent = isLocal ? "Edit" : "Go to source";
+    Object.assign(action.style, {
+      padding: "3px 10px",
+      border: "1px solid #4a90d9",
+      background: "#fff",
+      color: "#4a90d9",
+      borderRadius: "4px",
+      cursor: "pointer",
+      font: "inherit",
+      fontSize: "11.5px"
+    });
+    action.addEventListener("click", () => {
+      if (isLocal) editor.enterComponentEditMode(inst.componentName);
+      else this.#target?.dispatchEvent(
+        new CustomEvent("gotodefinition", {
+          detail: {
+            componentName: inst.componentName,
+            origin: summary ? "imported" : "unknown",
+            hint: summary?.hint
+          },
+          bubbles: true,
+          composed: true
+        })
+      );
+    });
+    nameRow.appendChild(action);
+    head.appendChild(nameRow);
+    this.#body.appendChild(head);
+    if (summary && summary.params.length > 0) {
+      const sec = section("Parameters");
+      for (const p of summary.params) {
+        const current = inst.params[p] ?? "";
+        addRow(
+          sec,
+          p,
+          textInput(current, (v) => {
+            editor.updateInstanceParams(inst.id, { ...inst.params, [p]: v });
+          })
+        );
+      }
+      this.#body.appendChild(sec);
+    }
+    const sectionGeo = section("Geometry");
+    const ix = inst.x;
+    const iy = inst.y;
+    const iw = typeof inst.w === "number" ? inst.w : 200;
+    const ih = typeof inst.h === "number" ? inst.h : 120;
+    addRow(
+      sectionGeo,
+      "X",
+      numberInput(ix, (v) => {
+        const dx = v - ix;
+        if (dx !== 0) editor.move([inst.id], dx, 0);
+      })
+    );
+    addRow(
+      sectionGeo,
+      "Y",
+      numberInput(iy, (v) => {
+        const dy = v - iy;
+        if (dy !== 0) editor.move([inst.id], 0, dy);
+      })
+    );
+    addRow(
+      sectionGeo,
+      "W",
+      numberInput(iw, (v) => {
+        if (v === iw) return;
+        editor.resize(inst.id, "e", v - iw, 0, { x: ix, y: iy, w: iw, h: ih });
+      })
+    );
+    addRow(
+      sectionGeo,
+      "H",
+      numberInput(ih, (v) => {
+        if (v === ih) return;
+        editor.resize(inst.id, "s", 0, v - ih, { x: ix, y: iy, w: iw, h: ih });
+      })
+    );
+    this.#body.appendChild(sectionGeo);
   }
 };
 function section(title) {

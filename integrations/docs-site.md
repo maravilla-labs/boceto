@@ -64,7 +64,7 @@ export default {
 
 When `resolveImports` is set (with `fs` + `glob` adapters), frontmatter `boceto.import` declarations are walked and merged into the parse registry automatically. Same-file sibling fences always share their `component … end` definitions — no setup needed.
 
-> `@boceto/remark` ships **no implicit Node defaults** so its dist stays free of `node:fs` / `tinyglobby` static imports — browser / Tauri / react-markdown consumers can bundle it cleanly. Node SSG consumers (Astro / Next / Docusaurus) import `defaultFsAdapter` + `defaultGlobAdapter` from `@boceto/remark/node-adapters` and pass them as shown above. Browser hosts inject their own adapters (e.g. the Tauri-backed resolver in `frontend/src/utils/bocetoImports.ts` in the Maravilla Docs app).
+> `@boceto/remark` ships **no implicit Node defaults** so its dist stays free of `node:fs` / `tinyglobby` static imports — browser / Tauri / react-markdown consumers can bundle it cleanly. Node SSG consumers (Astro / Next / Docusaurus) import `defaultFsAdapter` + `defaultGlobAdapter` from `@boceto/remark/node-adapters` and pass them as shown above. Browser / Tauri hosts inject their own adapters (a Tauri `read_doc` command, a browser `fetch` of a public asset, an in-memory map for tests, …).
 
 ### Per-fence overrides
 

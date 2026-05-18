@@ -36,6 +36,19 @@ interface BocetoPanelAttrs extends HTMLAttributes<HTMLElement> {
   open?: boolean | string
   x?: number | string
   y?: number | string
+  /**
+   * `id` of a host-controlled element the panel should attach to instead
+   * of `document.body`. Pair with `dock` to embed inside a sidebar / rail
+   * (Photoshop-style). The slot must exist in the DOM before the panel's
+   * `connectedCallback` runs.
+   */
+  mount?: string
+  /**
+   * Docked layout — flips `position: fixed` → flow, drops the drag
+   * handle / shadow / close button, and the panel becomes always-visible.
+   * Pair with `mount` so the panel lands inside your container.
+   */
+  dock?: boolean | string
 }
 
 interface BocetoInspectorAttrs extends BocetoPanelAttrs {
