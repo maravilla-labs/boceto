@@ -21,6 +21,7 @@ import {
   validateComponents,
 } from './components'
 import { parsePage } from './page'
+import { stripFrontmatter } from './frontmatter'
 
 export { BocetoParseError } from './errors'
 
@@ -32,7 +33,13 @@ export function parse(source: string, options: ParseOptions = {}): BocetoDoc {
     }
   }
 
-  const rawBlocks = extractBlocks(source)
+  // Strip a leading YAML frontmatter block if present. Frontmatter is
+  // metadata for higher-level consumers (e.g. `resolveBocetoImports`); the
+  // parser itself ignores it. Stripping here keeps standalone `.boceto`
+  // files with frontmatter from being mis-detected as page-separator runs.
+  const stripped = stripFrontmatter(source)
+
+  const rawBlocks = extractBlocks(stripped)
 
   // Optional imports: prepend their blocks for Pass-1 component extraction
   // only — their pages are discarded so importing a doc doesn't leak its
@@ -63,6 +70,11 @@ export function parse(source: string, options: ParseOptions = {}): BocetoDoc {
   validateComponents(components)
 
   const componentMap = new Map<string, Component>()
+  // Pre-parsed imports go in first — cheapest path; consumers using a
+  // LibraryCache populated by `resolveBocetoImports` flow through here.
+  if (options.importedComponents) {
+    for (const c of options.importedComponents) componentMap.set(c.name, c)
+  }
   for (const c of allParsed) componentMap.set(c.name, c) // own overrides import (later wins)
 
   // Pass 2: parse pages with the component registry available so references

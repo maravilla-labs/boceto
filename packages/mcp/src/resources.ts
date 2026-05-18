@@ -107,6 +107,74 @@ export const RESOURCES: ResourceEntry[] = [
     ],
   },
 
+  // ── Integrations — one resource per stack, plus the decision index ───
+  {
+    uri: 'boceto://integrations/index.md',
+    name: 'Boceto integrations — overview',
+    description:
+      'Decision tree mapping host stacks (TipTap+React, plain HTML, React app, docs site) to a specific integration recipe. The individual recipe bodies are best fetched via the `boceto_list_integrations` and `boceto_read_integration` tools.',
+    mimeType: 'text/markdown',
+    paths: [
+      { root: 'package', rel: 'integrations/index.md' },
+      { root: 'repo', rel: 'integrations/index.md' },
+    ],
+  },
+  {
+    uri: 'boceto://integrations/tiptap-react.md',
+    name: 'Boceto integration — TipTap + React',
+    description:
+      'Embed the boceto editor as a block inside a TipTap + React rich-text document. Covers `BocetoBlock`, `BocetoContext`, `withReactNodeView`, the `insertBocetoBlock` command, and how cross-block component context is broadcast.',
+    mimeType: 'text/markdown',
+    paths: [
+      { root: 'package', rel: 'integrations/tiptap-react.md' },
+      { root: 'repo', rel: 'integrations/tiptap-react.md' },
+    ],
+  },
+  {
+    uri: 'boceto://integrations/web-components.md',
+    name: 'Boceto integration — plain web components',
+    description:
+      'Drop `<boceto-edit>` + sidekick panels into raw HTML or any framework that supports custom elements (Vue, Svelte, Solid, Astro, …). The framework-agnostic fallback.',
+    mimeType: 'text/markdown',
+    paths: [
+      { root: 'package', rel: 'integrations/web-components.md' },
+      { root: 'repo', rel: 'integrations/web-components.md' },
+    ],
+  },
+  {
+    uri: 'boceto://integrations/react.md',
+    name: 'Boceto integration — React app',
+    description:
+      'Use `@boceto/react` to mount the editor in a React app outside a TipTap doc — `<BocetoEditFull>` for the full surface, or `<BocetoEdit>` + `<BocetoPalette>` + `<BocetoInspector>` à-la-carte.',
+    mimeType: 'text/markdown',
+    paths: [
+      { root: 'package', rel: 'integrations/react.md' },
+      { root: 'repo', rel: 'integrations/react.md' },
+    ],
+  },
+  {
+    uri: 'boceto://integrations/react-markdown.md',
+    name: 'Boceto integration — react-markdown',
+    description:
+      'Plug `@boceto/remark` into `react-markdown` via `rehype-raw` and a `boceto-view` component override. Same-file fence aggregation + cross-file frontmatter imports come from the remark plugin; works in any browser / Tauri / SSR host that uses react-markdown for docs / wiki / CMS rendering.',
+    mimeType: 'text/markdown',
+    paths: [
+      { root: 'package', rel: 'integrations/react-markdown.md' },
+      { root: 'repo', rel: 'integrations/react-markdown.md' },
+    ],
+  },
+  {
+    uri: 'boceto://integrations/docs-site.md',
+    name: 'Boceto integration — docs site (remark / markdown-it)',
+    description:
+      'Turn ```boceto fences into `<boceto-view>` or inline SVG inside a docs site (remark for Next/Astro/Docusaurus, markdown-it for Vitepress/Eleventy). Covers cross-file imports via YAML frontmatter + `LibraryCache`.',
+    mimeType: 'text/markdown',
+    paths: [
+      { root: 'package', rel: 'integrations/docs-site.md' },
+      { root: 'repo', rel: 'integrations/docs-site.md' },
+    ],
+  },
+
   // ── Formal spec ──────────────────────────────────────────────────────
   {
     uri: 'boceto://spec/boceto-spec.md',

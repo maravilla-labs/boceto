@@ -41,6 +41,9 @@
     "dist",
     "skill",
     "spec",
+    "recipes",
+    "references",
+    "integrations",
     "README.md"
   ],
   "scripts": {

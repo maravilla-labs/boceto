@@ -352,6 +352,18 @@ export interface ParseOptions {
    * Ignored when `raw` is set (raw mode skips Pass-1 entirely).
    */
   imports?: string | string[]
+  /**
+   * Pre-parsed components to merge into the registry before parsing `source`.
+   * Faster path than `imports` when the caller already holds parsed
+   * components (e.g. from a `LibraryCache` populated by `resolveBocetoImports`).
+   * Skips Pass-1a/1b for these entries entirely.
+   *
+   * Combines additively with `imports`; later entries (and `source`'s own
+   * definitions) override earlier ones of the same name.
+   *
+   * Ignored when `raw` is set.
+   */
+  importedComponents?: readonly Component[]
 }
 
 /** Type guard: returns true if a `PageItem` is a `ComponentInstance`. */

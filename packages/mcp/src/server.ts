@@ -19,6 +19,12 @@ import {
   runListRecipes,
   runReadRecipe,
 } from './tools/recipes'
+import {
+  listIntegrationsInputSchema,
+  readIntegrationInputSchema,
+  runListIntegrations,
+  runReadIntegration,
+} from './tools/integrations'
 import { findResource, readResource, RESOURCES } from './resources'
 
 const SERVER_NAME = '@boceto/mcp'
@@ -146,6 +152,34 @@ export function createServer(): McpServer {
     },
     async (args) => {
       const result = runReadRecipe(args)
+      return toolResult(result)
+    },
+  )
+
+  server.registerTool(
+    'boceto_list_integrations',
+    {
+      title: 'List integration recipes for embedding the boceto editor',
+      description:
+        'List every available integration recipe (slug + kind + title + summary): how to embed `<boceto-edit>` and friends into a host application across stacks (TipTap + React, plain web components, React app, docs-site renderer). Start here when the user asks to add boceto to their app, integrate the editor, wire up a Boceto block in TipTap, render boceto in their docs, or anything similar.',
+      inputSchema: listIntegrationsInputSchema,
+    },
+    async () => {
+      const result = runListIntegrations({})
+      return toolResult(result)
+    },
+  )
+
+  server.registerTool(
+    'boceto_read_integration',
+    {
+      title: 'Read an integration recipe',
+      description:
+        'Return the full markdown body for one integration slug — install commands, wiring code, the custom-element / event surface, peer dependencies, and gotchas. Pair with `boceto_list_integrations` for discovery. Slugs available today: `index`, `tiptap-react`, `web-components`, `react`, `docs-site`.',
+      inputSchema: readIntegrationInputSchema,
+    },
+    async (args) => {
+      const result = runReadIntegration(args)
       return toolResult(result)
     },
   )

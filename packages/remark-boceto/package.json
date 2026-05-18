@@ -49,10 +49,15 @@
     "@boceto/core": "workspace:*",
     "unist-util-visit": "^5.0.0"
   },
+  "optionalDependencies": {
+    "tinyglobby": "^0.2.16"
+  },
   "devDependencies": {
     "@types/mdast": "^4.0.4",
+    "@types/node": "^20.16.0",
     "remark": "^15.0.1",
     "remark-html": "^16.0.1",
+    "tinyglobby": "^0.2.16",
     "tsup": "^8.3.0",
     "typescript": "^5.6.3",
     "unified": "^11.0.5",

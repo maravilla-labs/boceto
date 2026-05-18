@@ -31,6 +31,28 @@ describe('boceto_parse', () => {
       expect(r.error.message.length).toBeGreaterThan(0)
     }
   })
+
+  it('resolves cross-doc components via the imports input', () => {
+    const lib = [
+      '```boceto',
+      'component my-card(title)',
+      '  element card 0 0 200 100 ""',
+      '  element heading 8 8 184 24 "$title"',
+      'end',
+      '```',
+    ].join('\n')
+    const page = [
+      '```boceto',
+      'element my-card 0 0 200 100 "" title="X"',
+      '```',
+    ].join('\n')
+    const withImports = runParse({ source: page, imports: lib })
+    expect(withImports.ok).toBe(true)
+    // Sanity: same source without imports still parses but the call site
+    // would error on lookup (the parser raises during instance expansion).
+    const without = runParse({ source: page })
+    expect(without.ok).toBe(false)
+  })
 })
 
 describe('boceto_lint', () => {
@@ -47,6 +69,25 @@ describe('boceto_lint', () => {
   it('honors options.disable', () => {
     const r = runLint({ source: 'element Frame 0 0 600 400', disable: ['invented-type'] })
     expect(r.issues.find((i) => i.rule === 'invented-type')).toBeUndefined()
+  })
+
+  it('threads imports through the parse cross-check', () => {
+    const lib = [
+      '```boceto',
+      'component my-card(title)',
+      '  element card 0 0 200 100 ""',
+      '  element heading 8 8 184 24 "$title"',
+      'end',
+      '```',
+    ].join('\n')
+    const page = [
+      '```boceto',
+      'element my-card 0 0 200 100 "" title="X"',
+      '```',
+    ].join('\n')
+    const r = runLint({ source: page, imports: lib })
+    expect(r.issues.find((i) => i.rule === 'parse-error')).toBeUndefined()
+    expect(r.errorCount).toBe(0)
   })
 })
 

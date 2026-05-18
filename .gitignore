@@ -32,6 +32,7 @@ skill-workspace/
 packages/mcp/skill/
 packages/mcp/references/
 packages/mcp/recipes/
+packages/mcp/integrations/
 packages/mcp/spec/
 # @boceto/skill prepack output — sync-skill.js copies skill/boceto/ here
 # at publish time.

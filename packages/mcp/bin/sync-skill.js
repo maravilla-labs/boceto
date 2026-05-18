@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
- * Copy the canon (skill, references, recipes, spec) into the package so the
- * published artifact is self-contained. Runs from `prepack` — in workspace
- * dev mode the server resolves the canonical sources directly.
+ * Copy the canon (skill, references, recipes, integrations, spec) into the
+ * package so the published artifact is self-contained. Runs from `prepack`
+ * — in workspace dev mode the server resolves the canonical sources directly.
  */
 import { cpSync, existsSync, mkdirSync, rmSync, copyFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
@@ -24,6 +24,9 @@ const COPIES = [
   ['references', 'references'],
   // Per-recipe markdown files. Splits served via the recipes tools.
   ['recipes', 'recipes'],
+  // Editor-integration recipes. Served via boceto_list_integrations /
+  // boceto_read_integration and as `boceto://integrations/<slug>.md` resources.
+  ['integrations', 'integrations'],
 ]
 
 const SPEC_COPIES = [['spec/boceto-spec.md', 'spec/boceto-spec.md']]

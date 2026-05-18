@@ -1,5 +1,6 @@
 import { Extension } from '@tiptap/core'
 import type { Editor } from '@tiptap/core'
+import { parse } from '@boceto/core'
 import { eachBocetoBlock } from './boceto-block'
 
 /**
@@ -15,6 +16,13 @@ export interface BocetoContextStorage {
   source: string
   /** Per-block fenced source, in document order. */
   blocks: string[]
+  /**
+   * For each `component NAME ... end` definition reachable across the doc,
+   * records the 0-based index of the block that defines it. Node views use
+   * this to tag imported components with a friendly origin hint ("block 2")
+   * so the Components panel can offer "Go to source" navigation.
+   */
+  originBlockIndex: Map<string, number>
   /**
    * Bumped on every doc change that affects the joined source — node views
    * subscribe via `editor.on('transaction')` and read this counter to know
@@ -44,6 +52,28 @@ export function collectBocetoSource(editor: Editor): {
 }
 
 /**
+ * Build a `Map<componentName, blockIndex>` from the per-block source array.
+ * Parses each block independently and records every component name it
+ * defines. Used by node views to surface "block N" origin hints on the
+ * Components panel for imported entries.
+ */
+export function buildOriginBlockIndex(blocks: readonly string[]): Map<string, number> {
+  const out = new Map<string, number>()
+  for (let i = 0; i < blocks.length; i++) {
+    try {
+      const doc = parse(blocks[i]!)
+      for (const c of doc.components) {
+        // First definition wins (matches the parser's source-order behaviour).
+        if (!out.has(c.name)) out.set(c.name, i)
+      }
+    } catch {
+      // A malformed block doesn't break origin tracking — just skip it.
+    }
+  }
+  return out
+}
+
+/**
  * `BocetoContext` — TipTap extension that broadcasts the doc-level Boceto
  * source to every node view so cross-block component definitions resolve.
  *
@@ -57,7 +87,7 @@ export const BocetoContext = Extension.create<unknown, BocetoContextStorage>({
   name: 'bocetoContext',
 
   addStorage() {
-    return { source: '', blocks: [], version: 0 }
+    return { source: '', blocks: [], originBlockIndex: new Map(), version: 0 }
   },
 
   onCreate() {
@@ -67,6 +97,7 @@ export const BocetoContext = Extension.create<unknown, BocetoContextStorage>({
     if (source === this.storage.source) return
     this.storage.source = source
     this.storage.blocks = blocks
+    this.storage.originBlockIndex = buildOriginBlockIndex(blocks)
     this.storage.version += 1
   },
 
@@ -76,6 +107,7 @@ export const BocetoContext = Extension.create<unknown, BocetoContextStorage>({
     if (source === this.storage.source) return
     this.storage.source = source
     this.storage.blocks = blocks
+    this.storage.originBlockIndex = buildOriginBlockIndex(blocks)
     this.storage.version += 1
   },
 })

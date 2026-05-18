@@ -1,6 +1,7 @@
 export { BocetoEditElement, defineBocetoEdit, TAG } from './boceto-edit'
 export { BocetoPaletteElement, defineBocetoPalette, PALETTE_TAG } from './boceto-palette'
 export { BocetoInspectorElement, defineBocetoInspector, INSPECTOR_TAG } from './boceto-inspector'
+export { BocetoComponentsElement, defineBocetoComponents, COMPONENTS_TAG } from './boceto-components'
 export {
   getActiveEditor,
   setActiveEditor,
@@ -29,3 +30,9 @@ export {
   type HitResult,
   type Mode,
 } from './editor'
+export {
+  ComponentMutationError,
+  type ComponentDefPatch,
+  type ComponentSummary,
+  type PromoteArgs,
+} from './editor/components'

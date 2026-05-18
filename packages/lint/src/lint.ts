@@ -69,18 +69,26 @@ export function lint(source: string, options: LintOptions = {}): LintReport {
   //    the autofix loop will re-lint after rewriting, surfacing the next.
   if (!options.skipParseCheck) {
     const fences = findBocetoFences(current)
+    // Thread cross-doc imports through the parser cross-check so pages that
+    // reference library components don't false-positive "Unknown component".
+    const parseOpts = {
+      imports: options.imports,
+      importedComponents: options.importedComponents,
+    }
     if (fences.length === 0) {
       // No fences — treat as raw DSL (one block at file line 1).
       const isRaw = !current.includes('```') && !/^---/m.test(current.trim())
       try {
-        parse(current, { raw: isRaw })
+        // `raw` skips Pass-1 entirely so imports are also ignored — only
+        // pass them through in non-raw mode.
+        parse(current, isRaw ? { raw: true } : parseOpts)
       } catch (err) {
         const pe = err as BocetoParseError
         allIssues.push(parseErrorIssue(pe, 0))
       }
     } else {
       try {
-        parse(current)
+        parse(current, parseOpts)
       } catch (err) {
         const pe = err as BocetoParseError
         // The parser reports `pe.line` relative to the body of whichever

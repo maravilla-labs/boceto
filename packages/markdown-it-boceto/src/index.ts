@@ -1,5 +1,17 @@
 import type MarkdownIt from 'markdown-it'
-import { applyFlexLayout, pageContentBox, parse, selectPage, SvgRenderer } from '@boceto/core'
+import type Token from 'markdown-it/lib/token.mjs'
+import {
+  applyFlexLayout,
+  LibraryCache,
+  pageContentBox,
+  parse,
+  resolveBocetoImports,
+  selectPage,
+  SvgRenderer,
+  type Component,
+  type FsAdapter,
+  type GlobAdapter,
+} from '@boceto/core'
 
 export interface MarkdownItBocetoOptions {
   /**
@@ -43,7 +55,30 @@ export interface MarkdownItBocetoOptions {
   render?: (source: string, info: { lang: string; meta: string }) => string
 }
 
+/**
+ * Per-render environment used by the markdown-it plugin. Pass this as the
+ * `env` argument of `md.render(src, env)` to provide cross-document context:
+ *
+ *     const { importedComponents } = await prewarmBocetoCache({ ... })
+ *     md.render(src, { bocetoImportedComponents: importedComponents })
+ *
+ * Same-file fence aggregation is automatic and needs no env.
+ */
+export interface BocetoEnv {
+  /**
+   * Pre-resolved components from cross-file `boceto.import` frontmatter.
+   * Populate via `prewarmBocetoCache` (or call `resolveBocetoImports`
+   * yourself). Without this, only same-file fence aggregation happens.
+   */
+  bocetoImportedComponents?: readonly Component[]
+}
+
 type FenceOpts = { fit?: 'content' | 'fixed'; width?: number; height?: number; padding?: number }
+
+interface ParsedFence {
+  page: string | null
+  opts: FenceOpts
+}
 
 /**
  * Parse the fence info-string portion after `boceto`. Recognized `key=value`
@@ -51,7 +86,7 @@ type FenceOpts = { fit?: 'content' | 'fixed'; width?: number; height?: number; p
  * overrides; everything else is joined back as the page name. Unknown keys
  * or invalid values fall through to the page name.
  */
-function parseFenceMeta(meta: string): { page: string | null; opts: FenceOpts } {
+function parseFenceMeta(meta: string): ParsedFence {
   if (!meta) return { page: null, opts: {} }
   const opts: FenceOpts = {}
   const rest: string[] = []
@@ -78,19 +113,43 @@ function parseFenceMeta(meta: string): { page: string | null; opts: FenceOpts } 
   return { page: rest.length ? rest.join(' ') : null, opts }
 }
 
+function wrapFence(source: string, pageName: string | null): string {
+  return '```boceto' + (pageName ? ':' + pageName : '') + '\n' + source + '\n```'
+}
+
+interface EnvSlot {
+  /** Pre-wrapped fence sources for same-file aggregation, in document order. */
+  siblings: string[]
+  /** Map from fence token index → position in `siblings` (so renderer can subtract self). */
+  positionByTokenIdx: Map<number, number>
+}
+
+const ENV_KEY = '__bocetoFenceContext__'
+
+function getOrInitSlot(env: Record<string, unknown> | undefined): EnvSlot | null {
+  if (!env) return null
+  const existing = env[ENV_KEY] as EnvSlot | undefined
+  if (existing) return existing
+  const slot: EnvSlot = { siblings: [], positionByTokenIdx: new Map() }
+  env[ENV_KEY] = slot
+  return slot
+}
+
 /**
  * markdown-it plugin: replaces fenced ```boceto blocks with either
  * `<boceto-view>` (default) or inline `<svg>` (mode: 'svg').
  *
- * **`mode: 'svg'` requires pre-initialization.** Because markdown-it's render
- * pipeline is synchronous, the host application must `await initYoga()` from
- * `@boceto/core` once before calling `md.render(...)`. If that hasn't
- * happened, the layout pass will throw with a descriptive error.
+ * **Same-file fence aggregation** is automatic: every ```boceto fence in a
+ * single source shares a component registry, so block N can use components
+ * defined in earlier blocks.
  *
- * In SVG mode each fence auto-sizes to its content by default (plus 16px
- * padding); `width` / `height` act as minimum floors. Pass `fit: 'fixed'`
- * for a fixed canvas. Per-fence overrides via the info string:
- * ` ```boceto Login width=1280 fit=content `.
+ * **Cross-file imports**: markdown-it renders synchronously, so the host
+ * application must resolve frontmatter imports BEFORE `md.render(...)`.
+ * Use `prewarmBocetoCache` from this module to populate a `LibraryCache`,
+ * then pass the returned components via `env.bocetoImportedComponents`.
+ *
+ * **`mode: 'svg'` requires pre-initialization.** Call `await initYoga()`
+ * from `@boceto/core` once before calling `md.render(...)`.
  */
 export default function markdownItBoceto(
   md: MarkdownIt,
@@ -101,6 +160,25 @@ export default function markdownItBoceto(
   const extraAttrs = options.attributes ?? {}
   const svgRenderer = mode === 'svg' ? new SvgRenderer() : null
   const defaultFence = md.renderer.rules.fence
+
+  // Core rule: walk every fence token before rendering so the fence rule can
+  // see its siblings on the env. This runs once per document.
+  md.core.ruler.push('boceto-collect-fences', (state) => {
+    const slot = getOrInitSlot(state.env)
+    if (!slot) return
+    slot.siblings = []
+    slot.positionByTokenIdx.clear()
+    for (let i = 0; i < state.tokens.length; i++) {
+      const tok = state.tokens[i] as Token | undefined
+      if (!tok || tok.type !== 'fence') continue
+      const info = (tok.info ?? '').trim()
+      const [lang, ...metaParts] = info.split(/\s+/)
+      if (lang !== 'boceto') continue
+      const { page } = parseFenceMeta(metaParts.join(' '))
+      slot.positionByTokenIdx.set(i, slot.siblings.length)
+      slot.siblings.push(wrapFence(tok.content, page))
+    }
+  })
 
   md.renderer.rules.fence = function (tokens, idx, opts, env, self) {
     const token = tokens[idx]!
@@ -115,13 +193,32 @@ export default function markdownItBoceto(
       return options.render(source, { lang, meta })
     }
     const { page: pageName, opts: fence } = parseFenceMeta(meta)
+
+    // Same-file aggregation: pull this doc's sibling fences from env, omit self.
+    const slot = (env as Record<string, unknown> | undefined)?.[ENV_KEY] as
+      | EnvSlot
+      | undefined
+    let otherFences: string[] = []
+    if (slot) {
+      const myPos = slot.positionByTokenIdx.get(idx) ?? -1
+      otherFences = slot.siblings.filter((_, j) => j !== myPos)
+    }
+
+    const importedComponents =
+      ((env as BocetoEnv | undefined)?.bocetoImportedComponents) ?? undefined
+
     if (mode === 'svg') {
       const fit = fence.fit ?? options.fit ?? 'content'
       const padding = fence.padding ?? options.padding ?? 16
       const minW = fence.width ?? options.width
       const minH = fence.height ?? options.height
-      const wrapped = '```boceto' + (pageName ? ':' + pageName : '') + '\n' + source + '\n```'
-      const doc = applyFlexLayout(parse(wrapped))
+      const wrapped = wrapFence(source, pageName)
+      const doc = applyFlexLayout(
+        parse(wrapped, {
+          imports: otherFences.length > 0 ? otherFences : undefined,
+          importedComponents,
+        }),
+      )
       let w: number, h: number
       if (fit === 'fixed') {
         w = minW ?? 860
@@ -144,6 +241,55 @@ export default function markdownItBoceto(
     return renderTag(tag, attrs) + '\n'
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Prewarm helper — async resolution for sync `md.render(...)`
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface PrewarmBocetoCacheOptions {
+  /** Absolute path of the markdown file whose imports we're resolving. */
+  filePath: string
+  /** Raw source text of `filePath` (frontmatter still present). */
+  source: string
+  fs: FsAdapter
+  glob: GlobAdapter
+  cache: LibraryCache
+  projectRoot?: string
+}
+
+/**
+ * Convenience wrapper around `resolveBocetoImports` for markdown-it users.
+ * Call this before `md.render(src, { bocetoImportedComponents: ... })`.
+ *
+ *     const cache = new LibraryCache()
+ *     const { importedComponents, importedPaths } = await prewarmBocetoCache({
+ *       filePath: '/proj/page.md',
+ *       source: await fs.readFile('/proj/page.md', 'utf8'),
+ *       fs: { readFile: (p) => fs.readFile(p) },
+ *       glob: tinyglobby.glob,
+ *       cache,
+ *       projectRoot: '/proj',
+ *     })
+ *     const html = md.render(src, { bocetoImportedComponents: importedComponents })
+ *
+ * `importedPaths` is the flat list of files consulted — useful for HMR
+ * subscriptions.
+ */
+export async function prewarmBocetoCache(opts: PrewarmBocetoCacheOptions): Promise<{
+  importedComponents: Component[]
+  importedPaths: string[]
+}> {
+  return await resolveBocetoImports({
+    filePath: opts.filePath,
+    source: opts.source,
+    fs: opts.fs,
+    glob: opts.glob,
+    cache: opts.cache,
+    projectRoot: opts.projectRoot,
+  })
+}
+
+export { LibraryCache } from '@boceto/core'
 
 function renderTag(tag: string, attrs: Record<string, string>): string {
   const parts = [tag]

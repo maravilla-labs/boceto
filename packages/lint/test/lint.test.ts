@@ -333,4 +333,30 @@ describe('lint integration', () => {
     const pe = r.issues.find((x) => x.rule === 'parse-error')
     expect(pe).toBeDefined()
   })
+
+  it('honors options.imports — no parse-error when component is defined in an imported library', () => {
+    // Without imports, the page-only source false-positives "Unknown
+    // component pricing-card". With the library source threaded through,
+    // the parse-check passes.
+    const libSource = [
+      '```boceto',
+      'component pricing-card(title, price)',
+      '  element card 0 0 240 160 ""',
+      '  element heading 8 8 220 28 "$title"',
+      'end',
+      '```',
+    ].join('\n')
+    const pageSource = [
+      '```boceto',
+      'element pricing-card 0 0 240 160 "" title="Pro" price="$29"',
+      '```',
+    ].join('\n')
+
+    const without = lint(pageSource)
+    expect(without.issues.find((x) => x.rule === 'parse-error')).toBeDefined()
+
+    const withImports = lint(pageSource, { imports: libSource })
+    expect(withImports.errorCount).toBe(0)
+    expect(withImports.issues.find((x) => x.rule === 'parse-error')).toBeUndefined()
+  })
 })

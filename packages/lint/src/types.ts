@@ -72,4 +72,20 @@ export interface LintOptions {
    * surfaces any remaining error as a `parse-error` issue.
    */
   skipParseCheck?: boolean
+  /**
+   * Library sources whose `component … end` definitions feed the
+   * parse-check registry. Use this when linting a page that references
+   * components defined in another file — without it, the cross-check
+   * raises a false-positive "Unknown component" issue.
+   *
+   * Each entry may be raw DSL or a fenced markdown block. Forwarded to
+   * `parse(src, { imports })`.
+   */
+  imports?: string | string[]
+  /**
+   * Pre-parsed components feeding the parse-check registry. Faster path
+   * than `imports` when the caller already holds parsed components (e.g.
+   * from `resolveBocetoImports` + `LibraryCache`).
+   */
+  importedComponents?: ReadonlyArray<import('@boceto/core').Component>
 }

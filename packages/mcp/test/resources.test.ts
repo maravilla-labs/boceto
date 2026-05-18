@@ -8,8 +8,8 @@ import {
 } from '../src/resources'
 
 describe('resources catalog', () => {
-  it('exposes the 8 expected URIs', () => {
-    expect(RESOURCES).toHaveLength(8)
+  it('exposes the 14 expected URIs', () => {
+    expect(RESOURCES).toHaveLength(14)
     const uris = RESOURCES.map((r) => r.uri).sort()
     expect(uris).toEqual(
       [
@@ -20,6 +20,12 @@ describe('resources catalog', () => {
         'boceto://references/elements.md',
         'boceto://references/components.md',
         'boceto://recipes/index.md',
+        'boceto://integrations/index.md',
+        'boceto://integrations/tiptap-react.md',
+        'boceto://integrations/web-components.md',
+        'boceto://integrations/react.md',
+        'boceto://integrations/react-markdown.md',
+        'boceto://integrations/docs-site.md',
         'boceto://spec/boceto-spec.md',
       ].sort(),
     )
@@ -50,6 +56,25 @@ describe('resources catalog', () => {
     const e = findResource('boceto://recipes/index.md')
     expect(e).toBeDefined()
     expect(e!.description).toMatch(/recipes/i)
+  })
+
+  it('findResource resolves every integration recipe URI', () => {
+    const slugs = [
+      'index',
+      'tiptap-react',
+      'web-components',
+      'react',
+      'react-markdown',
+      'docs-site',
+    ]
+    for (const slug of slugs) {
+      const e = findResource(`boceto://integrations/${slug}.md`)
+      expect(e, slug).toBeDefined()
+      expect(e!.mimeType).toBe('text/markdown')
+      // Resolves to a real file.
+      const p = resolveResourcePath(e!)
+      expect(p.length).toBeGreaterThan(0)
+    }
   })
 
   it('findResource returns undefined for an unknown URI', () => {

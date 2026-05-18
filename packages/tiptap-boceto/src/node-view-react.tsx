@@ -87,6 +87,27 @@ function useImportsFor(
   }, [version, ownCode, storage])
 }
 
+/**
+ * Move the TipTap selection to the start of the Nth `bocetoBlock` node in
+ * doc order. Used as the navigation target when a node view fires
+ * `gotodefinition` for an imported component — the user lands on the block
+ * whose source defines that component and can click it to open in edit
+ * mode.
+ */
+function focusTipTapBlockByIndex(editor: { commands: { focus: (pos: number) => boolean }; state: { doc: { descendants: (fn: (node: { type: { name: string } }, pos: number) => boolean | void) => void } } }, targetIndex: number): void {
+  let seen = -1
+  let pos: number | null = null
+  editor.state.doc.descendants((node, p) => {
+    if (node.type.name !== 'bocetoBlock') return
+    seen++
+    if (seen === targetIndex) {
+      pos = p
+      return false
+    }
+  })
+  if (pos != null) editor.commands.focus(pos)
+}
+
 function PencilIcon(): JSX.Element {
   return (
     <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor" aria-hidden="true">
@@ -177,6 +198,47 @@ export default function BocetoNodeView(props: NodeViewProps): JSX.Element {
       el.removeEventListener('change', handler)
     }
   }, [editing])
+
+  // Push origin hints into the editor so the Components panel can label
+  // imported entries with "block N" (the block where each component is
+  // defined). Re-run whenever the joined imports change.
+  useEffect(() => {
+    if (!editing) return
+    const el = editRef.current as
+      | (HTMLElement & { editor?: { tagImportOrigin: (n: string, h: string | undefined) => void } })
+      | null
+    if (!el?.editor) return
+    const storage = (props.editor.storage as Record<string, unknown>)['bocetoContext'] as
+      | BocetoContextStorage
+      | undefined
+    if (!storage) return
+    for (const [name, idx] of storage.originBlockIndex) {
+      el.editor.tagImportOrigin(name, `block ${idx + 1}`)
+    }
+  }, [editing, imports, props.editor])
+
+  // Catch `gotodefinition` from the inspector / panel / context menu. Find
+  // the sibling TipTap block whose source contains `component <name>` and
+  // focus the cursor at that block's start so the user can click into it.
+  useEffect(() => {
+    if (!editing) return
+    const el = editRef.current
+    if (!el) return
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ componentName: string; origin?: string }>).detail
+      if (!detail?.componentName) return
+      const storage = (props.editor.storage as Record<string, unknown>)['bocetoContext'] as
+        | BocetoContextStorage
+        | undefined
+      const idx = storage?.originBlockIndex.get(detail.componentName)
+      if (idx == null) return
+      focusTipTapBlockByIndex(props.editor, idx)
+    }
+    el.addEventListener('gotodefinition', handler)
+    return () => {
+      el.removeEventListener('gotodefinition', handler)
+    }
+  }, [editing, props.editor])
 
   if (editing) {
     return (

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { remark } from 'remark'
 import remarkHtml from 'remark-html'
+import { LibraryCache, type FsAdapter, type GlobAdapter } from '@boceto/core'
 import remarkBoceto from '../src'
 
 async function render(md: string, opts?: Parameters<typeof remarkBoceto>[0]): Promise<string> {
@@ -10,6 +11,23 @@ async function render(md: string, opts?: Parameters<typeof remarkBoceto>[0]): Pr
     .process(md)
   return String(file)
 }
+
+function makeFs(files: Record<string, string>): { fs: FsAdapter; reads: string[] } {
+  const reads: string[] = []
+  return {
+    reads,
+    fs: {
+      async readFile(p) {
+        reads.push(p)
+        const c = files[p]
+        if (c == null) throw new Error(`ENOENT: ${p}`)
+        return new TextEncoder().encode(c)
+      },
+    },
+  }
+}
+
+const noGlob: GlobAdapter = async () => []
 
 describe('remark-boceto', () => {
   it('replaces ```boceto blocks with <boceto-view>', async () => {
@@ -136,5 +154,180 @@ describe('remark-boceto', () => {
     const out = await render(md)
     expect(out).toContain('data-page="Login"')
     expect(out).not.toContain('width=1280')
+  })
+})
+
+describe('remark-boceto — cross-document', () => {
+  it('shares components between sibling fences in the same doc (svg mode)', async () => {
+    // Fence A defines a component; fence B uses it. With same-file aggregation,
+    // fence B must resolve without "Unknown component" errors.
+    const md = [
+      '```boceto Defs',
+      'component feature-card(title)',
+      '  element card 0 0 240 140 ""',
+      '  element heading 12 12 216 28 "$title"',
+      'end',
+      '```',
+      '',
+      '```boceto Page',
+      'element feature-card 0 0 240 140 "" title="Hello"',
+      '```',
+      '',
+    ].join('\n')
+    const out = await render(md, { mode: 'svg' })
+    // The use-side fence rendered correctly: SVG includes the heading text.
+    expect(out).toContain('Hello')
+  })
+
+  it('resolves frontmatter imports against the VFile path (svg mode)', async () => {
+    const { fs } = makeFs({
+      '/proj/lib.md': [
+        '```boceto',
+        'component pricing-card(title, price)',
+        '  element card 0 0 240 160 ""',
+        '  element heading 8 8 220 28 "$title"',
+        '  element heading 8 44 220 36 "$price"',
+        'end',
+        '```',
+      ].join('\n'),
+    })
+    const md = [
+      '---',
+      'boceto:',
+      '  import: ./lib.md',
+      '---',
+      '',
+      '```boceto',
+      'element pricing-card 0 0 240 160 "" title="Pro" price="$29"',
+      '```',
+      '',
+    ].join('\n')
+
+    const cache = new LibraryCache()
+    const file = await remark()
+      .use(remarkBoceto, {
+        mode: 'svg',
+        resolveImports: { fs, glob: noGlob, cache, projectRoot: '/proj' },
+      })
+      .use(remarkHtml, { sanitize: false })
+      .process({ path: '/proj/page.md', value: md })
+    const out = String(file)
+    // The imported component was rendered.
+    expect(out).toContain('Pro')
+    expect(out).toContain('$29')
+    // The plugin exposed the imported paths for watch-mode.
+    expect((file.data as { bocetoImports?: string[] }).bocetoImports).toEqual([
+      '/proj/lib.md',
+    ])
+  })
+
+  it('emits a file message on import resolution failure, not a crash', async () => {
+    const { fs } = makeFs({}) // no library files — read will throw
+    const md = [
+      '---',
+      'boceto:',
+      '  import: ./missing.md',
+      '---',
+      '',
+      '```boceto',
+      'element box 0 0 60 24 "stillrenders"',
+      '```',
+      '',
+    ].join('\n')
+
+    const cache = new LibraryCache()
+    const file = await remark()
+      .use(remarkBoceto, {
+        mode: 'svg',
+        resolveImports: { fs, glob: noGlob, cache, projectRoot: '/proj' },
+      })
+      .use(remarkHtml, { sanitize: false })
+      .process({ path: '/proj/page.md', value: md })
+
+    expect(file.messages.length).toBeGreaterThan(0)
+    expect(file.messages[0]!.source).toBe('remark-boceto')
+    expect(file.messages[0]!.ruleId).toBe('imports')
+    // The fence still renders even when imports failed.
+    expect(String(file)).toContain('stillrenders')
+  })
+
+  it('falls back to resolveImports.currentFilePath when the VFile has no path (react-markdown case)', async () => {
+    // react-markdown hands sources in via `children` (a bare string) — the
+    // VFile that unified constructs has no `path`. Without the fallback the
+    // resolver bails silently and the cross-file import is invisible.
+    const { fs } = makeFs({
+      '/proj/lib.md': [
+        '```boceto',
+        'component note-card(label)',
+        '  element card 0 0 200 100 ""',
+        '  element heading 8 8 184 24 "$label"',
+        'end',
+        '```',
+      ].join('\n'),
+    })
+    const md = [
+      '---',
+      'boceto:',
+      '  import: ./lib.md',
+      '---',
+      '',
+      '```boceto',
+      'element note-card 0 0 200 100 "" label="Hi"',
+      '```',
+      '',
+    ].join('\n')
+
+    const cache = new LibraryCache()
+    // .process(md) — no `{ path, value }` form, so `file.path` is undefined.
+    const file = await remark()
+      .use(remarkBoceto, {
+        mode: 'svg',
+        resolveImports: {
+          fs,
+          glob: noGlob,
+          cache,
+          projectRoot: '/proj',
+          currentFilePath: '/proj/page.md',
+        },
+      })
+      .use(remarkHtml, { sanitize: false })
+      .process(md)
+
+    expect(String(file)).toContain('Hi')
+    expect((file.data as { bocetoImports?: string[] }).bocetoImports).toEqual([
+      '/proj/lib.md',
+    ])
+  })
+
+  it('caches libraries across multiple processes', async () => {
+    const { fs, reads } = makeFs({
+      '/proj/lib.md': [
+        '```boceto',
+        'component badge-pill(label)',
+        '  element badge 0 0 80 24 "$label"',
+        'end',
+        '```',
+      ].join('\n'),
+    })
+    const cache = new LibraryCache()
+    const md = [
+      '---',
+      'boceto:',
+      '  import: ./lib.md',
+      '---',
+      '',
+      '```boceto',
+      'element badge-pill 0 0 80 24 "" label="New"',
+      '```',
+      '',
+    ].join('\n')
+
+    const opts = {
+      mode: 'svg' as const,
+      resolveImports: { fs, glob: noGlob, cache, projectRoot: '/proj' },
+    }
+    await remark().use(remarkBoceto, opts).process({ path: '/proj/a.md', value: md })
+    await remark().use(remarkBoceto, opts).process({ path: '/proj/b.md', value: md })
+    expect(reads.filter((p) => p === '/proj/lib.md')).toHaveLength(1)
   })
 })

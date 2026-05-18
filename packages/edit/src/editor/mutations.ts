@@ -207,12 +207,21 @@ function pageNumberFromId(pageId: string): number {
 }
 
 /**
- * Remove the top-level items whose ids are in `ids`. Returns the count
- * actually removed (an id pointing at a nested item is ignored).
+ * Remove the top-level items whose ids are in `ids` across the supplied
+ * pages. Returns the count actually removed (an id pointing at a nested
+ * item is ignored).
  */
 export function removeTopLevel(doc: BocetoDoc, ids: ReadonlySet<string>): number {
+  return removeTopLevelFromPages(doc.pages, ids)
+}
+
+export function removeTopLevelFromPages(
+  pages: readonly Page[],
+  ids: ReadonlySet<string>,
+): number {
   let removed = 0
-  for (const page of doc.pages) {
+  for (const page of pages) {
+    const before = page.elements.length
     const next = page.elements.filter((it) => {
       if (ids.has(it.id)) {
         removed++
@@ -220,9 +229,8 @@ export function removeTopLevel(doc: BocetoDoc, ids: ReadonlySet<string>): number
       }
       return true
     })
-    if (next.length !== page.elements.length) page.elements = next
-    // Also drop arrows whose endpoints went away.
-    if (removed > 0) {
+    if (next.length !== before) page.elements = next
+    if (next.length !== before) {
       page.arrows = page.arrows.filter((a) => !ids.has(a.from) && !ids.has(a.to))
     }
   }
@@ -234,8 +242,15 @@ export function removeTopLevel(doc: BocetoDoc, ids: ReadonlySet<string>): number
  * visible. Returns the new ids. Nested items are ignored.
  */
 export function duplicateTopLevel(doc: BocetoDoc, ids: ReadonlySet<string>): string[] {
+  return duplicateTopLevelInPages(doc.pages, ids)
+}
+
+export function duplicateTopLevelInPages(
+  pages: readonly Page[],
+  ids: ReadonlySet<string>,
+): string[] {
   const created: string[] = []
-  for (const page of doc.pages) {
+  for (const page of pages) {
     // Snapshot original ids so the loop doesn't see its own clones.
     const targets = page.elements.filter((it) => ids.has(it.id))
     for (const item of targets) {
@@ -361,9 +376,17 @@ export function reorderItems(
   ids: ReadonlySet<string>,
   mode: 'front' | 'back' | 'forward' | 'backward',
 ): number {
+  return reorderItemsInPages(doc.pages, ids, mode)
+}
+
+export function reorderItemsInPages(
+  pages: readonly Page[],
+  ids: ReadonlySet<string>,
+  mode: 'front' | 'back' | 'forward' | 'backward',
+): number {
   if (ids.size === 0) return 0
   let touched = 0
-  for (const page of doc.pages) {
+  for (const page of pages) {
     const before = page.elements
     if (!before.some((it) => ids.has(it.id))) continue
     const next = reorderArray(before, ids, mode)

@@ -1,13 +1,14 @@
 import {
   CanvasRenderer,
   initYoga,
+  isComponentInstance,
   pageContentBox,
   selectPage,
   type BocetoDoc,
   type ElementType,
 } from '@boceto/core'
 import { BocetoEditor } from './editor/editor'
-import { createContextMenu, type ContextMenuHandle } from './editor/context-menu'
+import { createContextMenu, type ContextMenuHandle, type ContextMenuItem } from './editor/context-menu'
 import { catalogEntry } from './editor/element-catalog'
 import { bindCanvas } from './editor/interactions'
 import { createInlineEditor } from './editor/inline-edit'
@@ -136,6 +137,18 @@ export class BocetoEditElement extends HTMLElement {
     })
     this.#editor.on('page', (e) => {
       this.dispatchEvent(new CustomEvent('page', { detail: e, bubbles: true }))
+      // Edit mode is signalled via the synthetic page id `__edit__<name>`.
+      // Surface the friendlier `componenteditmode` event so hosts can update
+      // breadcrumb chrome / disable other UI without parsing ids.
+      const editing = this.#editor.editingComponent
+      this.dispatchEvent(
+        new CustomEvent('componenteditmode', {
+          detail: { name: editing },
+          bubbles: true,
+          composed: true,
+        }),
+      )
+      this.#schedulePaint()
     })
     // Forward `change` to the host AFTER the model is fully updated. Editor's
     // `change` fires from undo/redo and commits, never from external setCode.
@@ -343,12 +356,43 @@ export class BocetoEditElement extends HTMLElement {
         this.#rubberBand = extra?.rubberBand ?? null
         this.#schedulePaint()
       },
-      onLabelEdit: (id) => this.#inline?.open(id),
+      onLabelEdit: (id) => this.#handleDoubleClick(id),
       onContextMenu: (info) => this.#openContextMenu(info),
       onDrop: (info) => this.#dropElement(info),
       getZoom: () => this.#zoom,
       focusTarget: this.#canvas,
     })
+  }
+
+  /**
+   * Double-click handler. For a `ComponentInstance` the gesture means "edit
+   * this component" — open inline definition for locals, fire
+   * `gotodefinition` for imports. Falls through to inline label editing for
+   * everything else.
+   */
+  #handleDoubleClick(id: string): void {
+    const item = this.#editor.findItem(id)
+    if (item && isComponentInstance(item)) {
+      const summaries = this.#editor.components()
+      const summary = summaries.find((c) => c.name === item.componentName)
+      if (summary?.origin === 'local') {
+        this.#editor.enterComponentEditMode(item.componentName)
+      } else {
+        this.dispatchEvent(
+          new CustomEvent('gotodefinition', {
+            detail: {
+              componentName: item.componentName,
+              origin: summary ? 'imported' : 'unknown',
+              hint: summary?.hint,
+            },
+            bubbles: true,
+            composed: true,
+          }),
+        )
+      }
+      return
+    }
+    this.#inline?.open(id)
   }
 
   /**
@@ -377,7 +421,58 @@ export class BocetoEditElement extends HTMLElement {
     const meta = isMacLike() ? '⌘' : 'Ctrl'
     const shift = '⇧'
     const hasSelection = info.ids.length > 0
-    this.#contextMenu.open(info.x, info.y, [
+    const items: ContextMenuItem[] = []
+
+    // Single-instance handling: show component-specific actions first.
+    if (info.ids.length === 1) {
+      const item = ed.findItem(info.ids[0]!)
+      if (item && isComponentInstance(item)) {
+        const summaries = ed.components()
+        const summary = summaries.find((c) => c.name === item.componentName)
+        const isLocal = summary?.origin === 'local'
+        items.push(
+          {
+            label: isLocal ? 'Edit component' : 'Go to source',
+            onSelect: () => {
+              if (isLocal) ed.enterComponentEditMode(item.componentName)
+              else
+                this.dispatchEvent(
+                  new CustomEvent('gotodefinition', {
+                    detail: {
+                      componentName: item.componentName,
+                      origin: summary ? 'imported' : 'unknown',
+                      hint: summary?.hint,
+                    },
+                    bubbles: true,
+                    composed: true,
+                  }),
+                )
+            },
+          },
+          {
+            label: 'Find instances',
+            onSelect: () => {
+              const ids = ed.instances(item.componentName).map((i) => i.id)
+              if (ids.length > 0) ed.select(ids, 'replace')
+            },
+          },
+          { label: '', separator: true, onSelect: () => undefined },
+        )
+      }
+    }
+
+    // Multi-selection: "Make component from selection".
+    if (info.ids.length > 1) {
+      items.push(
+        {
+          label: 'Make component from selection…',
+          onSelect: () => this.#promptPromote(info.ids),
+        },
+        { label: '', separator: true, onSelect: () => undefined },
+      )
+    }
+
+    items.push(
       {
         label: 'Bring to Front',
         hint: `${meta}${shift}]`,
@@ -415,7 +510,32 @@ export class BocetoEditElement extends HTMLElement {
         disabled: !hasSelection,
         onSelect: () => ed.removeItems(info.ids),
       },
-    ])
+    )
+    this.#contextMenu.open(info.x, info.y, items)
+  }
+
+  /**
+   * Promote-to-component prompt. Uses a single `window.prompt` for v1 —
+   * good enough to validate the gesture; a richer in-shadow form can come
+   * later. Params can be left blank to infer from `$ident` tokens.
+   */
+  #promptPromote(ids: readonly string[]): void {
+    const name = window.prompt('Component name (kebab-case):')
+    if (!name) return
+    const paramsStr = window.prompt('Params (comma-separated, optional):', '') ?? ''
+    const params = paramsStr
+      .split(',')
+      .map((p) => p.trim())
+      .filter((p) => p.length > 0)
+    try {
+      this.#editor.promoteToComponent({
+        ids: [...ids],
+        name,
+        ...(params.length > 0 ? { params } : {}),
+      })
+    } catch (err) {
+      window.alert((err as Error).message ?? String(err))
+    }
   }
 
   #schedulePaint(): void {

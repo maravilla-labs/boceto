@@ -34,6 +34,12 @@ export const renderSvgInputSchema = {
     .nullable()
     .optional()
     .describe('Paper background colour, or `null` to omit. Default `#fafaf8`.'),
+  imports: z
+    .union([z.string(), z.array(z.string())])
+    .optional()
+    .describe(
+      'Library source(s) whose `component … end` definitions feed the component registry before `source` is parsed. Use when the source references components defined in another file. Each entry may be raw DSL or a fenced markdown block.',
+    ),
 }
 
 export interface RenderSvgResult {
@@ -60,12 +66,21 @@ export async function runRenderSvg(args: {
   fit?: 'fixed' | 'content'
   padding?: number
   background?: string | null
+  imports?: string | string[]
 }): Promise<RenderSvgResult> {
   let w = args.width ?? DEFAULT_W
   let h = args.height ?? DEFAULT_H
 
   const isMarkdown = args.source.includes('```') || /^---/m.test(args.source.trim())
-  const doc = parse(args.source, { raw: !isMarkdown })
+  // Raw mode skips Pass-1 entirely, so imports are ignored in that path.
+  const doc = parse(
+    args.source,
+    isMarkdown
+      ? args.imports !== undefined
+        ? { imports: args.imports }
+        : undefined
+      : { raw: true },
+  )
 
   if (!yogaReady) yogaReady = initYoga()
   await yogaReady

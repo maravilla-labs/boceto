@@ -2,6 +2,7 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { z } from 'zod'
+import { splitFrontMatter } from '../util/frontmatter'
 
 /**
  * Recipe catalog: per-file markdown stored under the top-level `recipes/`
@@ -54,7 +55,7 @@ function loadCatalog(): { meta: RecipeMeta; body: string }[] {
   const out: { meta: RecipeMeta; body: string }[] = []
   for (const f of files) {
     const text = readFileSync(resolve(root, f), 'utf8')
-    const parsed = splitFrontMatter(text)
+    const parsed = parseRecipeFile(text)
     if (!parsed) continue
     out.push(parsed)
   }
@@ -71,31 +72,15 @@ function loadCatalog(): { meta: RecipeMeta; body: string }[] {
 }
 
 /**
- * Parse a recipe file's leading YAML-ish front-matter and return the
- * structured meta + remaining body. Each line is `key: "json-value"` (we
- * write them via `JSON.stringify` in the splitter so quoting + escapes
- * round-trip cleanly without a full YAML parser).
+ * Validate one recipe file: extract front-matter via the shared splitter and
+ * cast it into the typed `RecipeMeta` shape. Files missing any required key
+ * are silently skipped (the catalog tolerates non-recipe markdown in the
+ * directory — e.g. notes or drafts without front-matter).
  */
-function splitFrontMatter(text: string): { meta: RecipeMeta; body: string } | null {
-  const FM_RE = /^---\n([\s\S]*?)\n---\n?([\s\S]*)$/
-  const m = text.match(FM_RE)
-  if (!m) return null
-  const head = m[1]!
-  const body = m[2] ?? ''
-  const meta: Record<string, string> = {}
-  for (const raw of head.split('\n')) {
-    const line = raw.trim()
-    if (!line) continue
-    const colon = line.indexOf(':')
-    if (colon < 0) continue
-    const key = line.slice(0, colon).trim()
-    const valRaw = line.slice(colon + 1).trim()
-    try {
-      meta[key] = typeof valRaw === 'string' ? JSON.parse(valRaw) : String(valRaw)
-    } catch {
-      meta[key] = valRaw.replace(/^"|"$/g, '')
-    }
-  }
+function parseRecipeFile(text: string): { meta: RecipeMeta; body: string } | null {
+  const fm = splitFrontMatter(text)
+  if (!fm) return null
+  const { meta, body } = fm
   if (!meta.slug || !meta.title || !meta.kind || !meta.summary) return null
   const m2: RecipeMeta = {
     slug: meta.slug,
@@ -104,7 +89,7 @@ function splitFrontMatter(text: string): { meta: RecipeMeta; body: string } | nu
     summary: meta.summary,
     ...(meta.size ? { size: meta.size } : {}),
   }
-  return { meta: m2, body: body.replace(/^\n+/, '') }
+  return { meta: m2, body }
 }
 
 // ── Tool: boceto_list_recipes ────────────────────────────────────────

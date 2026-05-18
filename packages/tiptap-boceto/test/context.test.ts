@@ -61,6 +61,18 @@ describe('BocetoContext extension', () => {
     ed.destroy()
   })
 
+  it('originBlockIndex maps each component name to the block that defines it', async () => {
+    const SECOND_DEFINES =
+      '<pre><code class="language-boceto">component badge-pill(label)\n  element badge 0 0 80 24 "$label"\nend</code></pre>'
+    const ed = newEditor(USES + DEFINES + SECOND_DEFINES)
+    await new Promise((r) => setTimeout(r, 0))
+    const storage = ed.storage.bocetoContext as BocetoContextStorage
+    // USES is at block 0, DEFINES at block 1, SECOND_DEFINES at block 2.
+    expect(storage.originBlockIndex.get('pricing-card')).toBe(1)
+    expect(storage.originBlockIndex.get('badge-pill')).toBe(2)
+    ed.destroy()
+  })
+
   it('collectBocetoSource skips empty bocetoBlocks', () => {
     const ed = new Editor({
       extensions: [StarterKit, BocetoBlock],

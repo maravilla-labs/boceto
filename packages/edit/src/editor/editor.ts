@@ -1,9 +1,13 @@
 import {
   CanvasRenderer,
+  isComponentInstance,
   parse,
   serialize,
   type AttrValue,
   type BocetoDoc,
+  type Component,
+  type ComponentBodyItem,
+  type ComponentInstance,
   type ElementType,
   type Page,
   type PageItem,
@@ -14,18 +18,35 @@ import {
   appendElement,
   currentBox,
   duplicateTopLevel,
+  duplicateTopLevelInPages,
   findAny,
   findTopLevel,
   moveItem,
   relayout,
   removePage,
   removeTopLevel,
+  removeTopLevelFromPages,
   renamePage,
   reorderItems,
+  reorderItemsInPages,
   resizeItem,
   setAttrOf,
   setLabelOf,
 } from './mutations'
+import {
+  appendInstance as appendInstanceMut,
+  buildComponentSummaries,
+  createComponent as createComponentMut,
+  deleteComponent as deleteComponentMut,
+  findInstancesOnPage,
+  promoteToComponent as promoteToComponentMut,
+  renameComponent as renameComponentMut,
+  updateComponentDef as updateComponentDefMut,
+  updateInstanceParams as updateInstanceParamsMut,
+  type ComponentDefPatch,
+  type ComponentSummary,
+  type PromoteArgs,
+} from './components'
 import { hitHandle, hitTestLeaf, hitTestTop, itemsInRect, selectionBox } from './hit-test'
 import type {
   EditorEventName,
@@ -64,10 +85,19 @@ export class BocetoEditor {
   #serializedCache: string | null = null
   /** Component-definition source merged into every parse. See `EditorInit.imports`. */
   #imports: string | undefined
+  /** Imported components — extracted once per `setImports` for the panel + summaries. */
+  #importedComponents: Component[] = []
+  /** Host-supplied origin hints for imported components (e.g. "block 2"). */
+  #importHints = new Map<string, string>()
+  /** Name of the component currently being edited in component-edit mode (null in page mode). */
+  #editingComponent: string | null = null
+  /** Synthetic page wrapping `component.body` when in edit mode. Not in `doc.pages`. */
+  #editPage: Page | null = null
 
   constructor(init: EditorInit = {}) {
     this.#imports = init.imports
     const doc = this.#parse(init.code)
+    this.#refreshImportedComponents()
     const firstPage = doc.pages[0]!
     this.#state = {
       doc,
@@ -101,6 +131,10 @@ export class BocetoEditor {
   }
 
   get currentPage(): Page {
+    // In component-edit mode the canvas operates on a synthetic page whose
+    // `elements` array IS the component body — same reference, so every
+    // mutation lands on the body directly.
+    if (this.#editPage) return this.#editPage
     const p = this.#state.doc.pages.find((p) => p.id === this.#state.currentPageId)
     return p ?? this.#state.doc.pages[0]!
   }
@@ -139,6 +173,10 @@ export class BocetoEditor {
     if (!doc.pages.find((p) => p.id === this.#state.currentPageId)) {
       this.#state.currentPageId = doc.pages[0]!.id
     }
+    // External code replace drops edit mode — the underlying component
+    // body may have moved or vanished.
+    this.#editingComponent = null
+    this.#editPage = null
     this.#history.clear()
     this.#serializedCache = null
     relayout(doc)
@@ -155,6 +193,7 @@ export class BocetoEditor {
     this.#imports = imports || undefined
     const doc = this.#parse(this.code)
     this.#state.doc = doc
+    this.#refreshImportedComponents()
     if (!doc.pages.find((p) => p.id === this.#state.currentPageId)) {
       this.#state.currentPageId = doc.pages[0]!.id
     }
@@ -219,7 +258,7 @@ export class BocetoEditor {
     const before = this.code
     let anyMoved = false
     for (const id of ids) {
-      const hit = findTopLevel(this.#state.doc, id)
+      const hit = this.#findTopLevelHere(id)
       if (!hit) {
         this.#emit('error', { message: `Cannot move nested item ${id}` })
         continue
@@ -245,7 +284,7 @@ export class BocetoEditor {
     opts: { commit?: boolean } = {},
   ): void {
     if (this.#state.readonly) return
-    const hit = findTopLevel(this.#state.doc, id)
+    const hit = this.#findTopLevelHere(id)
     if (!hit) {
       this.#emit('error', { message: `Cannot resize nested item ${id}` })
       return
@@ -258,8 +297,25 @@ export class BocetoEditor {
 
   /** Convenience: current bbox for a top-level item (for capturing drag origin). */
   boxOf(id: string): { x: number; y: number; w: number; h: number } | null {
-    const hit = findTopLevel(this.#state.doc, id)
+    const hit = this.#findTopLevelHere(id)
     return hit ? currentBox(hit.item) : null
+  }
+
+  /**
+   * Locate a top-level item by id in the editor's currently-active surface
+   * — either the visible doc page or the synthetic edit page when in
+   * component-edit mode. Geometry mutations all route through this so
+   * editing a component body uses the same machinery as editing a page.
+   */
+  #findTopLevelHere(id: string): { page: Page; item: PageItem; index: number } | null {
+    if (this.#editPage) {
+      for (let i = 0; i < this.#editPage.elements.length; i++) {
+        const it = this.#editPage.elements[i]!
+        if (it.id === id) return { page: this.#editPage, item: it, index: i }
+      }
+      return null
+    }
+    return findTopLevel(this.#state.doc, id)
   }
 
   /**
@@ -315,7 +371,9 @@ export class BocetoEditor {
     if (ids.length === 0) return
     const set = new Set(ids)
     const before = this.code
-    const removed = removeTopLevel(this.#state.doc, set)
+    const removed = this.#editPage
+      ? removeTopLevelFromPages([this.#editPage], set)
+      : removeTopLevel(this.#state.doc, set)
     if (removed === 0) return
     // Drop removed ids from the selection.
     for (const id of set) this.#state.selection.delete(id)
@@ -349,7 +407,9 @@ export class BocetoEditor {
     if (this.#state.readonly) return
     if (ids.length === 0) return
     const before = this.code
-    const touched = reorderItems(this.#state.doc, new Set(ids), mode)
+    const touched = this.#editPage
+      ? reorderItemsInPages([this.#editPage], new Set(ids), mode)
+      : reorderItems(this.#state.doc, new Set(ids), mode)
     if (touched === 0) return
     relayout(this.#state.doc)
     this.#afterMutation(before, true)
@@ -360,7 +420,9 @@ export class BocetoEditor {
     if (ids.length === 0) return []
     const before = this.code
     const set = new Set(ids)
-    const created = duplicateTopLevel(this.#state.doc, set)
+    const created = this.#editPage
+      ? duplicateTopLevelInPages([this.#editPage], set)
+      : duplicateTopLevel(this.#state.doc, set)
     if (created.length === 0) return []
     relayout(this.#state.doc)
     this.#afterMutation(before, true)
@@ -403,6 +465,214 @@ export class BocetoEditor {
     this.#state.selection = new Set()
     this.#emit('page', { pageId: id })
     this.#emit('select', { ids: [] })
+  }
+
+  // ── Components ─────────────────────────────────────────────────────────
+
+  /** Component currently being edited (null in page mode). */
+  get editingComponent(): string | null {
+    return this.#editingComponent
+  }
+
+  /**
+   * Panel-friendly summary of every component visible to this editor — both
+   * local (defined in `doc.components`) and imported (visible via the
+   * `imports` source). Instance counts come from the **current page**.
+   * Imported entries pick up any `tagImportOrigin` hint the host has set.
+   */
+  components(): ComponentSummary[] {
+    return buildComponentSummaries({
+      localComponents: this.#state.doc.components,
+      importedComponents: this.#importedComponents,
+      currentPage: this.currentPage,
+      hints: this.#importHints,
+    })
+  }
+
+  /** Every ComponentInstance on the current page. Optional name filter. */
+  instances(name?: string): ComponentInstance[] {
+    return findInstancesOnPage(this.currentPage, name)
+  }
+
+  /**
+   * Annotate an imported component with a human-readable origin hint (e.g.
+   * "block 2" or "from ./shared/cards.md"). The hint flows through to
+   * `components()` and is shown verbatim in the panel.
+   */
+  tagImportOrigin(name: string, hint: string | undefined): void {
+    if (!hint) this.#importHints.delete(name)
+    else this.#importHints.set(name, hint)
+  }
+
+  createComponent(input: { name: string; params?: string[]; body?: ComponentBodyItem[] }): Component {
+    if (this.#state.readonly) throw new Error('editor is readonly')
+    const before = this.code
+    const c = createComponentMut(this.#state.doc, input)
+    relayout(this.#state.doc)
+    this.#afterMutation(before, true)
+    return c
+  }
+
+  deleteComponent(name: string, options: { deleteInstances?: boolean } = {}): boolean {
+    if (this.#state.readonly) return false
+    // Refuse to delete the component currently being edited — exit edit mode first.
+    if (this.#editingComponent === name) {
+      this.#emit('error', { message: `Cannot delete component "${name}" while editing it` })
+      return false
+    }
+    const before = this.code
+    const removed = deleteComponentMut(this.#state.doc, name, options)
+    if (!removed) return false
+    // Drop any selection ids that point at instances we just removed.
+    for (const id of [...this.#state.selection]) {
+      if (!findAny(this.#state.doc, id)) this.#state.selection.delete(id)
+    }
+    this.#emit('select', { ids: [...this.#state.selection] })
+    relayout(this.#state.doc)
+    this.#afterMutation(before, true)
+    return true
+  }
+
+  renameComponent(oldName: string, newName: string): boolean {
+    if (this.#state.readonly) return false
+    if (oldName === newName) return false
+    const before = this.code
+    const ok = renameComponentMut(this.#state.doc, oldName, newName)
+    if (!ok) return false
+    // Track the edit-mode target name through the rename.
+    if (this.#editingComponent === oldName) this.#editingComponent = newName
+    relayout(this.#state.doc)
+    this.#afterMutation(before, true)
+    return true
+  }
+
+  updateComponentDef(name: string, patch: ComponentDefPatch): boolean {
+    if (this.#state.readonly) return false
+    const before = this.code
+    const ok = updateComponentDefMut(this.#state.doc, name, patch)
+    if (!ok) return false
+    relayout(this.#state.doc)
+    this.#afterMutation(before, true)
+    return true
+  }
+
+  /**
+   * Add a `ComponentInstance` call site for a local component to the current
+   * page. Returns the new instance's id. Refuses unknown component names.
+   * The new instance is round-tripped through serialize → parse so its
+   * `expanded` tree is populated for hit-testing.
+   */
+  addInstance(
+    componentName: string,
+    x: number,
+    y: number,
+    opts: { w?: number; h?: number } = {},
+  ): string | null {
+    if (this.#state.readonly) return null
+    if (this.#editPage) {
+      this.#emit('error', { message: 'Cannot add an instance while editing a component body' })
+      return null
+    }
+    const before = this.code
+    try {
+      const inst = appendInstanceMut(this.#state.doc, this.currentPage, componentName, {
+        x,
+        y,
+        w: opts.w,
+        h: opts.h,
+      })
+      // Round-trip so `expanded` is materialised by the parser.
+      const reparsed = this.#parse(serialize(this.#state.doc))
+      this.#state.doc = reparsed
+      this.#refreshImportedComponents()
+      relayout(this.#state.doc)
+      this.#afterMutation(before, true)
+      return inst.id
+    } catch (err) {
+      this.#emit('error', { message: (err as Error).message ?? String(err) })
+      return null
+    }
+  }
+
+  updateInstanceParams(instanceId: string, params: Record<string, string>): boolean {
+    if (this.#state.readonly) return false
+    const before = this.code
+    const ok = updateInstanceParamsMut(this.#state.doc, instanceId, params)
+    if (!ok) return false
+    relayout(this.#state.doc)
+    this.#afterMutation(before, true)
+    return true
+  }
+
+  /**
+   * Lift the currently-selected (or supplied) top-level items into a new
+   * `Component` definition. The selection is replaced by one instance call
+   * site placed at the union-bbox of the lifted items. Selection moves to
+   * the new instance. Operates on the current page only — sub-selections
+   * inside an expanded subtree are refused.
+   */
+  promoteToComponent(args: PromoteArgs): { instanceId: string; componentName: string } {
+    if (this.#state.readonly) throw new Error('editor is readonly')
+    if (this.#editingComponent) {
+      throw new Error('Cannot promote to component while editing a component body')
+    }
+    const before = this.code
+    // Re-parse after we mutate so the new instance gets a proper `expanded` tree.
+    const result = promoteToComponentMut(this.#state.doc, this.currentPage, args)
+    // Cheapest way to materialise `expanded` for the new instance: round-trip
+    // through serialize → parse. Reuses every existing code path.
+    const next = this.#parse(serialize(this.#state.doc))
+    this.#state.doc = next
+    this.#refreshImportedComponents()
+    relayout(this.#state.doc)
+    // Find the new instance again on the reparsed doc and select it.
+    const inst = this.instances().find((i) => i.componentName === result.componentName)
+    if (inst) {
+      this.#state.selection = new Set([inst.id])
+      this.#emit('select', { ids: [inst.id] })
+    }
+    this.#afterMutation(before, true)
+    return result
+  }
+
+  /**
+   * Enter component-edit mode for the local component `name`. The canvas
+   * swaps to a synthetic page whose `elements` IS the component body — all
+   * existing geometry mutations route through unchanged. Fires the `page`
+   * event so panels (palette/inspector) update their scope.
+   */
+  enterComponentEditMode(name: string): void {
+    if (this.#state.readonly) return
+    if (this.#editingComponent === name) return
+    const c = this.#state.doc.components.find((c) => c.name === name)
+    if (!c) {
+      this.#emit('error', { message: `Cannot edit unknown or imported component "${name}"` })
+      return
+    }
+    this.#editingComponent = name
+    // Build a synthetic page whose elements array IS the component body —
+    // same reference, so mutations land directly on `c.body`.
+    this.#editPage = {
+      id: `__edit__${name}`,
+      name: `Editing: ${name}`,
+      elements: c.body as PageItem[],
+      arrows: [],
+    }
+    this.#state.selection = new Set()
+    this.#emit('select', { ids: [] })
+    this.#emit('page', { pageId: this.#editPage.id })
+    relayout(this.#state.doc)
+  }
+
+  /** Exit component-edit mode and return to the previously-active page. */
+  exitComponentEditMode(): void {
+    if (!this.#editingComponent) return
+    this.#editingComponent = null
+    this.#editPage = null
+    this.#state.selection = new Set()
+    this.#emit('select', { ids: [] })
+    this.#emit('page', { pageId: this.#state.currentPageId })
+    relayout(this.#state.doc)
   }
 
   // ── History ────────────────────────────────────────────────────────────
@@ -473,6 +743,26 @@ export class BocetoEditor {
     h: number,
     extra?: { hoveredId?: string; zoom?: number },
   ): void {
+    if (this.#editPage) {
+      // Temporarily expose the synthetic edit page so the renderer can find
+      // it via `selectPage(doc, id)`. It's spliced back out before any code
+      // path that might serialize the doc runs (the `code` getter never
+      // sees it because we don't trigger serialize during render).
+      this.#state.doc.pages.push(this.#editPage)
+      try {
+        renderer.render(this.#state.doc, {
+          width: w,
+          height: h,
+          page: this.#editPage.id,
+          selectedIds: this.#state.selection,
+          hoveredId: extra?.hoveredId,
+          zoom: extra?.zoom,
+        })
+      } finally {
+        this.#state.doc.pages.pop()
+      }
+      return
+    }
     renderer.render(this.#state.doc, {
       width: w,
       height: h,
@@ -512,6 +802,24 @@ export class BocetoEditor {
       this.#state.currentPageId = doc.pages[0]!.id
       this.#emit('page', { pageId: this.#state.currentPageId })
     }
+    // If we were editing a component, re-bind the synthetic edit page to
+    // the new doc's component body (it's a fresh object after re-parse).
+    if (this.#editingComponent) {
+      const c = doc.components.find((c) => c.name === this.#editingComponent)
+      if (c) {
+        this.#editPage = {
+          id: `__edit__${c.name}`,
+          name: `Editing: ${c.name}`,
+          elements: c.body as PageItem[],
+          arrows: [],
+        }
+      } else {
+        // Component is gone — fall back to page mode.
+        this.#editingComponent = null
+        this.#editPage = null
+        this.#emit('page', { pageId: this.#state.currentPageId })
+      }
+    }
     // Drop selected ids that no longer exist.
     for (const id of [...this.#state.selection]) {
       if (!findAny(doc, id)) this.#state.selection.delete(id)
@@ -544,6 +852,26 @@ export class BocetoEditor {
       raw: looksRaw && !this.#imports,
       ...(this.#imports ? { imports: this.#imports } : {}),
     })
+  }
+
+  /**
+   * Parse the current `imports` source in isolation to extract the list of
+   * components it brings in — used by `components()` for the imported
+   * section of the panel. Called whenever `#imports` changes.
+   */
+  #refreshImportedComponents(): void {
+    if (!this.#imports) {
+      this.#importedComponents = []
+      return
+    }
+    try {
+      const importsDoc = parse(this.#imports)
+      this.#importedComponents = importsDoc.components.slice()
+    } catch {
+      // A malformed imports source should not crash the editor; the panel
+      // simply won't show anything from imports.
+      this.#importedComponents = []
+    }
   }
 }
 

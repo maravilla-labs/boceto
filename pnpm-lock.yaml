@@ -346,10 +346,17 @@ importers:
       unist-util-visit:
         specifier: ^5.0.0
         version: 5.1.0
+    optionalDependencies:
+      tinyglobby:
+        specifier: ^0.2.16
+        version: 0.2.16
     devDependencies:
       '@types/mdast':
         specifier: ^4.0.4
         version: 4.0.4
+      '@types/node':
+        specifier: ^20.16.0
+        version: 20.19.41
       remark:
         specifier: ^15.0.1
         version: 15.0.1

@@ -1,6 +1,18 @@
 import type { Code, Html, Root } from 'mdast'
 import { visit } from 'unist-util-visit'
-import { applyFlexLayout, initYoga, pageContentBox, parse, selectPage, SvgRenderer } from '@boceto/core'
+import {
+  applyFlexLayout,
+  initYoga,
+  LibraryCache,
+  pageContentBox,
+  parse,
+  resolveBocetoImports,
+  selectPage,
+  SvgRenderer,
+  type Component,
+  type FsAdapter,
+  type GlobAdapter,
+} from '@boceto/core'
 
 export interface RemarkBocetoOptions {
   /**
@@ -48,11 +60,78 @@ export interface RemarkBocetoOptions {
    * swap renderers entirely.
    */
   render?: (source: string, info: { lang: string; meta: string | null }) => string
+  /**
+   * Cross-document component sharing.
+   *
+   * Within a single markdown file, every ```boceto fence shares a component
+   * registry — block N can use a `component` defined in block 1. This is
+   * **always on** and requires no configuration.
+   *
+   * Across files, declare imports in YAML frontmatter:
+   *
+   *     ---
+   *     boceto:
+   *       import:
+   *         - ./00-component-library.md
+   *         - ./shared/*-component.md
+   *     ---
+   *
+   *  - `true` (default): file imports are resolved using `node:fs/promises`
+   *    and `tinyglobby` (lazy-loaded). The plugin allocates one
+   *    `LibraryCache` per instance so libraries parse once per build.
+   *  - `false`: file imports are disabled; only same-file fences share.
+   *  - Object: explicit adapter overrides (custom fs, custom glob, shared
+   *    cache for HMR, project-root constraint).
+   *
+   * The list of absolute paths consulted is written to
+   * `file.data.bocetoImports` for watch-mode subscription.
+   */
+  resolveImports?:
+    | boolean
+    | {
+        cache?: LibraryCache
+        fs?: FsAdapter
+        glob?: GlobAdapter
+        projectRoot?: string
+        /**
+         * Fallback for the importing file's absolute path when the unified
+         * pipeline doesn't expose one on the VFile. Pipelines that call
+         * `.process({ path, value })` (typical for `unified()` directly,
+         * Astro, Next remark) set `file.path` automatically — those hosts
+         * leave this option unset. Pipelines that hand the source in as a
+         * bare string (`react-markdown`'s `children` prop) cannot set the
+         * VFile path; pass it here so frontmatter `boceto.import` paths
+         * resolve relative to the right directory.
+         */
+        currentFilePath?: string
+      }
 }
 
-export type Plugin = () => (tree: Root) => void | Promise<void>
+/**
+ * Minimal structural subset of `unified`'s VFile that this plugin reads.
+ * Avoids a direct dependency on `vfile` while staying compatible with the
+ * real type passed in by `unified`/`remark`.
+ */
+interface BocetoVFile {
+  path?: string
+  value?: unknown
+  data?: Record<string, unknown>
+  message?: (reason: string, place?: unknown, source?: string) => unknown
+}
+
+export type Plugin = () => (tree: Root, file: BocetoVFile) => Promise<void>
 
 type FenceOpts = { fit?: 'content' | 'fixed'; width?: number; height?: number; padding?: number }
+
+interface FenceTarget {
+  node: Code
+  index: number
+  parent: Root
+  source: string
+  meta: string | null
+  pageName: string | null
+  fenceOpts: FenceOpts
+}
 
 /**
  * Parse the fence info-string portion after `boceto`. Recognized `key=value`
@@ -93,88 +172,194 @@ function parseFenceMeta(meta: string | null): { page: string | null; opts: Fence
  *
  * - `mode: 'wc'` (default): emits `<boceto-view code="…">`.
  * - `mode: 'svg'`: emits a full `<svg>…</svg>` rendered server-side. The
- *   transformer is async in this mode so it can `await initYoga()` once
- *   before resolving FlexContainer layout. By default each fence auto-sizes
- *   to its content (plus 16px padding); `width` / `height` act as minimum
- *   floors. Pass `fit: 'fixed'` for a fixed canvas. Authors can override
- *   any of `fit` / `width` / `height` / `padding` per fence via the info
- *   string, e.g. ` ```boceto Login width=1280 fit=content `.
+ *   transformer is async so it can `await initYoga()` once before resolving
+ *   FlexContainer layout. By default each fence auto-sizes to its content
+ *   (plus 16px padding); `width` / `height` act as minimum floors. Pass
+ *   `fit: 'fixed'` for a fixed canvas. Authors can override any of
+ *   `fit` / `width` / `height` / `padding` per fence via the info string,
+ *   e.g. ` ```boceto Login width=1280 fit=content `.
+ *
+ * **Cross-document sharing.** Sibling fences in the same markdown file always
+ * share a component registry. Files can also pull in libraries declared in
+ * YAML frontmatter — see `RemarkBocetoOptions.resolveImports`.
  */
 export default function remarkBoceto(
   options: RemarkBocetoOptions = {},
-): (tree: Root) => void | Promise<void> {
+): (tree: Root, file: BocetoVFile) => Promise<void> {
   const mode = options.mode ?? 'wc'
   const tag = options.tag ?? 'boceto-view'
   const extraAttrs = options.attributes ?? {}
   const svgRenderer = mode === 'svg' ? new SvgRenderer() : null
 
-  if (mode !== 'svg') {
-    // Synchronous transformer for WC mode — no layout to resolve.
-    return (tree) => {
-      visit(tree, 'code', (node: Code, index, parent) => {
-        if (!parent || index == null) return
-        if ((node.lang ?? '') !== 'boceto') return
-        const source = node.value
-        const meta = node.meta ?? null
-        let html: string
-        if (options.render) {
-          html = options.render(source, { lang: 'boceto', meta })
-        } else {
-          const { page } = parseFenceMeta(meta)
-          const attrs: Record<string, string> = { ...extraAttrs, code: source }
-          if (page) attrs['data-page'] = page
-          html = renderTag(tag, attrs)
-        }
-        parent.children[index] = { type: 'html', value: html } as Html
-      })
-    }
-  }
+  const importsCfg = resolveImportsConfig(options.resolveImports)
+  // One cache per plugin instance unless the caller supplied one.
+  const cache = importsCfg?.cache ?? (importsCfg ? new LibraryCache() : null)
 
-  // SVG mode: collect every boceto block, ensure Yoga is loaded once, then
-  // parse + lay out + render each in place.
-  return async (tree) => {
-    const targets: Array<{ node: Code; index: number; parent: Root | Code['data'] }> = []
+  return async (tree, file) => {
+    // 1. Collect every boceto fence in document order.
+    const targets: FenceTarget[] = []
     visit(tree, 'code', (node: Code, index, parent) => {
       if (!parent || index == null) return
       if ((node.lang ?? '') !== 'boceto') return
-      targets.push({ node, index, parent: parent as Root })
+      const meta = node.meta ?? null
+      const { page, opts } = parseFenceMeta(meta)
+      targets.push({
+        node,
+        index,
+        parent: parent as Root,
+        source: node.value,
+        meta,
+        pageName: page,
+        fenceOpts: opts,
+      })
     })
     if (targets.length === 0) return
-    await initYoga()
-    for (const { node, index, parent } of targets) {
-      const source = node.value
-      const meta = node.meta ?? null
+
+    // 2. Resolve cross-file imports declared in frontmatter (best-effort).
+    let importedComponents: readonly Component[] = []
+    let importedPaths: string[] = []
+    // `file.path` wins; `currentFilePath` is the fallback for hosts that
+    // can't set it on the VFile (react-markdown's `children` API is the
+    // motivating case). Without either, frontmatter `boceto.import` paths
+    // have no anchor and resolution is skipped silently — same as before.
+    const filePath = file?.path ?? importsCfg?.currentFilePath
+    if (importsCfg && cache && filePath && typeof file?.value === 'string') {
+      try {
+        const fsAdapter = importsCfg.fs ?? (await defaultFsAdapter())
+        const globAdapter = importsCfg.glob ?? (await defaultGlobAdapter())
+        const res = await resolveBocetoImports({
+          filePath,
+          source: String(file.value),
+          fs: fsAdapter,
+          glob: globAdapter,
+          cache,
+          projectRoot: importsCfg.projectRoot,
+        })
+        importedComponents = res.importedComponents
+        importedPaths = res.importedPaths
+      } catch (err) {
+        // Don't crash the whole pipeline on import resolution failure —
+        // surface the error on the VFile so the host can handle it.
+        const msg = (err as Error).message ?? String(err)
+        if (file?.message) {
+          file.message(msg, undefined, 'remark-boceto:imports')
+        }
+      }
+    }
+    if (file?.data) {
+      ;(file.data as { bocetoImports?: string[] }).bocetoImports = importedPaths
+    }
+
+    // 3. Same-file fence aggregation: each fence's siblings act as in-doc
+    //    imports (string form), additive with `importedComponents`.
+    const fenceImports = targets.map((t) => wrapFence(t.source, t.pageName))
+
+    if (mode === 'svg') await initYoga()
+
+    for (let i = 0; i < targets.length; i++) {
+      const t = targets[i]!
+      const others = fenceImports.filter((_, j) => j !== i)
       let html: string
       if (options.render) {
-        html = options.render(source, { lang: 'boceto', meta })
+        html = options.render(t.source, { lang: 'boceto', meta: t.meta })
+      } else if (mode === 'svg') {
+        html = renderSvg(t, others, importedComponents, options, svgRenderer!)
       } else {
-        const { page: pageName, opts: fence } = parseFenceMeta(meta)
-        const fit = fence.fit ?? options.fit ?? 'content'
-        const padding = fence.padding ?? options.padding ?? 16
-        const minW = fence.width ?? options.width
-        const minH = fence.height ?? options.height
-        const wrapped = '```boceto' + (pageName ? ':' + pageName : '') + '\n' + source + '\n```'
-        const doc = applyFlexLayout(parse(wrapped))
-        let w: number, h: number
-        if (fit === 'fixed') {
-          w = minW ?? 860
-          h = minH ?? 600
-        } else {
-          const pg = selectPage(doc)
-          const box = pg ? pageContentBox(pg.elements) : null
-          if (box) {
-            w = Math.max(minW ?? 0, Math.ceil(box.x + box.w + padding))
-            h = Math.max(minH ?? 0, Math.ceil(box.y + box.h + padding))
-          } else {
-            w = minW ?? 860
-            h = minH ?? 600
-          }
-        }
-        html = svgRenderer!.renderToString(doc, { width: w, height: h })
+        html = renderWc(t, tag, extraAttrs)
       }
-      ;(parent as Root).children[index] = { type: 'html', value: html } as Html
+      t.parent.children[t.index] = { type: 'html', value: html } as Html
     }
   }
+}
+
+function renderWc(
+  t: FenceTarget,
+  tag: string,
+  extraAttrs: Record<string, string>,
+): string {
+  const attrs: Record<string, string> = { ...extraAttrs, code: t.source }
+  if (t.pageName) attrs['data-page'] = t.pageName
+  return renderTag(tag, attrs)
+}
+
+function renderSvg(
+  t: FenceTarget,
+  otherFences: string[],
+  importedComponents: readonly Component[],
+  options: RemarkBocetoOptions,
+  renderer: SvgRenderer,
+): string {
+  const fit = t.fenceOpts.fit ?? options.fit ?? 'content'
+  const padding = t.fenceOpts.padding ?? options.padding ?? 16
+  const minW = t.fenceOpts.width ?? options.width
+  const minH = t.fenceOpts.height ?? options.height
+  const wrapped = wrapFence(t.source, t.pageName)
+  const doc = applyFlexLayout(
+    parse(wrapped, {
+      imports: otherFences.length > 0 ? otherFences : undefined,
+      importedComponents,
+    }),
+  )
+  let w: number, h: number
+  if (fit === 'fixed') {
+    w = minW ?? 860
+    h = minH ?? 600
+  } else {
+    const pg = selectPage(doc)
+    const box = pg ? pageContentBox(pg.elements) : null
+    if (box) {
+      w = Math.max(minW ?? 0, Math.ceil(box.x + box.w + padding))
+      h = Math.max(minH ?? 0, Math.ceil(box.y + box.h + padding))
+    } else {
+      w = minW ?? 860
+      h = minH ?? 600
+    }
+  }
+  return renderer.renderToString(doc, { width: w, height: h })
+}
+
+function wrapFence(source: string, pageName: string | null): string {
+  return '```boceto' + (pageName ? ':' + pageName : '') + '\n' + source + '\n```'
+}
+
+function resolveImportsConfig(
+  v: RemarkBocetoOptions['resolveImports'],
+): {
+  cache?: LibraryCache
+  fs?: FsAdapter
+  glob?: GlobAdapter
+  projectRoot?: string
+  currentFilePath?: string
+} | null {
+  if (v === false) return null
+  if (v === true || v == null) return {}
+  return v
+}
+
+let _fsAdapter: FsAdapter | null = null
+async function defaultFsAdapter(): Promise<FsAdapter> {
+  if (_fsAdapter) return _fsAdapter
+  const mod = await import('node:fs/promises')
+  _fsAdapter = {
+    async readFile(p) {
+      const buf = await mod.readFile(p)
+      // Buffer extends Uint8Array — copy into a fresh ArrayBuffer-backed view
+      // so downstream Web Crypto / TextDecoder consumers see a plain Uint8Array.
+      return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength)
+    },
+  }
+  return _fsAdapter
+}
+
+let _globAdapter: GlobAdapter | null = null
+async function defaultGlobAdapter(): Promise<GlobAdapter> {
+  if (_globAdapter) return _globAdapter
+  const mod = (await import('tinyglobby')) as { glob: (patterns: string | string[], opts?: { cwd?: string; absolute?: boolean }) => Promise<string[]> }
+  _globAdapter = async (pattern, opts) => {
+    const matches = await mod.glob(pattern, { cwd: opts.cwd, absolute: false })
+    return matches
+  }
+  return _globAdapter
 }
 
 function renderTag(tag: string, attrs: Record<string, string>): string {

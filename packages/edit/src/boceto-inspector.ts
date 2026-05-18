@@ -1,4 +1,4 @@
-import type { AttrValue, Element } from '@boceto/core'
+import { isComponentInstance, type AttrValue, type ComponentInstance, type Element } from '@boceto/core'
 import type { BocetoEditElement } from './boceto-edit'
 import { attrsFor, type AttrKind, type AttrSpec } from './editor/element-attrs'
 import { createFloatingPanel, type FloatingPanelHandle } from './editor/floating-panel'
@@ -209,8 +209,14 @@ export class BocetoInspectorElement extends HTMLElement {
 
     const item = editor.findItem(ids[0]!)
     if (!item) return
-    // We only fully edit `Element` for v1. Flex containers / composites
-    // are show-only.
+
+    // Component-instance branch — show component name + call-site params.
+    if (isComponentInstance(item)) {
+      this.#renderComponentInstance(editor, item)
+      return
+    }
+
+    // We only fully edit `Element` for v1. Flex containers are show-only.
     const isElement = !('kind' in item)
     const el = item as Element
     const sectionCommon = section('Common')
@@ -335,6 +341,127 @@ export class BocetoInspectorElement extends HTMLElement {
         this.#body.appendChild(sectionAttrs)
       }
     }
+  }
+
+  /**
+   * Inspector rendering when the selection is a single `ComponentInstance`.
+   * Shows the component name (clickable — opens edit mode for local, fires
+   * `gotodefinition` for imported), every param with an editable value,
+   * plus geometry rows so users can fine-tune position / size.
+   */
+  #renderComponentInstance(
+    editor: BocetoEditElement['editor'],
+    inst: ComponentInstance,
+  ): void {
+    if (!this.#body || !this.#target) return
+    const allComponents = editor.components()
+    const summary = allComponents.find((c) => c.name === inst.componentName)
+    const isLocal = summary?.origin === 'local'
+
+    // Header section: name + edit/go-to-source action.
+    const head = section('Component')
+    const nameRow = document.createElement('div')
+    Object.assign(nameRow.style, {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '8px',
+      marginBottom: '6px',
+    } as CSSStyleDeclaration)
+    const name = document.createElement('span')
+    name.textContent = inst.componentName
+    Object.assign(name.style, {
+      fontFamily: 'ui-monospace, SF Mono, Menlo, Consolas, monospace',
+      fontSize: '12.5px',
+      color: '#27272a',
+      flex: '1',
+    } as CSSStyleDeclaration)
+    nameRow.appendChild(name)
+    const action = document.createElement('button')
+    action.type = 'button'
+    action.textContent = isLocal ? 'Edit' : 'Go to source'
+    Object.assign(action.style, {
+      padding: '3px 10px',
+      border: '1px solid #4a90d9',
+      background: '#fff',
+      color: '#4a90d9',
+      borderRadius: '4px',
+      cursor: 'pointer',
+      font: 'inherit',
+      fontSize: '11.5px',
+    } as CSSStyleDeclaration)
+    action.addEventListener('click', () => {
+      if (isLocal) editor.enterComponentEditMode(inst.componentName)
+      else this.#target?.dispatchEvent(
+        new CustomEvent('gotodefinition', {
+          detail: {
+            componentName: inst.componentName,
+            origin: summary ? 'imported' : 'unknown',
+            hint: summary?.hint,
+          },
+          bubbles: true,
+          composed: true,
+        }),
+      )
+    })
+    nameRow.appendChild(action)
+    head.appendChild(nameRow)
+    this.#body.appendChild(head)
+
+    // Params section — one input per declared param.
+    if (summary && summary.params.length > 0) {
+      const sec = section('Parameters')
+      for (const p of summary.params) {
+        const current = inst.params[p] ?? ''
+        addRow(
+          sec,
+          p,
+          textInput(current, (v) => {
+            editor.updateInstanceParams(inst.id, { ...inst.params, [p]: v })
+          }),
+        )
+      }
+      this.#body.appendChild(sec)
+    }
+
+    // Geometry — instances are top-level items, fully movable / resizable.
+    const sectionGeo = section('Geometry')
+    const ix = inst.x as number
+    const iy = inst.y as number
+    const iw = typeof inst.w === 'number' ? inst.w : 200
+    const ih = typeof inst.h === 'number' ? inst.h : 120
+    addRow(
+      sectionGeo,
+      'X',
+      numberInput(ix, (v) => {
+        const dx = v - ix
+        if (dx !== 0) editor.move([inst.id], dx, 0)
+      }),
+    )
+    addRow(
+      sectionGeo,
+      'Y',
+      numberInput(iy, (v) => {
+        const dy = v - iy
+        if (dy !== 0) editor.move([inst.id], 0, dy)
+      }),
+    )
+    addRow(
+      sectionGeo,
+      'W',
+      numberInput(iw, (v) => {
+        if (v === iw) return
+        editor.resize(inst.id, 'e', v - iw, 0, { x: ix, y: iy, w: iw, h: ih })
+      }),
+    )
+    addRow(
+      sectionGeo,
+      'H',
+      numberInput(ih, (v) => {
+        if (v === ih) return
+        editor.resize(inst.id, 's', 0, v - ih, { x: ix, y: iy, w: iw, h: ih })
+      }),
+    )
+    this.#body.appendChild(sectionGeo)
   }
 }
 

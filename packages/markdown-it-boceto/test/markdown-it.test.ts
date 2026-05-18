@@ -1,9 +1,26 @@
 import { beforeAll, describe, expect, it } from 'vitest'
 import MarkdownIt from 'markdown-it'
-import { initYoga } from '@boceto/core'
-import bocetoIt from '../src'
+import { initYoga, LibraryCache, type FsAdapter, type GlobAdapter } from '@boceto/core'
+import bocetoIt, { prewarmBocetoCache } from '../src'
 
 const make = (opts?: Parameters<typeof bocetoIt>[1]) => new MarkdownIt().use(bocetoIt, opts)
+
+function makeFs(files: Record<string, string>): { fs: FsAdapter; reads: string[] } {
+  const reads: string[] = []
+  return {
+    reads,
+    fs: {
+      async readFile(p) {
+        reads.push(p)
+        const c = files[p]
+        if (c == null) throw new Error(`ENOENT: ${p}`)
+        return new TextEncoder().encode(c)
+      },
+    },
+  }
+}
+
+const noGlob: GlobAdapter = async () => []
 
 // SVG mode requires the Yoga WASM runtime; pre-init once.
 beforeAll(async () => {
@@ -132,5 +149,86 @@ describe('markdown-it-boceto', () => {
     const out = md.render(src)
     expect(out).toContain('data-page="Login"')
     expect(out).not.toContain('width=1280')
+  })
+})
+
+describe('markdown-it-boceto — cross-document', () => {
+  it('shares components between sibling fences in the same source (svg)', () => {
+    const md = make({ mode: 'svg' })
+    const src = [
+      '```boceto Defs',
+      'component feature-card(title)',
+      '  element card 0 0 240 140 ""',
+      '  element heading 12 12 216 28 "$title"',
+      'end',
+      '```',
+      '',
+      '```boceto Page',
+      'element feature-card 0 0 240 140 "" title="Hello"',
+      '```',
+      '',
+    ].join('\n')
+    const out = md.render(src)
+    expect(out).toContain('Hello')
+  })
+
+  it('uses bocetoImportedComponents from env when set', async () => {
+    const { fs } = makeFs({
+      '/proj/lib.md': [
+        '```boceto',
+        'component pricing-card(title, price)',
+        '  element card 0 0 240 160 ""',
+        '  element heading 8 8 220 28 "$title"',
+        '  element heading 8 44 220 36 "$price"',
+        'end',
+        '```',
+      ].join('\n'),
+    })
+    const cache = new LibraryCache()
+    const pageSrc = [
+      '---',
+      'boceto:',
+      '  import: ./lib.md',
+      '---',
+      '',
+      '```boceto',
+      'element pricing-card 0 0 240 160 "" title="Pro" price="$29"',
+      '```',
+      '',
+    ].join('\n')
+
+    const { importedComponents, importedPaths } = await prewarmBocetoCache({
+      filePath: '/proj/page.md',
+      source: pageSrc,
+      fs,
+      glob: noGlob,
+      cache,
+      projectRoot: '/proj',
+    })
+
+    expect(importedPaths).toEqual(['/proj/lib.md'])
+    expect(importedComponents.map((c) => c.name)).toEqual(['pricing-card'])
+
+    const md = make({ mode: 'svg' })
+    const out = md.render(pageSrc, { bocetoImportedComponents: importedComponents })
+    expect(out).toContain('Pro')
+    expect(out).toContain('$29')
+  })
+
+  it('falls back gracefully when env has no imported components', () => {
+    // Page references an unknown component but has no env imports — parse throws,
+    // surfaced as a thrown error. This documents that the plugin does NOT silently
+    // hide missing-component errors when imports weren't prewarmed.
+    const md = make({ mode: 'svg' })
+    const src = [
+      '```boceto',
+      'element pricing-card 0 0 240 160 "" title="x" price="y"',
+      '```',
+      '',
+    ].join('\n')
+    // Parser reports unknown reference — could be "element type" or "component"
+    // depending on the lookup path; either is fine — the point is we don't
+    // silently produce empty output.
+    expect(() => md.render(src)).toThrowError(/pricing-card/)
   })
 })

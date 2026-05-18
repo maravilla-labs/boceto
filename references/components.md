@@ -181,6 +181,176 @@ For one-off shapes, plain `box` / `card` / `row` / `col` are faster to author. C
 - **Duplicate param names**: `component foo(name, name)` is a parse error.
 - **Forgetting the empty label**: instance lines always have `""` in the label slot, even when params drive the content: `element my-card 0 0 200 60 "" title="X"`. Omitting it causes the parser to read `title="X"` as the label.
 
+## Authoring components in the editor
+
+The DSL is one way in; `<boceto-edit>` plus the `<boceto-components>` panel is the other. The panel is the source of truth for "what components exist" — a definition with zero instances stays visible there even though it's invisible on the canvas.
+
+### The Components panel
+
+Mount alongside the palette and inspector:
+
+```html
+<boceto-edit id="ed" code="…"></boceto-edit>
+<boceto-palette for="ed"></boceto-palette>
+<boceto-inspector for="ed" auto></boceto-inspector>
+<boceto-components for="ed" open></boceto-components>
+```
+
+The panel lists every component in scope, grouped by **Local** (defined in this editor's source — fully editable) and **Available elsewhere** (visible via `imports` — read-only with a "Go to source" affordance). Each row shows the param signature, an instance-count badge ("× 3" or "unused"), and per-row actions.
+
+### Three ways to make a component
+
+1. **+ New** in the panel — opens an inline form (name + comma-separated params). On submit, the editor adds the definition and drops into component-edit mode immediately so you can author the body visually.
+2. **Promote selection** — select multiple top-level items on the canvas, right-click → **Make component from selection…**. The selection is lifted into a new component definition (with `$param` tokens preserved) and replaced by a single instance call site at the original bounding box. Param names are inferred from `$ident` tokens unless you supply them explicitly.
+3. **DSL directly** — type `component foo(a, b) … end` in source as before; the panel picks it up.
+
+### Editing a component body
+
+Double-click any local instance (or hit **Edit** on the panel row). The canvas swaps to render the component's body as a mini-page. A breadcrumb chip at the top reads `Editing: feature-card · Done`. While in this mode:
+
+- Drag / resize / add / delete / label-edit work normally; mutations land on `Component.body`, not on the current page.
+- `$param` placeholders stay literal — they don't expand until an instance renders.
+- The Components panel refuses to delete the component you're currently editing. Exit first.
+- Pressing **Done** (or the chip's ✕) returns to the previous page. The next `change` event reflects the mutated body.
+
+### Instance call-site params
+
+Selecting a `ComponentInstance` opens the Inspector with a **Component** header and a **Parameters** section — one input per declared param, prefilled from the call site. Edits commit via `editor.updateInstanceParams(id, params)` and round-trip as `param="value"` attrs in the source.
+
+### Cross-document UX
+
+When a component comes from elsewhere (a sibling TipTap block, or a `boceto.import`-loaded file):
+
+- The panel shows it under **Available elsewhere** with a hint (e.g. *"block 2"* in TipTap, or the host's chosen text).
+- The Inspector shows the param signature read-only with a **Go to source** button.
+- Double-clicking the instance — or any of the navigation buttons — dispatches a `gotodefinition` event on `<boceto-edit>` with `{ componentName, origin, hint }`. The TipTap integration handles this by focusing the sibling block that defines the component; in a docs-app you'd handle it by navigating to the source file.
+
+### Programmatic API
+
+Every gesture above is a method on `BocetoEditor` (accessible via `<boceto-edit>.editor`):
+
+```ts
+ed.components()                          // ComponentSummary[] (local + imported, with origin + counts)
+ed.instances(name?)                      // ComponentInstance[] on the current page
+ed.tagImportOrigin(name, hint)           // host annotation for the panel
+ed.createComponent({ name, params })
+ed.deleteComponent(name, { deleteInstances: true })
+ed.renameComponent(oldName, newName)     // updates def + every instance
+ed.updateComponentDef(name, { params, shell, defaults })
+ed.updateInstanceParams(instanceId, params)
+ed.addInstance(name, x, y, { w, h })
+ed.promoteToComponent({ ids, name, params? })
+ed.enterComponentEditMode(name)
+ed.exitComponentEditMode()
+ed.editingComponent                      // null in page mode
+```
+
+## Cross-document libraries
+
+Big docs spread their components across multiple files: one library file (or several) holds the shared `component … end` definitions; wireframe pages reference them by name. Boceto ships first-class support for this — same-file sharing is automatic, cross-file sharing is opt-in via YAML frontmatter.
+
+### Sibling fences in the same file
+
+Every ```boceto fence in one markdown file shares a component registry. Block N can use a component defined in block 1 without any extra syntax:
+
+````
+```boceto:Defs
+component feature-card(title, body)
+  element card 0 0 240 140 ""
+  element heading 12 12 216 28 "$title"
+  element label 12 50 216 60 "$body"
+end
+```
+
+…some prose between fences…
+
+```boceto:Page
+element feature-card 0 0 240 140 "" title="Fast" body="Sub-frame renders"
+```
+````
+
+This mirrors `@boceto/tiptap`'s editor-level multi-block context. No setup needed.
+
+### Importing components from other files
+
+Declare libraries in YAML frontmatter:
+
+```yaml
+---
+title: Courses page
+boceto:
+  import:
+    - ./00-component-library.md
+    - ./shared/*-component.md
+    - ../platform/components/*.boceto
+---
+```
+
+- `boceto.import` is a string or array of strings.
+- Entries resolve relative to the importing file's directory.
+- Patterns containing `*`, `?`, `[`, `{` are expanded as globs.
+- Paths must stay inside a configurable project root (default: importer's directory) — escapes throw `BocetoImportError`.
+- Library files may themselves declare `boceto.import` — transitive resolution is recursive, cycles are silently broken (the registry is flat).
+- Duplicate component names across imports are a parse error with both source paths in the message. The importing file's own definitions still win over imports of the same name.
+
+Standalone `.boceto` files support the same frontmatter when the file starts with `---`.
+
+### Plumbing in remark / markdown-it
+
+**remark** — `@boceto/remark` resolves frontmatter imports automatically when given a `VFile` with a `path`. Same-file fence sharing is always on.
+
+```ts
+import remarkBoceto from '@boceto/remark'
+import { LibraryCache } from '@boceto/core'
+
+const cache = new LibraryCache()
+const file = await unified()
+  .use(remarkParse)
+  .use(remarkBoceto, { mode: 'svg', resolveImports: { cache } })
+  .use(remarkHtml)
+  .process({ path: '/site/pages/courses.md', value: source })
+
+// Subscribe to file.data.bocetoImports for watch-mode HMR.
+```
+
+**markdown-it** — the render pipeline is synchronous, so resolve imports first:
+
+```ts
+import md from 'markdown-it'
+import bocetoIt, { prewarmBocetoCache } from '@boceto/markdown-it'
+import { LibraryCache, initYoga } from '@boceto/core'
+import { glob } from 'tinyglobby'
+import { readFile } from 'node:fs/promises'
+
+await initYoga()
+const cache = new LibraryCache()
+
+const { importedComponents, importedPaths } = await prewarmBocetoCache({
+  filePath: '/site/pages/courses.md',
+  source,
+  fs: { readFile: async (p) => new Uint8Array(await readFile(p)) },
+  glob,
+  cache,
+  projectRoot: '/site',
+})
+
+const html = md().use(bocetoIt, { mode: 'svg' })
+  .render(source, { bocetoImportedComponents: importedComponents })
+```
+
+### Performance / caching contract
+
+- `LibraryCache` parses each library file exactly once and is keyed by absolute path. Two pages importing the same `./components.md` trigger one read, one parse.
+- Each cache entry also tracks its transitive dependencies on `entry.paths`, so watch mode can drop dependent entries with `cache.invalidateDependents(changedPath)`.
+- The cache survives across multiple `process()` / `render()` calls — share one instance for the whole build, or per request.
+
+### Error UX
+
+- Unknown component reference → `BocetoParseError: Unknown component "feature-card"`. If the page declares `boceto.import` but the component is missing from every library, fix the library or add it to the import list.
+- Glob misses → silently zero matches (matches common "wildcards may legitimately match nothing" semantics). To detect, inspect `importedPaths`.
+- Duplicate definitions across imports → `BocetoImportError: Component "Button" is defined in multiple boceto imports: /…/a.md and /…/b.md`. Rename one or scope which libraries the page imports.
+- Import path escapes project root → `BocetoImportError: Import path escapes projectRoot`. Either move the file inside the root or widen the `projectRoot` constraint.
+
 ## Tip: round-trip composition
 
 `<boceto-edit>` treats composite instances as a single draggable / resizable unit, with their body re-laid-out automatically. If the user moves an instance, the surrounding components (and the contents of any flex containers) reflow. This is why `auto` sizing + flex shells are the most-future-proof way to author reusable components.

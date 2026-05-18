@@ -32,6 +32,19 @@ export {
 } from './types'
 export { initYoga, isYogaReady, applyFlexLayout } from './layout/yoga'
 export { parse, BocetoParseError } from './parser'
+export { stripFrontmatter } from './parser/frontmatter'
+export {
+  BocetoImportError,
+  LibraryCache,
+  extractFrontmatter,
+  resolveBocetoImports,
+  type BocetoFrontmatter,
+  type FsAdapter,
+  type GlobAdapter,
+  type LibraryCacheEntry,
+  type ResolveImportsOptions,
+  type ResolveImportsResult,
+} from './imports'
 export { serialize, type SerializeOptions } from './serializer'
 export { tokenize, type Token } from './tokenizer'
 export {
