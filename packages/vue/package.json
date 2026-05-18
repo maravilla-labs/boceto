@@ -1,6 +1,6 @@
 {
   "name": "@boceto/vue",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Vue 3 wrappers for <boceto-view> and <boceto-edit>.",
   "license": "MIT",
   "author": "Maravilla Labs",

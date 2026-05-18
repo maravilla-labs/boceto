@@ -1,6 +1,6 @@
 {
   "name": "@boceto/core",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Boceto DSL — parser, serializer, types, and canvas renderer.",
   "license": "MIT",
   "author": "Maravilla Labs",

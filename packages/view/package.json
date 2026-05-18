@@ -1,6 +1,6 @@
 {
   "name": "@boceto/view",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Read-only <boceto-view> web component.",
   "license": "MIT",
   "author": "Maravilla Labs",

@@ -1,6 +1,6 @@
 {
   "name": "@boceto/remark",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "remark plugin: render fenced ```boceto blocks as <boceto-view> custom elements.",
   "license": "MIT",
   "author": "Maravilla Labs",

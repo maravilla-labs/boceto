@@ -1,6 +1,6 @@
 {
   "name": "@boceto/lint",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Linter + auto-fixer for the Boceto DSL. Catches missing label slots, invented element types, fractional coords, slot-nesting traps, and more. Usable from the playground, CI, or an MCP server.",
   "license": "MIT",
   "author": "Maravilla Labs",
