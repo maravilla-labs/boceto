@@ -1,29 +1,55 @@
 /**
- * Floating draggable panel — the visual chassis for `<boceto-palette>` and
- * `<boceto-inspector>`. Mounts in `document.body` with `position: fixed` so
- * it escapes the editor's bounds, comes with a drag handle, an optional
- * close button, and minimal sketch-aligned styling.
+ * Floating draggable panel — the visual chassis for `<boceto-palette>`,
+ * `<boceto-inspector>`, and `<boceto-components>`. Two modes:
+ *
+ *  - **Floating** (default): `position: fixed`, mounted in `document.body`,
+ *    drag-handle header, optional close button. Use when the host wants the
+ *    classic "popover anywhere" UX.
+ *  - **Docked**: `position: static`, mounted into a host-supplied container
+ *    (`opts.mount`), no drag, no shadow, fills the parent width. Use when
+ *    the host has its own panel layout (Photoshop-style tabs, a permanent
+ *    sidebar, …) and just wants the panel content inside their rail.
  *
  * Theming: every node carries a `data-boceto-panel="…"` attribute so host
- * pages can override the defaults from light-DOM CSS.
+ * pages can override the defaults from light-DOM CSS. Docked mode also
+ * adds `data-boceto-panel-mode="dock"` on the root for targeted styling.
  */
 
 export interface FloatingPanelOptions {
   title: string
-  /** Initial position in viewport pixels. */
+  /** Initial position in viewport pixels. Floating mode only. */
   x?: number
   y?: number
-  /** Initial width / height of the panel. Width defaults to 280. */
+  /** Initial width / height of the panel. Width defaults to 280 in
+   *  floating mode, '100%' in docked mode. */
   width?: number
   height?: number
-  /** Called when the user closes the panel via the × button. */
+  /** Called when the user closes the panel via the × button. Omit in
+   *  docked mode if the close button shouldn't appear at all. */
   onClose?: () => void
+  /**
+   * DOM node to mount the panel into. Defaults to `document.body`, which
+   * is what floating mode wants. Pass a host-supplied container to dock
+   * the panel inside the host's layout — typically combined with
+   * `dock: true` to drop the floating chrome.
+   */
+  mount?: HTMLElement | null
+  /**
+   * Docked layout — drops `position: fixed`, the drag handle, the shadow,
+   * and the rounded border. The panel becomes a block element that flows
+   * naturally inside its parent. Pair with `mount` so the panel lands in
+   * a host-controlled location (e.g. a tab body in the host's right rail).
+   *
+   * When `dock` is true but `mount` is omitted, the panel still mounts in
+   * `document.body` (likely not what you want — pair them).
+   */
+  dock?: boolean
 }
 
 export interface FloatingPanelHandle {
   /** The outer panel element. */
   el: HTMLDivElement
-  /** Header strip (drag handle). Title text lives here. */
+  /** Header strip (drag handle in floating mode; title bar in docked mode). */
   header: HTMLDivElement
   /** The scrollable body where callers append their controls. */
   body: HTMLDivElement
@@ -34,27 +60,55 @@ export interface FloatingPanelHandle {
 }
 
 export function createFloatingPanel(opts: FloatingPanelOptions): FloatingPanelHandle {
+  const dock = opts.dock === true
+  const mountTarget = opts.mount ?? document.body
+
   const root = document.createElement('div')
   root.dataset.bocetoPanel = 'root'
-  Object.assign(root.style, {
-    position: 'fixed',
-    left: `${opts.x ?? 16}px`,
-    top: `${opts.y ?? 16}px`,
-    width: `${opts.width ?? 280}px`,
-    maxHeight: opts.height ? `${opts.height}px` : '80vh',
+  if (dock) root.dataset.bocetoPanelMode = 'dock'
+  // Base styles shared by both modes.
+  const baseStyle: Partial<CSSStyleDeclaration> = {
     background: '#fff',
-    border: '1px solid #d4d4d8',
-    borderRadius: '8px',
-    boxShadow: '0 6px 20px rgba(0,0,0,0.10), 0 2px 4px rgba(0,0,0,0.06)',
     fontFamily: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
     fontSize: '13px',
     color: '#222',
-    zIndex: '2147482000',
     display: 'flex',
     flexDirection: 'column',
     overflow: 'hidden',
     userSelect: 'none',
-  } as CSSStyleDeclaration)
+  }
+  if (dock) {
+    Object.assign(root.style, {
+      ...baseStyle,
+      // Inline flow inside the host container.
+      position: 'static',
+      width: opts.width ? `${opts.width}px` : '100%',
+      // The host owns the outer chrome — no shadow, no border, no rounding.
+      // We keep a faint top divider for visual separation when the host
+      // stacks multiple docked panels.
+      border: '0',
+      borderRadius: '0',
+      boxShadow: 'none',
+      // Stretch to fill the host's available height; the body still scrolls
+      // internally so the parent layout stays predictable.
+      flex: '1 1 auto',
+      minHeight: '0',
+      maxHeight: opts.height ? `${opts.height}px` : '100%',
+    } as CSSStyleDeclaration)
+  } else {
+    Object.assign(root.style, {
+      ...baseStyle,
+      position: 'fixed',
+      left: `${opts.x ?? 16}px`,
+      top: `${opts.y ?? 16}px`,
+      width: `${opts.width ?? 280}px`,
+      maxHeight: opts.height ? `${opts.height}px` : '80vh',
+      border: '1px solid #d4d4d8',
+      borderRadius: '8px',
+      boxShadow: '0 6px 20px rgba(0,0,0,0.10), 0 2px 4px rgba(0,0,0,0.06)',
+      zIndex: '2147482000',
+    } as CSSStyleDeclaration)
+  }
 
   const header = document.createElement('div')
   header.dataset.bocetoPanel = 'header'
@@ -65,7 +119,7 @@ export function createFloatingPanel(opts: FloatingPanelOptions): FloatingPanelHa
     padding: '8px 10px',
     borderBottom: '1px solid #e4e4e7',
     background: '#fafafa',
-    cursor: 'grab',
+    cursor: dock ? 'default' : 'grab',
     fontSize: '12px',
     letterSpacing: '0.04em',
     textTransform: 'uppercase',
@@ -73,11 +127,14 @@ export function createFloatingPanel(opts: FloatingPanelOptions): FloatingPanelHa
     fontWeight: '600',
   } as CSSStyleDeclaration)
 
-  const grip = document.createElement('span')
-  grip.dataset.bocetoPanel = 'grip'
-  grip.textContent = '⋮⋮'
-  Object.assign(grip.style, { color: '#a1a1aa', letterSpacing: '-3px' } as CSSStyleDeclaration)
-  header.appendChild(grip)
+  // Grip is the drag-affordance. Docked panels can't be moved, so we hide it.
+  if (!dock) {
+    const grip = document.createElement('span')
+    grip.dataset.bocetoPanel = 'grip'
+    grip.textContent = '⋮⋮'
+    Object.assign(grip.style, { color: '#a1a1aa', letterSpacing: '-3px' } as CSSStyleDeclaration)
+    header.appendChild(grip)
+  }
 
   const titleEl = document.createElement('span')
   titleEl.dataset.bocetoPanel = 'title'
@@ -85,7 +142,10 @@ export function createFloatingPanel(opts: FloatingPanelOptions): FloatingPanelHa
   titleEl.style.flex = '1'
   header.appendChild(titleEl)
 
-  if (opts.onClose) {
+  // Close button: floating panels need it (their own onClose collapses the
+  // host element). Docked panels live inside host-controlled chrome, so the
+  // close button is omitted — visibility there is the host's responsibility.
+  if (opts.onClose && !dock) {
     const close = document.createElement('button')
     close.dataset.bocetoPanel = 'close'
     close.type = 'button'
@@ -128,50 +188,72 @@ export function createFloatingPanel(opts: FloatingPanelOptions): FloatingPanelHa
   } as CSSStyleDeclaration)
 
   root.append(header, body)
-  document.body.appendChild(root)
+  mountTarget.appendChild(root)
 
-  // ── Drag-to-move on the header ────────────────────────────────────────
+  // ── Drag-to-move on the header (floating only) ───────────────────────
   let dragging = false
   let pid = -1
   let originX = 0
   let originY = 0
   let panelOriginX = 0
   let panelOriginY = 0
-  header.addEventListener('pointerdown', (e) => {
-    if (e.target !== header && (e.target as HTMLElement).dataset.bocetoPanel !== 'grip' && (e.target as HTMLElement).dataset.bocetoPanel !== 'title') {
-      return // clicks on the close button don't drag
+  if (!dock) {
+    header.addEventListener('pointerdown', (e) => {
+      if (e.target !== header && (e.target as HTMLElement).dataset.bocetoPanel !== 'grip' && (e.target as HTMLElement).dataset.bocetoPanel !== 'title') {
+        return // clicks on the close button don't drag
+      }
+      dragging = true
+      pid = e.pointerId
+      originX = e.clientX
+      originY = e.clientY
+      const rect = root.getBoundingClientRect()
+      panelOriginX = rect.left
+      panelOriginY = rect.top
+      header.setPointerCapture(e.pointerId)
+      header.style.cursor = 'grabbing'
+      e.preventDefault()
+    })
+    header.addEventListener('pointermove', (e) => {
+      if (!dragging || e.pointerId !== pid) return
+      const dx = e.clientX - originX
+      const dy = e.clientY - originY
+      const next = clampToViewport(panelOriginX + dx, panelOriginY + dy, root)
+      root.style.left = `${next.x}px`
+      root.style.top = `${next.y}px`
+    })
+    function endDrag(e: PointerEvent): void {
+      if (!dragging || e.pointerId !== pid) return
+      dragging = false
+      try {
+        header.releasePointerCapture(pid)
+      } catch {
+        /* jsdom no-op */
+      }
+      header.style.cursor = 'grab'
     }
-    dragging = true
-    pid = e.pointerId
-    originX = e.clientX
-    originY = e.clientY
-    const rect = root.getBoundingClientRect()
-    panelOriginX = rect.left
-    panelOriginY = rect.top
-    header.setPointerCapture(e.pointerId)
-    header.style.cursor = 'grabbing'
-    e.preventDefault()
-  })
-  header.addEventListener('pointermove', (e) => {
-    if (!dragging || e.pointerId !== pid) return
-    const dx = e.clientX - originX
-    const dy = e.clientY - originY
-    const next = clampToViewport(panelOriginX + dx, panelOriginY + dy, root)
-    root.style.left = `${next.x}px`
-    root.style.top = `${next.y}px`
-  })
-  function endDrag(e: PointerEvent): void {
-    if (!dragging || e.pointerId !== pid) return
-    dragging = false
-    try {
-      header.releasePointerCapture(pid)
-    } catch {
-      /* jsdom no-op */
+    header.addEventListener('pointerup', endDrag)
+    header.addEventListener('pointercancel', endDrag)
+
+    // Re-clamp on viewport resize so the panel never escapes the visible
+    // area when the host window shrinks. Without this, a panel positioned
+    // at `left: 1200px` is stranded off-screen if the user shrinks the
+    // window past 1200 — the existing in-drag clamp only fires during
+    // pointer-move. Listener auto-removes on dispose via the `removed`
+    // flag below (the panel's root is the source of truth).
+    const onResize = (): void => {
+      if (!isElementInDocument(root)) return
+      const next = clampToViewport(
+        parseFloat(root.style.left) || 0,
+        parseFloat(root.style.top) || 0,
+        root,
+      )
+      root.style.left = `${next.x}px`
+      root.style.top = `${next.y}px`
     }
-    header.style.cursor = 'grab'
+    window.addEventListener('resize', onResize)
+    // Stash for dispose.
+    ;(root as { __bocetoResizeHandler?: () => void }).__bocetoResizeHandler = onResize
   }
-  header.addEventListener('pointerup', endDrag)
-  header.addEventListener('pointercancel', endDrag)
 
   let visible = true
 
@@ -193,6 +275,8 @@ export function createFloatingPanel(opts: FloatingPanelOptions): FloatingPanelHa
       return visible
     },
     dispose(): void {
+      const handler = (root as { __bocetoResizeHandler?: () => void }).__bocetoResizeHandler
+      if (handler) window.removeEventListener('resize', handler)
       root.remove()
     },
   }
@@ -210,4 +294,8 @@ function clampToViewport(
   const clampedX = Math.max(4, Math.min(x, vw - w - 4))
   const clampedY = Math.max(4, Math.min(y, vh - h - 4))
   return { x: clampedX, y: clampedY }
+}
+
+function isElementInDocument(el: HTMLElement): boolean {
+  return document.body.contains(el)
 }

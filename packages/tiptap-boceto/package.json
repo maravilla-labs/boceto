@@ -1,6 +1,6 @@
 {
   "name": "@boceto/tiptap",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "TipTap node + extension for embedding Boceto wireframes (with cross-block component context) in any TipTap editor.",
   "license": "MIT",
   "author": "Maravilla Labs",

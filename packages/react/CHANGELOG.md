@@ -1,5 +1,34 @@
 # @boceto/react
 
+## 0.4.0
+
+### Minor Changes
+
+- Docked panel mode lands across `@boceto/edit`'s floating-panel chassis and every wrapper that uses it. Hosts can now embed `<boceto-palette>`, `<boceto-inspector>`, and `<boceto-components>` inline (Photoshop-style tabs, a permanent sidebar, …) instead of floating them in `document.body`.
+
+  `createFloatingPanel` gains two new options:
+  - `mount: HTMLElement | null` — target node to attach to (defaults to `document.body`).
+  - `dock: boolean` — switches `position: fixed` → flow layout, drops the drag handle, shadow, and close button. Width defaults to `100%` of the host.
+
+  Each panel element accepts matching attributes:
+
+  ```html
+  <boceto-palette for="ed" mount="palette-slot" dock></boceto-palette>
+  <boceto-inspector for="ed" mount="inspector-slot" dock></boceto-inspector>
+  <boceto-components for="ed" mount="components-slot" dock></boceto-components>
+  ```
+
+  In docked mode the panels become always-visible (the host's layout decides when the user sees them) and skip the active-editor / open-attribute auto-toggle behaviour. Floating mode is unchanged.
+
+  `@boceto/react` mirrors with new `mount?: string` + `dock?: boolean` props on `BocetoPalette`, `BocetoInspector`, and the brand-new `BocetoComponents` React wrapper (also exported from this release).
+
+  Floating panels also pick up an automatic re-clamp on `window.resize` so they never escape the visible area when the host window shrinks — addresses the docs-app symptom where the inspector slid behind the right edge after a window resize.
+
+### Patch Changes
+
+- Updated dependencies
+  - @boceto/edit@0.4.0
+
 ## 0.3.1
 
 ### Patch Changes

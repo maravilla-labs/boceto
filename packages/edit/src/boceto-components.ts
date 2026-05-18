@@ -24,7 +24,7 @@ import { getActiveEditor, onActiveEditorChange } from './editor/active-editor'
  */
 export class BocetoComponentsElement extends HTMLElement {
   static get observedAttributes(): string[] {
-    return ['for', 'x', 'y', 'open']
+    return ['for', 'x', 'y', 'open', 'mount', 'dock']
   }
 
   #panel: FloatingPanelHandle | null = null
@@ -41,17 +41,22 @@ export class BocetoComponentsElement extends HTMLElement {
   connectedCallback(): void {
     if (this.#panel) return
     this.style.display = 'none'
+    const dock = this.hasAttribute('dock')
+    const mount = this.#resolveMount()
     const x = numAttr(this, 'x', 16)
     const y = numAttr(this, 'y', 240)
     this.#panel = createFloatingPanel({
       title: 'Components',
       x,
       y,
-      width: 320,
+      width: dock ? undefined : 320,
       onClose: () => this.removeAttribute('open'),
+      mount,
+      dock,
     })
     this.#buildBody()
-    if (this.hasAttribute('open')) this.#panel.show()
+    // Docked panels are always visible — host controls when they're on screen.
+    if (dock || this.hasAttribute('open')) this.#panel.show()
     else this.#panel.hide()
     this.#attachToTarget()
     this.#unsubActive = onActiveEditorChange(() => {
@@ -59,6 +64,15 @@ export class BocetoComponentsElement extends HTMLElement {
       this.#detach()
       this.#attachToTarget()
     })
+  }
+
+  /** Resolve the `mount` attribute (an element id) into a DOM node. Returns
+   *  null when the attribute is unset OR doesn't resolve — falls back to
+   *  document.body. */
+  #resolveMount(): HTMLElement | null {
+    const id = this.getAttribute('mount')
+    if (!id) return null
+    return document.getElementById(id)
   }
 
   disconnectedCallback(): void {

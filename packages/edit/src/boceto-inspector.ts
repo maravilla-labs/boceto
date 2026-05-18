@@ -24,7 +24,7 @@ import { getActiveEditor, onActiveEditorChange } from './editor/active-editor'
  */
 export class BocetoInspectorElement extends HTMLElement {
   static get observedAttributes(): string[] {
-    return ['for', 'x', 'y', 'auto', 'open']
+    return ['for', 'x', 'y', 'auto', 'open', 'mount', 'dock']
   }
 
   #panel: FloatingPanelHandle | null = null
@@ -38,23 +38,42 @@ export class BocetoInspectorElement extends HTMLElement {
   connectedCallback(): void {
     if (this.#panel) return
     this.style.display = 'none'
+    const dock = this.hasAttribute('dock')
+    const mount = this.#resolveMount()
     const x = numAttr(this, 'x', Math.max(16, window.innerWidth - 320))
     const y = numAttr(this, 'y', 120)
     this.#panel = createFloatingPanel({
       title: 'Inspector',
       x,
       y,
-      width: 300,
+      width: dock ? undefined : 300,
       onClose: () => this.removeAttribute('open'),
+      mount,
+      dock,
     })
     this.#body = this.#panel.body
-    this.#panel.hide()
+    // Docked panels are always visible — the host's tab/rail layout
+    // controls when they're on screen. The inspector body still renders
+    // "Nothing selected" when the selection is empty.
+    if (!dock) this.#panel.hide()
     this.#attachToTarget()
-    // Hide whenever a *different* editor becomes the active one. Without
-    // this, every inspector with a non-empty selection on its target stays
-    // visible — a TipTap doc with multiple Boceto blocks would stack
-    // inspectors on top of each other.
-    this.#unsubActive = onActiveEditorChange(() => this.#applyActiveScoping())
+    if (!dock) {
+      // Hide whenever a *different* editor becomes the active one. Without
+      // this, every inspector with a non-empty selection on its target stays
+      // visible — a TipTap doc with multiple Boceto blocks would stack
+      // inspectors on top of each other. Docked inspectors stay where the
+      // host put them.
+      this.#unsubActive = onActiveEditorChange(() => this.#applyActiveScoping())
+    }
+  }
+
+  /** Resolve the `mount` attribute (an element id) into a DOM node. Returns
+   *  null when the attribute is unset OR doesn't resolve — falls back to
+   *  document.body. */
+  #resolveMount(): HTMLElement | null {
+    const id = this.getAttribute('mount')
+    if (!id) return null
+    return document.getElementById(id)
   }
 
   disconnectedCallback(): void {
@@ -132,6 +151,12 @@ export class BocetoInspectorElement extends HTMLElement {
   #onSelectionChange(): void {
     if (!this.#target || !this.#panel) return
     const ids = [...this.#target.editor.selection]
+    // Docked panels are always-visible — show/hide is the host's call.
+    // Still re-render on every selection change so the body content tracks.
+    if (this.hasAttribute('dock')) {
+      this.#render()
+      return
+    }
     const auto = this.getAttribute('auto') !== null || !this.hasAttribute('auto') // default-on
     if (ids.length === 0) {
       if (auto) this.#panel.hide()

@@ -1,6 +1,6 @@
 {
   "name": "@boceto/mcp",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "MCP server for Boceto. Exposes parse, lint, fix, render-svg, and catalog tools — plus the full skill + spec as MCP resources — so any AI client (Claude Desktop, Cursor, Cline, etc.) gains a runtime feedback loop for authoring Boceto wireframes.",
   "license": "MIT",
   "author": "Maravilla Labs",

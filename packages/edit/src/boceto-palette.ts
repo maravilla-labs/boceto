@@ -30,7 +30,7 @@ import { getActiveEditor, onActiveEditorChange } from './editor/active-editor'
  */
 export class BocetoPaletteElement extends HTMLElement {
   static get observedAttributes(): string[] {
-    return ['for', 'x', 'y', 'open']
+    return ['for', 'x', 'y', 'open', 'mount', 'dock']
   }
 
   #panel: FloatingPanelHandle | null = null
@@ -48,6 +48,8 @@ export class BocetoPaletteElement extends HTMLElement {
     this.style.display = 'none'
     const x = numAttr(this, 'x', NaN)
     const y = numAttr(this, 'y', NaN)
+    const dock = this.hasAttribute('dock')
+    const mount = this.#resolveMount()
     // Default geometry — when no `x`/`y` attrs are set the panel reflows
     // to a Spotlight-style position above the bound editor on open(). The
     // values here are only meaningful at very first construct.
@@ -55,27 +57,43 @@ export class BocetoPaletteElement extends HTMLElement {
       title: 'Add element  (⌘K)',
       x: Number.isFinite(x) ? x : 16,
       y: Number.isFinite(y) ? y : 16,
-      width: 520,
+      width: dock ? undefined : 520,
       height: undefined,
       onClose: () => this.removeAttribute('open'),
+      mount,
+      dock,
     })
     this.#buildBody()
-    if (this.hasAttribute('open')) {
-      this.#positionOverEditor()
+    // Docked panels are always-visible — the host's tab/rail layout owns
+    // visibility. Floating panels respect the `open` attribute.
+    if (dock || this.hasAttribute('open')) {
+      if (!dock) this.#positionOverEditor()
       this.#panel.show()
     } else this.#panel.hide()
     this.#installGlobalHotkey()
-    this.#installFocusToast()
-    // Close ourselves whenever a *different* editor becomes active. Without
-    // this, a TipTap doc with multiple Boceto blocks can end up with several
-    // open palettes stacked over each other.
-    this.#unsubActive = onActiveEditorChange((active) => {
-      if (!this.hasAttribute('open')) return
-      const target = this.#findTargetMaybe()
-      if (active && target && active !== target) {
-        this.removeAttribute('open')
-      }
-    })
+    if (!dock) this.#installFocusToast()
+    // Close ourselves whenever a *different* editor becomes active. Floating
+    // only — docked panels stay where the host put them. (A TipTap doc with
+    // multiple Boceto blocks can end up with several open floating palettes
+    // stacked otherwise.)
+    if (!dock) {
+      this.#unsubActive = onActiveEditorChange((active) => {
+        if (!this.hasAttribute('open')) return
+        const target = this.#findTargetMaybe()
+        if (active && target && active !== target) {
+          this.removeAttribute('open')
+        }
+      })
+    }
+  }
+
+  /** Resolve the `mount` attribute (an element id) into the DOM node the
+   *  panel should attach to. Returns `null` when the attribute is unset OR
+   *  when the id doesn't resolve — falls back to document.body. */
+  #resolveMount(): HTMLElement | null {
+    const id = this.getAttribute('mount')
+    if (!id) return null
+    return document.getElementById(id)
   }
 
   disconnectedCallback(): void {
