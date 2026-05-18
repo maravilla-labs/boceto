@@ -298,6 +298,13 @@ export class BocetoEditElement extends HTMLElement {
     const w = numAttr(this, 'width', DEFAULT_W)
     const h = numAttr(this, 'height', DEFAULT_H)
     this.#applyCanvasSize(w, h)
+    // Also seed the host's CSS dimensions so the canvas (which uses
+    // `height: 100%`) has a non-zero box to fill. Without this, a host
+    // that doesn't set explicit CSS height on `<boceto-edit>` gets a
+    // 0-height canvas on first render (the ResizeObserver eventually
+    // overrides via #cssSized, but until then the canvas is invisible).
+    if (!this.style.minWidth) this.style.minWidth = `${Math.max(1, Math.round(w))}px`
+    if (!this.style.minHeight) this.style.minHeight = `${Math.max(1, Math.round(h))}px`
   }
 
   #applyCanvasSize(w: number, h: number): void {
@@ -520,27 +527,25 @@ export class BocetoEditElement extends HTMLElement {
   }
 
   /**
-   * Promote-to-component prompt. Uses a single `window.prompt` for v1 —
-   * good enough to validate the gesture; a richer in-shadow form can come
-   * later. Params can be left blank to infer from `$ident` tokens.
+   * Promote-to-component prompt. Renders an in-DOM modal overlay (mounted
+   * to `document.body`) instead of `window.prompt` — the WKWebView in
+   * Tauri silently blocks `window.prompt` / `window.alert`, so the v1
+   * gesture was a no-op there. Params can be left blank to infer from
+   * `$ident` tokens.
    */
   #promptPromote(ids: readonly string[]): void {
-    const name = window.prompt('Component name (kebab-case):')
-    if (!name) return
-    const paramsStr = window.prompt('Params (comma-separated, optional):', '') ?? ''
-    const params = paramsStr
-      .split(',')
-      .map((p) => p.trim())
-      .filter((p) => p.length > 0)
-    try {
-      this.#editor.promoteToComponent({
-        ids: [...ids],
-        name,
-        ...(params.length > 0 ? { params } : {}),
-      })
-    } catch (err) {
-      window.alert((err as Error).message ?? String(err))
-    }
+    promptPromoteDialog().then((res) => {
+      if (!res) return
+      try {
+        this.#editor.promoteToComponent({
+          ids: [...ids],
+          name: res.name,
+          ...(res.params.length > 0 ? { params: res.params } : {}),
+        })
+      } catch (err) {
+        promptAlert((err as Error).message ?? String(err))
+      }
+    })
   }
 
   #schedulePaint(): void {
@@ -629,4 +634,204 @@ export const TAG = 'boceto-edit'
 export function defineBocetoEdit(tag = TAG): void {
   if (typeof customElements === 'undefined') return
   if (!customElements.get(tag)) customElements.define(tag, BocetoEditElement)
+}
+
+/**
+ * In-DOM substitute for `window.prompt` — Tauri / WKWebView silently
+ * block native `prompt()`. Resolves to `{ name, params }` (user clicked
+ * Create) or `null` (user cancelled). Mounts to `document.body` so it
+ * escapes any host's shadow root / overflow:hidden chrome.
+ */
+function promptPromoteDialog(): Promise<{ name: string; params: string[] } | null> {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div')
+    Object.assign(overlay.style, {
+      position: 'fixed',
+      inset: '0',
+      background: 'rgba(0,0,0,0.40)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: '2147483600',
+    } as CSSStyleDeclaration)
+
+    const dialog = document.createElement('form')
+    Object.assign(dialog.style, {
+      background: 'var(--boceto-panel-bg, #fff)',
+      color: 'var(--boceto-panel-fg, #222)',
+      border: '1px solid var(--boceto-panel-input-border, #d4d4d8)',
+      borderRadius: '8px',
+      boxShadow: '0 10px 30px rgba(0,0,0,0.20)',
+      padding: '16px 18px',
+      width: '320px',
+      display: 'grid',
+      gap: '10px',
+      fontFamily: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
+      fontSize: '13px',
+    } as CSSStyleDeclaration)
+
+    const title = document.createElement('div')
+    title.textContent = 'Promote selection to component'
+    Object.assign(title.style, { fontWeight: '600', fontSize: '14px' } as CSSStyleDeclaration)
+
+    const nameLabel = document.createElement('label')
+    nameLabel.textContent = 'Name (kebab-case)'
+    Object.assign(nameLabel.style, {
+      display: 'grid',
+      gap: '4px',
+      color: 'var(--boceto-panel-muted, #71717a)',
+      fontSize: '12px',
+    } as CSSStyleDeclaration)
+    const inputStyle: Partial<CSSStyleDeclaration> = {
+      padding: '6px 8px',
+      border: '1px solid var(--boceto-panel-input-border, #d4d4d8)',
+      borderRadius: '4px',
+      font: 'inherit',
+      fontSize: '13px',
+      outline: 'none',
+      background: 'var(--boceto-panel-input-bg, #fff)',
+      color: 'var(--boceto-panel-fg, #222)',
+    }
+    const nameInput = document.createElement('input')
+    nameInput.type = 'text'
+    nameInput.required = true
+    nameInput.placeholder = 'my-card'
+    Object.assign(nameInput.style, inputStyle as CSSStyleDeclaration)
+    nameLabel.append(nameInput)
+
+    const paramsLabel = document.createElement('label')
+    paramsLabel.textContent = 'Params (comma-separated, optional)'
+    Object.assign(paramsLabel.style, {
+      display: 'grid',
+      gap: '4px',
+      color: 'var(--boceto-panel-muted, #71717a)',
+      fontSize: '12px',
+    } as CSSStyleDeclaration)
+    const paramsInput = document.createElement('input')
+    paramsInput.type = 'text'
+    paramsInput.placeholder = 'title, subtitle'
+    Object.assign(paramsInput.style, inputStyle as CSSStyleDeclaration)
+    paramsLabel.append(paramsInput)
+
+    const row = document.createElement('div')
+    Object.assign(row.style, {
+      display: 'flex',
+      gap: '8px',
+      justifyContent: 'flex-end',
+      marginTop: '4px',
+    } as CSSStyleDeclaration)
+    const cancel = document.createElement('button')
+    cancel.type = 'button'
+    cancel.textContent = 'Cancel'
+    Object.assign(cancel.style, {
+      padding: '5px 12px',
+      border: '1px solid var(--boceto-panel-input-border, #d4d4d8)',
+      background: 'var(--boceto-panel-bg, #fff)',
+      color: 'var(--boceto-panel-fg, #222)',
+      borderRadius: '4px',
+      cursor: 'pointer',
+      font: 'inherit',
+      fontSize: '13px',
+    } as CSSStyleDeclaration)
+    const create = document.createElement('button')
+    create.type = 'submit'
+    create.textContent = 'Create'
+    Object.assign(create.style, {
+      padding: '5px 14px',
+      border: '1px solid var(--boceto-panel-accent, #4a90d9)',
+      background: 'var(--boceto-panel-accent, #4a90d9)',
+      color: 'var(--boceto-panel-accent-fg, #fff)',
+      borderRadius: '4px',
+      cursor: 'pointer',
+      font: 'inherit',
+      fontSize: '13px',
+    } as CSSStyleDeclaration)
+    row.append(cancel, create)
+
+    dialog.append(title, nameLabel, paramsLabel, row)
+    overlay.append(dialog)
+
+    const close = (result: { name: string; params: string[] } | null): void => {
+      overlay.remove()
+      window.removeEventListener('keydown', onKey, true)
+      resolve(result)
+    }
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        close(null)
+      }
+    }
+    window.addEventListener('keydown', onKey, true)
+    cancel.addEventListener('click', () => close(null))
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) close(null)
+    })
+    dialog.addEventListener('submit', (e) => {
+      e.preventDefault()
+      e.stopPropagation()
+      const name = nameInput.value.trim()
+      if (!name) {
+        nameInput.focus()
+        return
+      }
+      const params = paramsInput.value
+        .split(',')
+        .map((p) => p.trim())
+        .filter((p) => p.length > 0)
+      close({ name, params })
+    })
+
+    document.body.appendChild(overlay)
+    queueMicrotask(() => nameInput.focus())
+  })
+}
+
+/** In-DOM `window.alert` substitute for the same WKWebView reason. */
+function promptAlert(message: string): void {
+  const overlay = document.createElement('div')
+  Object.assign(overlay.style, {
+    position: 'fixed',
+    inset: '0',
+    background: 'rgba(0,0,0,0.40)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: '2147483600',
+  } as CSSStyleDeclaration)
+  const dialog = document.createElement('div')
+  Object.assign(dialog.style, {
+    background: 'var(--boceto-panel-bg, #fff)',
+    color: 'var(--boceto-panel-fg, #222)',
+    border: '1px solid var(--boceto-panel-input-border, #d4d4d8)',
+    borderRadius: '8px',
+    boxShadow: '0 10px 30px rgba(0,0,0,0.20)',
+    padding: '16px 18px',
+    maxWidth: '380px',
+    display: 'grid',
+    gap: '12px',
+    fontFamily: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
+    fontSize: '13px',
+  } as CSSStyleDeclaration)
+  const text = document.createElement('div')
+  text.textContent = message
+  const ok = document.createElement('button')
+  ok.type = 'button'
+  ok.textContent = 'OK'
+  Object.assign(ok.style, {
+    padding: '5px 14px',
+    border: '1px solid var(--boceto-panel-accent, #4a90d9)',
+    background: 'var(--boceto-panel-accent, #4a90d9)',
+    color: 'var(--boceto-panel-accent-fg, #fff)',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    font: 'inherit',
+    fontSize: '13px',
+    justifySelf: 'end',
+  } as CSSStyleDeclaration)
+  ok.addEventListener('click', () => overlay.remove())
+  dialog.append(text, ok)
+  overlay.append(dialog)
+  document.body.appendChild(overlay)
+  queueMicrotask(() => ok.focus())
 }

@@ -180,7 +180,11 @@ export class BocetoComponentsElement extends HTMLElement {
     } as CSSStyleDeclaration)
     body.appendChild(this.#editModeChip)
 
-    // Search + "+ New" header row.
+    // Search + "+ New" header row. `flex-wrap: wrap` lets the "+ New"
+    // button drop onto a second row when the panel is narrow (the docked
+    // case in a 320px-wide host rail with the search input claiming most
+    // of the row). The search input itself has `min-width: 0` + `flex: 1`
+    // so it shrinks rather than pushing the button off-screen.
     const headerRow = document.createElement('div')
     Object.assign(headerRow.style, {
       position: 'sticky',
@@ -189,6 +193,7 @@ export class BocetoComponentsElement extends HTMLElement {
       padding: '8px 10px',
       borderBottom: '1px solid var(--boceto-panel-border, #e4e4e7)',
       display: 'flex',
+      flexWrap: 'wrap',
       gap: '6px',
       zIndex: '1',
     } as CSSStyleDeclaration)
@@ -196,7 +201,8 @@ export class BocetoComponentsElement extends HTMLElement {
     this.#searchInput.type = 'search'
     this.#searchInput.placeholder = 'Search components…'
     Object.assign(this.#searchInput.style, {
-      flex: '1',
+      flex: '1 1 120px',
+      minWidth: '0',
       padding: '4px 8px',
       border: '1px solid var(--boceto-panel-input-border, #d4d4d8)',
       borderRadius: '4px',

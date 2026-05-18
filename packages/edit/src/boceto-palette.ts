@@ -313,10 +313,10 @@ export class BocetoPaletteElement extends HTMLElement {
       e.dataTransfer?.setData('application/boceto-element-type', entry.type)
       e.dataTransfer?.setData('text/plain', entry.type)
       if (e.dataTransfer) e.dataTransfer.effectAllowed = 'copy'
-      // Prevent host editors (e.g. a parent ProseMirror) from also
-      // treating this as a draggable inside their document — the only
-      // legitimate drop target is a boceto canvas.
-      e.stopPropagation()
+      // Don't stopPropagation here — some Safari / WKWebView builds
+      // cancel the drag operation entirely when dragstart is stopped.
+      // The canvas-side dragover/drop handlers stopPropagation instead,
+      // which is enough to keep PM from claiming the drop.
     })
     return row
   }

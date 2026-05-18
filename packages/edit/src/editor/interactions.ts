@@ -79,7 +79,16 @@ export function bindCanvas(
 
   const onPointerDown = (e: PointerEvent): void => {
     if (editor.readonly) return
-    if (e.button !== 0) return
+    if (e.button !== 0) {
+      // Right-click / middle-click. Don't start a drag, but ALSO block the
+      // event from bubbling to host editors (notably ProseMirror), whose
+      // mousedown handler would otherwise select the wrapping node and paint
+      // its node-selection background over the canvas. The contextmenu event
+      // that follows is also stopPropagation()'d below — both gates are
+      // needed because PM acts on mousedown, not contextmenu.
+      e.stopPropagation()
+      return
+    }
     const { x, y } = toCanvasCoords(canvas, e, zoomNow())
     canvas.setPointerCapture(e.pointerId)
     opts.focusTarget?.focus()
@@ -279,21 +288,27 @@ export function bindCanvas(
   const onDragOver = (e: DragEvent): void => {
     if (editor.readonly) return
     if (!opts.onDrop) return
-    const types = e.dataTransfer?.types
-    if (!types || !Array.from(types).includes('application/boceto-element-type')) return
+    // Safari / WKWebView (the engine behind Tauri) hides custom MIME types
+    // in `dataTransfer.types` during dragover — only `text/plain`, `Files`,
+    // and a few standard types are visible. So we can't gate on
+    // `application/boceto-element-type` here without breaking drag-from-
+    // palette on those engines. Instead we accept any active drag, call
+    // preventDefault to mark ourselves as a drop target, and verify the
+    // type at drop time (when the full dataTransfer is visible).
+    if (!e.dataTransfer) return
     e.preventDefault() // signal that we accept the drop
     // Hosts like ProseMirror also bind dragover at the editor level and will
     // claim the drop themselves once they see the gesture. Stop the bubble so
-    // the canvas is the only handler that sees a boceto-element drag.
+    // the canvas is the only handler that sees this drag.
     e.stopPropagation()
-    if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy'
+    e.dataTransfer.dropEffect = 'copy'
   }
 
   const onDrop = (e: DragEvent): void => {
     if (editor.readonly) return
     if (!opts.onDrop) return
     const type = e.dataTransfer?.getData('application/boceto-element-type')
-    if (!type) return
+    if (!type) return // not our drag — let the browser fall through
     e.preventDefault()
     // Same reasoning as dragover — keep the drop inside the canvas; we've
     // already handled it.
@@ -302,7 +317,17 @@ export function bindCanvas(
     opts.onDrop({ x, y, type })
   }
 
+  // ProseMirror (and other rich-text hosts) react to `mousedown`, not just
+  // pointerdown, to select a NodeView as a "node selection" — which paints
+  // their blue selection background over the canvas. The pointerdown
+  // handler above already stops right-click propagation, but mousedown is
+  // a separate event and PM listens on it directly. Stop it the same way.
+  const onMouseDown = (e: MouseEvent): void => {
+    if (e.button !== 0) e.stopPropagation()
+  }
+
   canvas.addEventListener('pointerdown', onPointerDown)
+  canvas.addEventListener('mousedown', onMouseDown)
   canvas.addEventListener('pointermove', onPointerMove)
   canvas.addEventListener('pointerup', onPointerUp)
   canvas.addEventListener('pointercancel', onPointerUp)
@@ -314,6 +339,7 @@ export function bindCanvas(
 
   return () => {
     canvas.removeEventListener('pointerdown', onPointerDown)
+    canvas.removeEventListener('mousedown', onMouseDown)
     canvas.removeEventListener('pointermove', onPointerMove)
     canvas.removeEventListener('pointerup', onPointerUp)
     canvas.removeEventListener('pointercancel', onPointerUp)
