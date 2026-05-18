@@ -34,6 +34,7 @@ Peer deps: `unified` `^11.0.0` (remark), `markdown-it` `^14.0.0`. For client-sid
 ```ts
 // astro.config.mjs / next.config.mjs / docusaurus.config.ts
 import remarkBoceto from '@boceto/remark'
+import { defaultFsAdapter, defaultGlobAdapter } from '@boceto/remark/node-adapters'
 import { LibraryCache } from '@boceto/core'
 
 const bocetoCache = new LibraryCache()
@@ -44,7 +45,14 @@ export default {
       remarkBoceto,
       {
         mode: 'svg',                       // or 'wc' for client-side <boceto-view>
-        resolveImports: { cache: bocetoCache },
+        resolveImports: {
+          cache: bocetoCache,
+          // `@boceto/remark`'s main entry ships no Node-only code so
+          // browser / react-markdown consumers can bundle it cleanly.
+          // Node SSG pipelines import the built-in adapters here.
+          fs: defaultFsAdapter,
+          glob: defaultGlobAdapter,
+        },
       },
     ],
   ],
@@ -54,7 +62,9 @@ export default {
 - `mode: 'svg'` — server-side renders each fence to an `<svg>` element. Zero client-side JS, works in any reader (GitHub, RSS, SSG).
 - `mode: 'wc'` (default) — emits `<boceto-view code="…">`. Requires the host page to call `defineBocetoView()` from `@boceto/view`.
 
-When `resolveImports` is enabled, frontmatter `boceto.import` declarations are walked and merged into the parse registry automatically. Same-file sibling fences always share their `component … end` definitions — no setup needed.
+When `resolveImports` is set (with `fs` + `glob` adapters), frontmatter `boceto.import` declarations are walked and merged into the parse registry automatically. Same-file sibling fences always share their `component … end` definitions — no setup needed.
+
+> `@boceto/remark` ships **no implicit Node defaults** so its dist stays free of `node:fs` / `tinyglobby` static imports — browser / Tauri / react-markdown consumers can bundle it cleanly. Node SSG consumers (Astro / Next / Docusaurus) import `defaultFsAdapter` + `defaultGlobAdapter` from `@boceto/remark/node-adapters` and pass them as shown above. Browser hosts inject their own adapters (e.g. the Tauri-backed resolver in `frontend/src/utils/bocetoImports.ts` in the Maravilla Docs app).
 
 ### Per-fence overrides
 
@@ -147,7 +157,7 @@ If you used `mode: 'wc'`: include the `<boceto-view>` runtime once per page:
 ## Common pitfalls
 
 - **Forgetting `await initYoga()`** before `md.render(…)` in svg mode — the layout pass throws "Yoga not ready". Remark's svg mode auto-awaits.
-- **Cross-file imports without `resolveImports`** — frontmatter `boceto.import` is ignored if you pass `resolveImports: false`. Most consumers want `true` (the default).
+- **Cross-file imports without `resolveImports`** — frontmatter `boceto.import` is ignored if you pass `resolveImports: false` (or omit `fs`/`glob` adapters). Node SSG consumers pass `defaultFsAdapter` + `defaultGlobAdapter` from `@boceto/remark/node-adapters`; browser hosts inject custom adapters. The plugin emits a VFile message if a doc declares `boceto.import` but no adapters are wired, so wiring mistakes surface in your build log.
 - **Glob results are unordered** — the resolver sorts lexicographically for determinism, but if your library files have name-prefixed ordering, the import order matters only on duplicate-name errors.
 - **markdown-it without `prewarmBocetoCache`** — file imports silently degrade to single-fence parsing. The plugin logs a warning to stderr; check your build output.
 - **Custom-element CSP** — `<boceto-view>` uses the WASM Yoga build for layout. `script-src 'wasm-unsafe-eval'` is required when running `mode: 'wc'`. `mode: 'svg'` has no such constraint.

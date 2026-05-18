@@ -223,15 +223,26 @@ export default function remarkBoceto(
     // motivating case). Without either, frontmatter `boceto.import` paths
     // have no anchor and resolution is skipped silently — same as before.
     const filePath = file?.path ?? importsCfg?.currentFilePath
-    if (importsCfg && cache && filePath && typeof file?.value === 'string') {
+    // `fs` and `glob` adapters MUST be supplied explicitly. The plugin no
+    // longer ships built-in Node defaults — that kept this entry point
+    // free of `node:fs` / `tinyglobby` static imports so browser bundlers
+    // never see them. Node consumers import the adapters from
+    // `@boceto/remark/node-adapters` and pass them through; browser /
+    // Tauri / react-markdown consumers inject their own.
+    if (
+      importsCfg &&
+      cache &&
+      filePath &&
+      typeof file?.value === 'string' &&
+      importsCfg.fs &&
+      importsCfg.glob
+    ) {
       try {
-        const fsAdapter = importsCfg.fs ?? (await defaultFsAdapter())
-        const globAdapter = importsCfg.glob ?? (await defaultGlobAdapter())
         const res = await resolveBocetoImports({
           filePath,
           source: String(file.value),
-          fs: fsAdapter,
-          glob: globAdapter,
+          fs: importsCfg.fs,
+          glob: importsCfg.glob,
           cache,
           projectRoot: importsCfg.projectRoot,
         })
@@ -244,6 +255,20 @@ export default function remarkBoceto(
         if (file?.message) {
           file.message(msg, undefined, 'remark-boceto:imports')
         }
+      }
+    } else if (
+      importsCfg &&
+      filePath &&
+      typeof file?.value === 'string' &&
+      (!importsCfg.fs || !importsCfg.glob)
+    ) {
+      // Adapters missing — emit a VFile warning so the host can wire them.
+      if (file?.message) {
+        file.message(
+          'resolveImports needs explicit `fs` + `glob` adapters. Import them from `@boceto/remark/node-adapters` (Node) or inject your own (browser/Tauri).',
+          undefined,
+          'remark-boceto:imports-missing-adapters',
+        )
       }
     }
     if (file?.data) {
@@ -334,32 +359,6 @@ function resolveImportsConfig(
   if (v === false) return null
   if (v === true || v == null) return {}
   return v
-}
-
-let _fsAdapter: FsAdapter | null = null
-async function defaultFsAdapter(): Promise<FsAdapter> {
-  if (_fsAdapter) return _fsAdapter
-  const mod = await import('node:fs/promises')
-  _fsAdapter = {
-    async readFile(p) {
-      const buf = await mod.readFile(p)
-      // Buffer extends Uint8Array — copy into a fresh ArrayBuffer-backed view
-      // so downstream Web Crypto / TextDecoder consumers see a plain Uint8Array.
-      return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength)
-    },
-  }
-  return _fsAdapter
-}
-
-let _globAdapter: GlobAdapter | null = null
-async function defaultGlobAdapter(): Promise<GlobAdapter> {
-  if (_globAdapter) return _globAdapter
-  const mod = (await import('tinyglobby')) as { glob: (patterns: string | string[], opts?: { cwd?: string; absolute?: boolean }) => Promise<string[]> }
-  _globAdapter = async (pattern, opts) => {
-    const matches = await mod.glob(pattern, { cwd: opts.cwd, absolute: false })
-    return matches
-  }
-  return _globAdapter
 }
 
 function renderTag(tag: string, attrs: Record<string, string>): string {

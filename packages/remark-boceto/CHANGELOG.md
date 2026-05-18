@@ -1,5 +1,30 @@
 # @boceto/remark
 
+## 0.4.0
+
+### Minor Changes
+
+- **Breaking-ish:** the default Node fs + glob adapters live behind a new `@boceto/remark/node-adapters` subpath export. The main entry no longer contains any `node:fs` / `tinyglobby` static or dynamic imports, so browser / Tauri / react-markdown bundles compile cleanly without externalising Node built-ins.
+
+  Node consumers add one import:
+
+  ```ts
+  import remarkBoceto from '@boceto/remark'
+  import { defaultFsAdapter, defaultGlobAdapter } from '@boceto/remark/node-adapters'
+
+  unified().use(remarkBoceto, {
+    resolveImports: {
+      fs: defaultFsAdapter,
+      glob: defaultGlobAdapter,
+      // …
+    },
+  })
+  ```
+
+  Browser / Tauri / react-markdown consumers continue to inject their own adapters as before — they never load the `node-adapters` module at all.
+
+  If `resolveImports` is set without `fs` + `glob`, the plugin no longer falls back to Node defaults; it surfaces a `remark-boceto:imports-missing-adapters` VFile message instead.
+
 ## 0.3.1
 
 ### Patch Changes
