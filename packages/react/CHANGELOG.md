@@ -1,5 +1,11 @@
 # @boceto/react
 
+## 0.3.1
+
+### Patch Changes
+
+- JSX intrinsic declarations now wrap each boceto custom-element tag in `React.DetailedHTMLProps<…, HTMLElement>` instead of bare `HTMLAttributes`. Consumers can now pass `ref`, `key`, and the other React special props on `<boceto-view>` / `<boceto-edit>` / etc. directly — matching the shape used for every built-in HTML intrinsic. This also lets existing consumers with their own local `IntrinsicElements` declarations merge with ours without "subsequent property declarations must have the same type" errors.
+
 ## 0.3.0
 
 ### Minor Changes
