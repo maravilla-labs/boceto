@@ -1,5 +1,11 @@
 # @boceto/remark
 
+## 0.3.1
+
+### Patch Changes
+
+- Externalize `node:fs/promises`, `node:fs`, `node:path`, `node:url`, and `tinyglobby` so they're no longer bundled into the dist. The plugin only touches them via lazy dynamic imports for the default fs/glob adapters; statically bundling them dragged Node-only `fs`/`path` imports into every browser bundle of any consumer that imported `@boceto/remark`, which Vite + Rollup refused to compile. With this fix, react-markdown consumers (and any other browser/Tauri host that injects its own fs adapter) can use `@boceto/remark` without bundler errors.
+
 ## 0.3.0
 
 ### Minor Changes
